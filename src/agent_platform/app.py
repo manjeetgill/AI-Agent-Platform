@@ -52,6 +52,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         from .research_tool import install_research_tool
         if getattr(application.state.repository, "pool", None) is not None:
             install_research_tool(registry, application.state.repository.pool, application.state.runtime)
+            from .knowledge import KnowledgeAnswer
+            registry.adapters['knowledge.answer'] = KnowledgeAnswer(application.state.repository.pool)
         application.state.workflow_tasks = set()
         try:
             yield
@@ -364,6 +366,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         return row
 
     registry = task_registry if task_registry is not None else default_registry()
+    from .knowledge import install_knowledge
+    install_knowledge(app)
     install_vision(app, actor)
     install_tasks(app, actor, registry)
     install_task_agents(app, registry)

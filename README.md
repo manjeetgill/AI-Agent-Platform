@@ -12,6 +12,14 @@ versioned templates without editing the engine. See [multi-app onboarding](docs/
 and the separate [shipping tool example](examples/shipping_plugin/pyproject.toml).
 Legacy NRAIAlgo research endpoints remain app-specific; use the generic task API for new apps.
 
+## Knowledge and RAG
+
+Apps can ingest private or app-wide text documents, search permitted passages and generate answers
+with validated source references. The same capability is available as the `knowledge.answer` agent
+tool. See [RAG integration](docs/KNOWLEDGE_RAG.md) and the [API example](examples/knowledge_flow.py).
+Retrieval currently uses PostgreSQL English full-text search; embeddings and binary document
+extraction are not included. Knowledge access is explicitly scoped per app.
+
 ## Prepared local setup (macOS with PostgreSQL 17)
 
 ```sh

@@ -64,6 +64,8 @@ async def serve(registry):
         await pool.wait(timeout=10)
         from .research_tool import install_research_tool
         install_research_tool(registry, pool)
+        from .knowledge import KnowledgeAnswer
+        registry.adapters['knowledge.answer'] = KnowledgeAnswer(pool)
         store = TaskStore(pool)
         while True:
             if not await tick(store, registry):

@@ -82,6 +82,8 @@ async def main():
     async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False, kwargs={'row_factory': dict_row}) as pool:
         registry = default_registry()
         install_research_tool(registry, pool)
+        from .knowledge import KnowledgeAnswer
+        registry.adapters['knowledge.answer'] = KnowledgeAnswer(pool)
         await configure(pool, registry, manifest)
     print(json.dumps({'app_id': str(manifest.app_id), 'templates': len(manifest.templates), 'configured': True}))
 
