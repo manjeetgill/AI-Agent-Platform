@@ -1,5 +1,9 @@
 """Assemble saved workflow evidence without inventing a consensus or numerical score."""
 SCOPES = {
+    'trading_review': {'title': 'Trading review', 'steps': ['Multi-trade Autopsy', 'Trader Behavior'],
+                       'limitations': ['Selected closed paper trades only; no broker execution conclusions or psychological diagnosis.']},
+    'strategy_comparison': {'title': 'Strategy comparison', 'steps': ['Strategy Doctor', 'Strategy Comparator'],
+                            'limitations': ['Saved simulated baskets; overlapping windows are not independent samples. Sensitivity requires explicit plan approval.']},
     'signal_review': {
         'title': 'Signal investigation', 'steps': ['Signal Researcher', 'Signal Challenger'],
         'limitations': ['Based on one saved scanner signal.',

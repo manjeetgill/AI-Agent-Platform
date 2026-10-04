@@ -275,8 +275,10 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
 
     async def workflow_work(workflow_id, body, request, claims):
         repo = request.app.state.repository
-        steps = ('signal-research', 'signal-challenger') if body.kind == 'signal_review' else (
-            'backtest-auditor', 'strategy-review')
+        steps = {'signal_review': ('signal-research', 'signal-challenger'),
+                 'backtest_review': ('backtest-auditor', 'strategy-review'),
+                 'trading_review': ('trade-autopsy', 'trader-behavior'),
+                 'strategy_comparison': ('strategy-doctor', 'strategy-comparator')}[body.kind]
         try:
             async with asyncio.timeout(115):
                 for index, slug in enumerate(steps):
@@ -301,7 +303,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         claims = actor(authorization)
         if not enabled('AI_WORKFLOWS') or not enabled('AI_BUILTIN_AGENTS', default=True):
             raise HTTPException(503, 'Agent workflows disabled')
-        required = 'scanner_evidence' if body.kind == 'signal_review' else 'backtest_evidence'
+        required = {'signal_review': 'scanner_evidence', 'backtest_review': 'backtest_evidence',
+                    'trading_review': 'research_evidence', 'strategy_comparison': 'research_evidence'}[body.kind]
         if body.evidence.tool != required:
             raise HTTPException(422, 'Workflow evidence does not match its steps')
         repo = request.app.state.repository

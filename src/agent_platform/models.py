@@ -25,12 +25,17 @@ class PaperTradeInput(Strict):
     trade_id: str = Field(pattern=r'^[0-9a-fA-F-]{36}$')
 
 
+class ResearchInput(Strict):
+    tool: Literal['research_evidence']
+    snapshot_id: str = Field(pattern=r'^[0-9a-fA-F-]{36}$')
+
+
 class AgentDraft(Strict):
     name: str = Field(min_length=3, max_length=80)
     description: str = Field(default='', max_length=500)
     instructions: str = Field(min_length=1, max_length=4000)
-    allowed_tools: list[Literal['scanner_evidence', 'backtest_evidence', 'paper_trade_evidence']] = Field(
-        default_factory=list, max_length=3)
+    allowed_tools: list[Literal['scanner_evidence', 'backtest_evidence', 'paper_trade_evidence', 'research_evidence']] = Field(
+        default_factory=list, max_length=4)
 
 
 class AgentIdea(Strict):
@@ -99,13 +104,13 @@ class StrategyPlan(Strict):
 
 class RunRequest(Strict):
     agent_id: str = Field(pattern=r'^[0-9a-fA-F-]{36}$')
-    evidence: ScannerInput | BacktestInput | PaperTradeInput
+    evidence: ScannerInput | BacktestInput | PaperTradeInput | ResearchInput
     idempotency_key: str = Field(min_length=8, max_length=100, pattern=r'^[A-Za-z0-9_.:-]+$')
 
 
 class WorkflowRequest(Strict):
-    kind: Literal['signal_review', 'backtest_review']
-    evidence: ScannerInput | BacktestInput
+    kind: Literal['signal_review', 'backtest_review', 'trading_review', 'strategy_comparison']
+    evidence: ScannerInput | BacktestInput | ResearchInput
     idempotency_key: str = Field(min_length=8, max_length=80, pattern=r'^[A-Za-z0-9_.:-]+$')
 
 
@@ -115,7 +120,14 @@ class Finding(Strict):
     source_ids: list[str] = Field(default_factory=list, max_length=8)
 
 
+class NumericClaim(Strict):
+    label: str = Field(max_length=160)
+    value: float = Field(allow_inf_nan=False, strict=True)
+    unit: str = Field(max_length=80)
+
+
 class Report(Strict):
+    numeric_claims: list[NumericClaim] = Field(default_factory=list, max_length=20)
     summary: str = Field(min_length=1, max_length=1500)
     why_triggered: str | None = Field(default=None, max_length=1000)
     supporting: list[Finding] = Field(default_factory=list, max_length=12)

@@ -87,3 +87,28 @@ reports remain explicit; no consensus, historical statistic or numerical score i
 invented. The current workflows independently review one saved signal or one
 backtest with two agents. Catalog entries expose a stable `builtin_key` for consumer
 applications to present domain-specific names without changing saved agent IDs.
+
+### Deterministic research evidence
+
+The reusable `research_evidence` tool accepts only `snapshot_id`. Its consumer
+connector retrieves a permission-scoped immutable evidence snapshot and rechecks
+current permissions. Domain calculations and source adapters remain in NRAIAlgo.
+A different consumer can implement the same signed connector endpoint.
+
+`research-v1` evidence carries typed facts (`label`, `value`, `unit`, `basis`),
+methodology/version/source coverage, limitations, freshness and a digest. Reports
+use `numeric_claims` for exact copies of numerical measurements: label, unit and
+value must all match a supplied measurement. Free prose is qualitative; digit
+and common spelled-number claims are rejected and repaired once. This validation
+is a guard against numeric invention, not proof of every semantic model claim.
+Evidence over the bounded size/count limit fails instead of silently dropping
+research facts. Scanner evidence additionally supplies typed mean/median volume
+measurements from the consumer.
+
+Added research built-ins cover historical patterns, portfolio risk, market
+context, multi-trade reviews, journal/behavior, strategy diagnosis/comparison,
+options and approved robustness results. `trading_review` and
+`strategy_comparison` workflows preserve separate step reports. Apply migration
+`012_research_workflows.sql` before startup. NRAIAlgo owns approved experiment
+plans and read-only monitoring/delivery consent; this platform does not acquire
+broker execution privileges or autonomously run sensitivity searches.

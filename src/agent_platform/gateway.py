@@ -70,6 +70,8 @@ class Gateway:
                   'Use only supplied evidence. Do not invent market facts or numbers. Every FACT must cite an evidence '
                   'source_id. Leave historical_context and invalidation_conditions empty unless explicitly present '
                   'in evidence; list unavailable context in missing. Distinguish observations and hypotheses. '
+                  'For evidenceVersion research-v1: prose must be qualitative and contain no digits, numerical estimates or spelled-out quantities. Put any numerical statement only in numeric_claims by copying the exact label, value and unit from measurements or facts. Never interchange mean and median or invent a calculation. Report source limitations before interpretation. Dates, timestamps, rule versions and numbered indicator names must also be omitted from prose; say the saved session or the moving average. You may leave numeric_claims empty because the interface displays the deterministic measurements separately. '
+                  'Be concise: summary at most eighty words, at most three supporting and three conflicting findings, at most three entries in each other prose list, and at most four numeric_claims. The interface already displays every measured value. '
                   'Return JSON matching this schema: '
                   + json.dumps(Report.model_json_schema()))
         if not evidence.get('historicalContext'):
@@ -103,6 +105,8 @@ class Gateway:
         if not enabled('AI_NVIDIA', default=True) or not model or not getattr(self.provider, 'key', None):
             raise RunFailure('MODEL_NOT_CONFIGURED')
         url, headers, payload = self.provider.request(model, policy, data)
+        if schema is Report:
+            payload['max_tokens'] = 2048
         client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(50, connect=5))
         total_tokens = 0
         try:
@@ -121,12 +125,15 @@ class Gateway:
                     if attempt:
                         raise RunFailure('INVALID_MODEL_OUTPUT') from None
                 except RunFailure as exc:
-                    if attempt or exc.code not in {'UNSUPPORTED_CONTEXT', 'UNSUPPORTED_SOURCE', 'UNSUPPORTED_FACT'}:
+                    if attempt or exc.code not in {'UNSUPPORTED_CONTEXT', 'UNSUPPORTED_SOURCE', 'UNSUPPORTED_FACT', 'UNSUPPORTED_NUMBER'}:
                         raise
+                    payload['messages'].append({'role': 'assistant', 'content': content})
                     payload['messages'].append({'role': 'user', 'content':
                         'Regenerate the JSON using only the original evidence. The previous response failed '
                         'evidence validation: ' + exc.code + '. Do not add historical context or invalidation '
-                        'conditions when absent from evidence. Every factual finding needs an existing source_id.'})
+                        'conditions when absent from evidence. Every factual finding needs an existing source_id. '
+                        'For UNSUPPORTED_NUMBER, remove ALL digits from every prose field, including dates, versions, sample counts and indicator names. '
+                        'Use qualitative wording without spelled-out numbers either (including one, two, five, twenty, thirty, half, twice). Omit numeric rule definitions and thresholds from prose. Put numerical facts only in numeric_claims, copying exact original label, numeric value and unit; or leave that list empty.'})
                 except httpx.TimeoutException as exc:
                     raise RunFailure('MODEL_TIMEOUT') from exc
                 except httpx.HTTPError as exc:

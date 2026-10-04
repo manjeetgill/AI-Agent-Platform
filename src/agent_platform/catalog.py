@@ -38,3 +38,20 @@ TEMPLATES = [
         ('Momentum Scout', 'Find momentum setups'), ('Breakout Researcher', 'Review breakouts'),
         ('Risk Monitor', 'Monitor risk conditions'))
 ]
+
+# Domain computations are supplied by the consuming app's scoped snapshot connector.
+for slug, name, scope in (
+    ('historical-patterns', 'Historical Pattern Finder', 'Explain measured historical similarity, overlap exclusions, outcomes and sample-size limitations. Do not infer predictive probabilities.'),
+    ('risk-monitor-review', 'Risk Monitor', 'Explain measured concentration and coverage. Monitoring schedules and notification consent are configured explicitly in the consumer UI; never claim a monitor was created by this report.'),
+    ('portfolio-risk', 'Portfolio Risk Analyst', 'Explain valued holdings concentration, mapping coverage, missing accounts and freshness. Never estimate beta or correlation.'),
+    ('market-context', 'Market Context Analyst', 'Explain dated sector/index mapping, selected-universe breadth and verified volatility. Distinguish selected breadth from exchange breadth.'),
+    ('trade-autopsy', 'Multi-trade Autopsy', 'Explain deterministic completed trade metrics and sample limitations. Paper fills are simulated.'),
+    ('trading-journal', 'Trading Journal Agent', 'Summarize dated trading metrics, observed entry-hour patterns and reflection questions.'),
+    ('trader-behavior', 'Trader Behavior Agent', 'Explain measured holding-time and post-loss premium-size comparisons. Never infer motives, emotions or causality.'),
+    ('strategy-doctor', 'Strategy Doctor', 'Diagnose saved backtest coverage and cost dependence. Treat each basket as one observation; distinguish hypotheses from measured evidence.'),
+    ('strategy-comparator', 'Strategy Comparator', 'Compare only explicitly supplied periods, capital and cost conventions. Do not rank incompatible samples or invent Sharpe or CAGR.'),
+    ('options-analyst', 'Options Analyst', 'Explain verified option contracts, calibrated Greeks, per-underlying exposure and expiry payoff limitations. Do not propose orders.'),
+    ('robustness-review', 'Strategy Robustness Review', 'Explain approved fixed-fill cost sensitivity results when supplied; otherwise state sensitivity is missing. Broader searches require a separately approved bounded plan.'),
+):
+    BUILTINS[slug] = {'name': name, 'description': scope, 'instructions': scope,
+                      'allowed_tools': ['research_evidence'], 'version': 1}

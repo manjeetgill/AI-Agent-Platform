@@ -1,5 +1,7 @@
 """Bounded read-only tool call followed by a validated model report."""
 import json
+import math
+import re
 
 import httpx
 
@@ -14,15 +16,18 @@ def compact_evidence(data):
     entries = data.get('events') if 'events' in data else data.get('facts')
     if not isinstance(entries, list):
         raise RunFailure('INVALID_EVIDENCE')
-    entries = entries[:40]
+    if data.get('evidenceVersion') == 'research-v1' and len(entries) > 100:
+        raise RunFailure('EVIDENCE_TOO_LARGE')
+    entries = entries[:100]
     if not entries or any(not isinstance(item, dict) for item in entries):
         raise RunFailure('MISSING_EVIDENCE')
     allowed = {'instrument', 'session', 'timeframe', 'source', 'asOf', 'events', 'facts', 'indicators',
-               'conditions', 'freshness', 'historicalContext', 'invalidationConditions'}
+               'conditions', 'freshness', 'historicalContext', 'invalidationConditions',
+               'measurements', 'methodology', 'limitations', 'evidenceVersion', 'digest', 'stale'}
     evidence = {key: value for key, value in data.items() if key in allowed}
     key = 'events' if 'events' in data else 'facts'
     evidence[key] = [{**entry, 'source_id': str(index)} for index, entry in enumerate(entries)]
-    encoded = json.dumps(evidence, default=str, separators=(',', ':'))
+    encoded = json.dumps(evidence, default=str, separators=(',', ':'), allow_nan=False)
     if len(encoded.encode()) > 32000:
         raise RunFailure('EVIDENCE_TOO_LARGE')
     return evidence
@@ -39,6 +44,22 @@ def validate_report(report, evidence):
             raise RunFailure('UNSUPPORTED_SOURCE')
         if finding.category in {'FACT', 'CALCULATED FACT'} and not finding.source_ids:
             raise RunFailure('UNSUPPORTED_FACT')
+    if evidence.get('evidenceVersion') == 'research-v1':
+        measurements = evidence.get('measurements', evidence.get('facts', []))
+        verified = {f.get('label'): f for f in measurements}
+        for claim in report.numeric_claims:
+            original = verified.get(claim.label)
+            if (not original or original.get('unit') != claim.unit
+                    or not isinstance(original.get('value'), (int, float))
+                    or not math.isclose(claim.value, original['value'], rel_tol=1e-8, abs_tol=1e-8)):
+                raise RunFailure('UNSUPPORTED_NUMBER')
+        # Numerical claims have an exact typed channel; prose cannot re-label or round them.
+        prose = [report.summary, report.why_triggered or '', report.data_freshness,
+                 *[f.text for f in report.supporting + report.conflicting],
+                 *report.missing, *report.risks, *report.historical_context,
+                 *report.invalidation_conditions, *report.questions]
+        if any(re.search(r'\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|half|twice|double|triple)\b', text, re.IGNORECASE) for text in prose):
+            raise RunFailure('UNSUPPORTED_NUMBER')
     return report
 
 
@@ -52,7 +73,7 @@ class Runtime:
 
     async def retrieve(self, tenant, user, agent_id, run_id, query):
         endpoints = {'scanner_evidence': 'scanner-evidence', 'backtest_evidence': 'backtest-evidence',
-                     'paper_trade_evidence': 'paper-trade-evidence'}
+                     'paper_trade_evidence': 'paper-trade-evidence', 'research_evidence': 'research-evidence'}
         endpoint = endpoints[query.tool]
         token = issue(self.signing_key, issuer='agent-platform', audience='nraialgo-connector',
                       tenant=tenant, user=user, agent=agent_id, run=run_id, scope=query.tool + ':read')
