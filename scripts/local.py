@@ -105,7 +105,7 @@ def nvidia():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['setup', 'start', 'status', 'nvidia', 'stop-db'])
+    parser.add_argument('command', choices=['setup', 'start', 'status', 'nvidia', 'vision', 'stop-db'])
     args = parser.parse_args()
     if args.command == 'setup':
         setup()
@@ -113,6 +113,11 @@ def main():
     values = load()
     if args.command == 'nvidia':
         nvidia()
+    elif args.command == 'vision':
+        values['AI_VISION'] = '1'
+        values['AI_PLATFORM_NVIDIA_VISION_MODEL'] = 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning'
+        save(CONFIG, values)
+        print('Vision configured using the existing NVIDIA key. Restart the platform to apply it.')
     elif args.command == 'status':
         print('NVIDIA: ' + ('configured (not verified)' if values.get('NVIDIA_API_KEY') and
               values.get('AI_PLATFORM_NVIDIA_FAST_MODEL') else 'awaiting key and model ID'))

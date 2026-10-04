@@ -35,11 +35,19 @@ class NVIDIAProvider:
             'https://integrate.api.nvidia.com/v1/chat/completions')
 
     def request(self, model, policy, data):
-        return self.url, {'Authorization': 'Bearer ' + self.key}, {
+        payload = {
             'model': model, 'temperature': 0.1, 'max_tokens': 1600,
             'response_format': {'type': 'json_object'}, 'messages': [
                 {'role': 'system', 'content': policy},
                 {'role': 'user', 'content': json.dumps(data, default=str)}]}
+        if model == 'nvidia/nemotron-3-ultra-550b-a55b':
+            # This hosted endpoint does not advertise constrained JSON output.
+            # Keep schema validation in Gateway; request a plain JSON answer.
+            payload.pop('response_format')
+            payload['chat_template_kwargs'] = {'enable_thinking': False}
+            payload['max_tokens'] = 4096
+            payload['messages'][0]['content'] += '\nReturn only the JSON object, without Markdown fences.'
+        return self.url, {'Authorization': 'Bearer ' + self.key}, payload
 
     def response(self, payload):
         usage = payload.get('usage') or {}

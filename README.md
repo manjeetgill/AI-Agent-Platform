@@ -58,3 +58,22 @@ and replayable task events. See [integration and rollout](docs/SERVICE_API.md) a
 using typed, explicitly granted tools. Includes a read-only decision comparison adapter and a
 [runnable HTTP example](examples/task_agent_flow.py). Natural-language planning requires the
 configured model; flags remain off until operator setup. No browser automation is bundled.
+
+## Optional image analysis
+
+With the existing NVIDIA key saved, run `.venv/bin/python scripts/local.py vision`,
+then restart the service. This sets `AI_VISION=1` and
+`AI_PLATFORM_NVIDIA_VISION_MODEL=nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` without
+changing the text/reasoning models. Deployments must set those variables explicitly.
+
+Authenticated consumers use `GET /v1/agents/vision` for configuration,
+`POST /v1/agents/vision/analyze` with `{image, question, mode, consent:true}`, and
+`GET /v1/agents/vision/reports` for their latest 20 reports. `image` is a base64 PNG
+or JPEG data URL; `mode` is `chart` or `document`. Remote URLs, PDFs and animated
+images are unsupported. Inputs are limited to 2,000,000 decoded bytes, 8 megapixels,
+and a 3,000,000-byte request. The service re-encodes images without metadata and
+resizes to fit 2048 pixels before sending to NVIDIA. Uploads are not persisted;
+questions and generated reports are stored by tenant and user. Requests share the
+existing atomic 20/day AI-builder allowance. Images and prompts must not be logged
+by a deployment's reverse proxy. Reports contain model-extracted content, not
+independently verified market facts. Migration 010 adds report storage.

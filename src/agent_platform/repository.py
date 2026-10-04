@@ -264,3 +264,16 @@ class Repository:
                 finished_at FROM agent_runs WHERE tenant_id=%s AND owner_id=%s ORDER BY created_at DESC LIMIT 100''',
                 (tenant, user))
             return await cursor.fetchall()
+
+    async def save_vision(self, tenant, user, row):
+        async with self.pool.connection() as connection:
+            await connection.execute('''INSERT INTO agent_vision_reports
+                (id,tenant_id,owner_id,question,mode,report,model,tokens) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)''',
+                (row['id'], tenant, user, row['question'], row['mode'], Jsonb(row['report']), row['model'], row['tokens']))
+
+    async def vision_history(self, tenant, user):
+        async with self.pool.connection() as connection:
+            cursor = await connection.execute('''SELECT id,question,mode,report,model,tokens,created_at
+                FROM agent_vision_reports WHERE tenant_id=%s AND owner_id=%s ORDER BY created_at DESC LIMIT 20''',
+                (tenant, user))
+            return await cursor.fetchall()
