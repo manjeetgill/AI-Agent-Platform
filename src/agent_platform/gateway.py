@@ -72,6 +72,10 @@ class Gateway:
                   'in evidence; list unavailable context in missing. Distinguish observations and hypotheses. '
                   'Return JSON matching this schema: '
                   + json.dumps(Report.model_json_schema()))
+        if not evidence.get('historicalContext'):
+            policy += ' For this input historical_context MUST be an empty array [].'
+        if not evidence.get('invalidationConditions'):
+            policy += ' For this input invalidation_conditions MUST be an empty array []; put research questions in questions.'
         return await self.structured(task, policy, {'task': instructions, 'evidence': evidence,
                                                     'user_preferences': preferences or []},
                                      Report, lambda value: validator(value, evidence))
@@ -99,7 +103,8 @@ class Gateway:
         if not enabled('AI_NVIDIA', default=True) or not model or not getattr(self.provider, 'key', None):
             raise RunFailure('MODEL_NOT_CONFIGURED')
         url, headers, payload = self.provider.request(model, policy, data)
-        client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(35, connect=5))
+        client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(50, connect=5))
+        total_tokens = 0
         try:
             for attempt in range(2):
                 try:
@@ -109,11 +114,19 @@ class Gateway:
                         continue
                     response.raise_for_status()
                     content, tokens = self.provider.response(response.json())
+                    total_tokens += tokens
                     output = validator(schema.model_validate_json(content))
-                    return output, tokens, self.provider.name, model
+                    return output, total_tokens, self.provider.name, model
                 except (KeyError, IndexError, TypeError, ValueError, ValidationError):
                     if attempt:
                         raise RunFailure('INVALID_MODEL_OUTPUT') from None
+                except RunFailure as exc:
+                    if attempt or exc.code not in {'UNSUPPORTED_CONTEXT', 'UNSUPPORTED_SOURCE', 'UNSUPPORTED_FACT'}:
+                        raise
+                    payload['messages'].append({'role': 'user', 'content':
+                        'Regenerate the JSON using only the original evidence. The previous response failed '
+                        'evidence validation: ' + exc.code + '. Do not add historical context or invalidation '
+                        'conditions when absent from evidence. Every factual finding needs an existing source_id.'})
                 except httpx.TimeoutException as exc:
                     raise RunFailure('MODEL_TIMEOUT') from exc
                 except httpx.HTTPError as exc:

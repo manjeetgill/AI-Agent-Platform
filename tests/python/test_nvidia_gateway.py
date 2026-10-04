@@ -35,3 +35,30 @@ def test_ultra_still_rejects_invalid_output(monkeypatch):
 
     asyncio.run(run())
     assert len(calls) == 2
+
+
+def test_evidence_validation_gets_one_correction_without_weakening_rules(monkeypatch):
+    import json
+
+    from agent_platform.models import Report
+    from agent_platform.runtime import validate_report
+
+    monkeypatch.setenv('AI_PLATFORM_NVIDIA_FAST_MODEL', MODEL)
+    monkeypatch.setenv('AI_NVIDIA', '1')
+    calls = []
+    bad = Report(summary='Test', data_freshness='Saved', historical_context=['Invented history'])
+    good = Report(summary='Test', data_freshness='Saved')
+
+    def respond(request):
+        calls.append(json.loads(request.content))
+        report = bad if len(calls) == 1 else good
+        return httpx.Response(200, json={'choices': [{'message': {'content': report.model_dump_json()}}]})
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            report, *_ = await Gateway(NVIDIAProvider('test-key'), client=client).report(
+                'research', 'Research evidence', {'sources': []}, validate_report)
+            assert report.historical_context == []
+    asyncio.run(run())
+    assert len(calls) == 2
+    assert 'UNSUPPORTED_CONTEXT' in calls[1]['messages'][-1]['content']

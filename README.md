@@ -77,3 +77,13 @@ questions and generated reports are stored by tenant and user. Requests share th
 existing atomic 20/day AI-builder allowance. Images and prompts must not be logged
 by a deployment's reverse proxy. Reports contain model-extracted content, not
 independently verified market facts. Migration 010 adds report storage.
+
+### Combined research workflow reports
+
+`GET /v1/agents/workflows/{id}` now includes `steps`, `completed_steps`,
+`expected_steps`, `complete`, and coverage limitations. Each step is loaded with the
+same tenant/user ownership predicates as individual reports. Failed or missing
+reports remain explicit; no consensus, historical statistic or numerical score is
+invented. The current workflows independently review one saved signal or one
+backtest with two agents. Catalog entries expose a stable `builtin_key` for consumer
+applications to present domain-specific names without changing saved agent IDs.

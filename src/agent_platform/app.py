@@ -24,6 +24,7 @@ from .task_agent_api import install_task_agents
 from .task_api import install_tasks
 from .tokens import TokenError, verify
 from .vision import install_vision
+from .workflow_report import assemble_workflow
 
 
 def create_app(*, repository=None, runtime=None, signing_key=None, task_registry=None):
@@ -97,7 +98,11 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         repo = request.app.state.repository
         if enabled('AI_BUILTIN_AGENTS', default=True):
             await repo.ensure_builtins(claims['tenant'], claims['user'], BUILTINS)
-        return {'agents': await repo.list_agents(claims['tenant'], claims['user']), 'templates': TEMPLATES,
+        agents = await repo.list_agents(claims['tenant'], claims['user'])
+        builtin_keys = {str(uuid5(NAMESPACE_URL, f"agent-platform:{claims['tenant']}:{claims['user']}:{slug}")): slug
+                        for slug in BUILTINS}
+        return {'agents': [{**agent, 'builtin_key': builtin_keys.get(str(agent['id']))
+                            if agent['kind'] == 'builtin' else None} for agent in agents], 'templates': TEMPLATES,
                 'features': capabilities(), 'model': model_configuration()}
 
     @app.post('/v1/agents')
@@ -337,7 +342,7 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         row = await repo.get_workflow(claims['tenant'], claims['user'], uuid(workflow_id))
         if not row:
             raise HTTPException(404, 'Workflow not found')
-        return row
+        return await assemble_workflow(repo, claims, row)
 
     @app.get('/v1/agents/runs')
     async def runs(request: Request, authorization: str | None = Header(default=None)):
