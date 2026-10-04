@@ -14,6 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from .catalog import BUILTINS, TEMPLATES
 from .flags import capabilities, enabled
+from .gateway import model_configuration
 from .migrate import schema_ready
 from .models import AgentDraft, AgentIdea, PreferenceIn, RunRequest, StrategyPlan, WorkflowRequest
 from .repository import Repository
@@ -53,7 +54,7 @@ def create_app(*, repository=None, runtime=None, signing_key=None):
             if repository is None:
                 await application.state.pool.close()
 
-    app = FastAPI(title='NRAIAlgo Agent Platform', docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title='AI Agent Platform', docs_url=None, redoc_url=None, lifespan=lifespan)
 
     def actor(authorization):
         if not authorization or not authorization.startswith('Bearer '):
@@ -93,7 +94,7 @@ def create_app(*, repository=None, runtime=None, signing_key=None):
         if enabled('AI_BUILTIN_AGENTS', default=True):
             await repo.ensure_builtins(claims['tenant'], claims['user'], BUILTINS)
         return {'agents': await repo.list_agents(claims['tenant'], claims['user']), 'templates': TEMPLATES,
-                'features': capabilities()}
+                'features': capabilities(), 'model': model_configuration()}
 
     @app.post('/v1/agents')
     async def create_agent(draft: AgentDraft, request: Request, authorization: str | None = Header(default=None)):

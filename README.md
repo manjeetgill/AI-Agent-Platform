@@ -4,26 +4,36 @@ Independent Python service extracted from NRAIAlgo on 2026-10-04. This project o
 
 NRAIAlgo is the first consumer. Its application UI, login/session validation, HTTP facade and evidence connector stay in its own repository. The only shared boundary is the versioned HTTP/delegation contract in `docs/INTEGRATION_PROTOCOL.md`. The platform still includes NRAIAlgo-oriented research agents and tools; extraction does not make their contracts generic.
 
-## Local setup
+## Prepared local setup (macOS with PostgreSQL 17)
 
 ```sh
 python3 -m venv .venv
-. .venv/bin/activate
-pip install -e '.[dev]'
-cp .env.example .env
-# Configure private values in .env; the Python process requires exported environment variables.
-python -m agent_platform.migrate
-uvicorn agent_platform.app:app --host 127.0.0.1 --port 4060
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python scripts/local.py setup
+.venv/bin/python scripts/local.py start
 ```
 
-Use a separate PostgreSQL database. The service never receives NRAIAlgo database or broker credentials. See `docs/AI_AGENT_DEPLOYMENT.md` for Docker setup and two-way networking.
+Setup generates a private signing key and database password once. The launcher initializes its own PostgreSQL cluster on 55460, applies platform migrations and serves the API on 4060. It preserves reports and settings across restarts. Configuration is stored under ignored `.runtime/local/` with permissions 0600. It does not use the NRAIAlgo database.
+
+When ready to configure NVIDIA, use your own Terminal:
 
 ```sh
-python -m pytest -q
-ruff check src tests
+.venv/bin/python scripts/local.py nvidia
 ```
 
-PostgreSQL tests are opt-in: migrate a disposable database, then set `AGENT_TEST_DATABASE_URL` to it. Unit tests use connector and model fixtures and require no NRAIAlgo checkout.
+Enter the key privately, then an accessible model ID. The optional reasoning model defaults to the same ID. Restart `scripts/local.py start` afterward. This command saves settings; a successful agent run verifies actual provider access. Before configuration, the API, agent catalog, custom-agent saving and history work; model actions show a setup message in the consuming UI.
+
+The consumer imports only `.runtime/local/client.json` during connection setup. This file contains the platform URL and signing secret, never the NVIDIA key or platform database password. For NRAIAlgo, run `npm run local:agents:connect` in its repository. The connector URL defaults to its local API at 4022.
+
+```sh
+.venv/bin/python scripts/local.py status
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check src tests scripts/local.py
+```
+
+Ctrl-C stops the API and retains the database. `scripts/local.py stop-db` stops only this project's local database. Docker deployment remains available through `compose.yaml` and `.env.example`; do not run it on the same API port while the native launcher is running. See `docs/AI_AGENT_DEPLOYMENT.md`.
+
+PostgreSQL tests require `AGENT_TEST_DATABASE_URL` pointing to a disposable migrated database. Unit tests require no NRAIAlgo checkout.
 
 ## Status
 

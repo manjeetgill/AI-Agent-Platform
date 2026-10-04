@@ -18,6 +18,14 @@ class ModelProvider(Protocol):
     def response(self, payload: dict) -> tuple[str, int]: ...
 
 
+def model_configuration():
+    configured = bool(enabled('AI_NVIDIA', default=True) and os.environ.get('NVIDIA_API_KEY', '').strip()
+                      and os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip())
+    return {'configured': configured, 'provider': 'nvidia',
+            'message': 'NVIDIA settings saved; model access is verified when you run an agent.' if configured else
+            'Platform connected. Add the NVIDIA API key and model ID in the platform, then restart it.'}
+
+
 class NVIDIAProvider:
     name = 'nvidia'
 
@@ -43,7 +51,7 @@ class Gateway:
         self.provider = provider
         self.client = client
         self.fast_model = os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
-        self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', self.fast_model).strip()
+        self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model
 
     def model_for(self, task):
         return self.reasoning_model if task == 'challenge' else self.fast_model
