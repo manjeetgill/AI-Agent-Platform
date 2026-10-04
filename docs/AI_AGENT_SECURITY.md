@@ -1,0 +1,11 @@
+# AI Agent security
+
+Current agent capabilities are read-only `scanner_evidence`, `backtest_evidence` and `paper_trade_evidence`. The platform has no NRAIAlgo database or broker credentials. Each connector endpoint checks a signed, audience-restricted 45-second tool delegation and selects saved data by both record ID and `workspace_id`. Backtests additionally require the existing owner role. NRAIAlgo's browser facade first validates its normal session, MFA and edition policy. The platform stores agents and runs under `tenant_id` and `owner_id` and includes both in every read.
+
+Custom instructions and saved preferences are user data. They cannot register tools, change permissions or produce an execution request. Retrieved evidence is serialized as data under a fixed system policy. Reports require valid JSON; source IDs must match supplied evidence indices, and model-labeled facts require a source ID. This check confirms provenance references, not semantic truth. Model observations are stored separately from factual trading data. No live trading path exists in the platform.
+
+The signing key is a shared service secret and must be at least 32 random bytes. Rotate it in both services together; in-flight 45-second requests may fail during rotation. Keep it and `NVIDIA_API_KEY` out of logs, browser bundles and repositories. The model only receives bounded scanner fields; the connector does not return broker, account or secret data. The NVIDIA credential stays in the platform service.
+
+Current limitations: tool token replay is not persisted for one-time enforcement; the tool is read-only and the token expires quickly. The platform's per-user active-run count is checked before insert, while a database unique index prevents overlapping runs for the same agent. Further per-user quotas and tenant-specific keys are required before broad production enablement. The model's narrative cannot yet be deterministically checked against every source field.
+
+The natural-language strategy builder never executes code or trades. It returns a strict archive backtest draft, rejects known unsupported indicator/code requests, and requires a separate user confirmation before the existing owner-only backtest API receives the draft. That API remains the final deterministic validator.

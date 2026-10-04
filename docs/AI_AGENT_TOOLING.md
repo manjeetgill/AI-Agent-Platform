@@ -1,0 +1,5 @@
+# AI Agent tools
+
+The `scanner_evidence` tool accepts a UUID manual scan run ID and an `NSE:` instrument symbol. NRAIAlgo independently checks ownership, completion and evidence version. `backtest_evidence` accepts a completed archive backtest UUID and checks both workspace and owner role; it returns measured outcome, P&L, drawdown, cost assumptions, coverage and limitations. `paper_trade_evidence` accepts a closed options paper trade UUID and returns frozen simulated entry, exit, legs, fees and P&L. Each scope has its own connector endpoint. The platform bounds evidence to 40 entries and 32 KB before model use.
+
+Tool output is untrusted data. Only server code selects and calls the tool. The model cannot supply arbitrary HTTP destinations, SQL or code. To add a tool, define a strict input and output schema, a fixed connector endpoint, an authorization query with workspace ownership, a delegation scope, response size and timeout limits, and isolation/failure tests. Do not register broker or order endpoints as tools.

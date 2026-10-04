@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:17-bookworm@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652
+    environment:
+      POSTGRES_DB: agent_platform
+      POSTGRES_PASSWORD: ${AGENT_DB_PASSWORD:?Set AGENT_DB_PASSWORD}
+    volumes: [agent_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d agent_platform]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build: .
+    env_file: .env
+    command: [python, -m, agent_platform.migrate]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: 'no'
+  api:
+    build: .
+    env_file: .env
+    ports: ['127.0.0.1:4060:4060']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=64m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4060/readiness', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+volumes:
+  agent_data:
