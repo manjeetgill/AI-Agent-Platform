@@ -45,3 +45,9 @@ task UI are not implemented yet; all execution tests use synthetic adapters.
 This preserves the existing partial implementation. Scheduled triggers, notifications, broader trading RAG, production load tests and credentialed browser/provider verification remain unfinished. No live execution tools are present. This extraction does not declare production readiness.
 
 The GitHub repository has not been created or connected. This folder is ready to use as its independent source project.
+
+## Multi-app roadmap
+
+The first service API increment adds scoped application credentials, app-bound users, pagination
+and replayable task events. See [integration and rollout](docs/SERVICE_API.md) and the
+[remaining roadmap](docs/ROADMAP.md). Browser execution remains disabled by default.

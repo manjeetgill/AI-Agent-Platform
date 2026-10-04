@@ -47,12 +47,12 @@ provide those browser-side guarantees. Never infer that a website action failed 
 
 ## API and authentication
 
-`AI_BROWSER_TASKS=1` enables `/v1/tasks`; it is off by default. Existing signed delegations
+`AI_BROWSER_TASKS=1` enables `/v1/tasks`; it is off by default. Existing signed delegations and scoped service keys
 authenticate requests, and every user operation checks tenant and owner. Standalone login and
 extension/device pairing are not implemented here. NRAIAlgo's current facade does not proxy tasks.
 
 - `POST /v1/tasks`: request and idempotency_key
-- `GET /v1/tasks`: most recent 100 owned tasks
+- `GET /v1/tasks`: paginated owned tasks (default 50, maximum 100)
 - `GET /v1/tasks/{id}`: plan and most recent 100 audit events
 - `PUT /v1/tasks/{id}/plan`: registered tool names and arguments
 - `POST /v1/tasks/{id}/start`
@@ -75,4 +75,4 @@ PostgreSQL tests use synthetic adapters to cover competing claims, per-user excl
 approval binding/expiry, revoked workers, crash recovery, payment handoff and reconciliation.
 The next end-to-end milestone needs the Chrome extension, one tested site adapter and user UI.
 It must verify local takeover, secret-free observation, reconnection, approval changes and receipt
-capture before live chores are enabled. The wider multi-app roadmap remains deferred.
+capture before live chores are enabled. The first multi-app increment is described in [Service API](SERVICE_API.md); remaining work is tracked in [Roadmap](ROADMAP.md).

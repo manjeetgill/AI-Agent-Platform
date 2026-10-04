@@ -7,12 +7,33 @@ from .tasks import TaskError
 
 
 class TaskStore:
-    def __init__(self, pool):
+    def __init__(self, pool, principal=None):
         self.pool = pool
+        self.principal = principal
 
     async def event(self, conn, task, name, details=None):
         await conn.execute('INSERT INTO chore_events(task_id,event,details) VALUES(%s,%s,%s)',
-                           (task, name, Jsonb(details or {})))
+                           (task, name, Jsonb({**(details or {}),
+                            **({'principal': self.principal} if self.principal else {})})))
+
+    async def page(self, tenant, user, *, limit=50, before=None):
+        async with self.pool.connection() as conn, conn.transaction():
+            boundary = ''
+            params = [tenant, user]
+            if before is not None:
+                cursor = await self.owned(conn, tenant, user, before)
+                boundary = ' AND (created_at,id)<(%s,%s)'
+                params.extend([cursor['created_at'], cursor['id']])
+            rows = await (await conn.execute('''SELECT id,request,status,current_step,revision,created_at,updated_at
+                FROM chore_tasks WHERE tenant_id=%s AND owner_id=%s''' + boundary +
+                ' ORDER BY created_at DESC,id DESC LIMIT %s', (*params, limit + 1))).fetchall()
+            return {'tasks': rows[:limit], 'next_cursor': str(rows[limit-1]['id']) if len(rows) > limit else None}
+
+    async def events(self, tenant, user, task, after=0, limit=100):
+        async with self.pool.connection() as conn, conn.transaction():
+            await self.owned(conn, tenant, user, task)
+            return await (await conn.execute('''SELECT id,event,details,created_at FROM chore_events
+                WHERE task_id=%s AND id>%s ORDER BY id LIMIT %s''', (task, after, limit))).fetchall()
 
     async def owned(self, conn, tenant, user, task):
         row = await (await conn.execute('''SELECT * FROM chore_tasks
@@ -47,10 +68,7 @@ class TaskStore:
             return row
 
     async def list(self, tenant, user):
-        async with self.pool.connection() as conn:
-            return await (await conn.execute('''SELECT id,request,status,current_step,revision,created_at,updated_at
-                FROM chore_tasks WHERE tenant_id=%s AND owner_id=%s ORDER BY created_at DESC,id LIMIT 100''',
-                (tenant, user))).fetchall()
+        return (await self.page(tenant, user, limit=100))['tasks']
 
     async def plan(self, tenant, user, task, actions):
         async with self.pool.connection() as conn, conn.transaction():
@@ -77,6 +95,11 @@ class TaskStore:
                                         (task, position))).fetchone()
         status = 'DONE' if step is None else {'READ': 'READY', 'SEND': 'WAITING_APPROVAL',
                                              'USER_ONLY': 'WAITING_USER'}[step['risk']]
+        if step and step['outcome_pending']:
+            status = 'OUTCOME_UNKNOWN'
+        elif status == 'WAITING_USER':
+            await conn.execute('UPDATE chore_steps SET outcome_pending=true WHERE task_id=%s AND position=%s',
+                               (task, position))
         await conn.execute('''UPDATE chore_tasks SET status=%s,current_step=%s,lease_token=NULL,
             lease_until=NULL,updated_at=now() WHERE id=%s''', (status, position, task))
         if status == 'READY':
@@ -97,7 +120,7 @@ class TaskStore:
                 raise TaskError('Task is not waiting for approval')
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task, row['current_step']))).fetchone()
-            if step['risk'] != 'SEND' or step['action_hash'] != digest:
+            if step['outcome_pending'] or step['risk'] != 'SEND' or step['action_hash'] != digest:
                 raise TaskError('Approval does not match the pending action')
             await conn.execute('''INSERT INTO chore_approvals(id,task_id,position,action_hash,approved_by,expires_at)
                 VALUES(%s,%s,%s,%s,%s,now()+interval '10 minutes')''',
@@ -113,16 +136,17 @@ class TaskStore:
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task, row['current_step']))).fetchone()
             if command in {'pause', 'cancel'}:
-                uncertain = row['status'] == 'OUTCOME_UNKNOWN' or (
-                    row['status'] in {'RUNNING', 'WAITING_USER'} and step['risk'] != 'READ')
+                uncertain = bool(step and (step['outcome_pending'] or row['status'] == 'OUTCOME_UNKNOWN' or (
+                    row['status'] in {'RUNNING', 'WAITING_USER'} and step['risk'] != 'READ')))
                 status = 'OUTCOME_UNKNOWN' if uncertain else ('PAUSED' if command == 'pause' else 'CANCELLED')
                 await conn.execute('''UPDATE chore_tasks SET status=%s,stop_requested=%s,
                     lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=%s''',
                     (status, 'PAUSED' if command == 'pause' else 'CANCELLED', task))
                 await conn.execute('DELETE FROM chore_jobs WHERE task_id=%s', (task,))
                 await conn.execute('DELETE FROM chore_approvals WHERE task_id=%s AND consumed_at IS NULL', (task,))
-                await conn.execute('UPDATE chore_steps SET status=%s WHERE task_id=%s AND position=%s',
-                                   ('UNKNOWN' if uncertain else 'PENDING', task, row['current_step']))
+                await conn.execute('''UPDATE chore_steps SET status=%s,outcome_pending=%s
+                    WHERE task_id=%s AND position=%s''',
+                    ('UNKNOWN' if uncertain else 'PENDING', uncertain, task, row['current_step']))
             elif command == 'resume' and row['status'] == 'PAUSED':
                 await conn.execute('UPDATE chore_tasks SET stop_requested=NULL WHERE id=%s', (task,))
                 await self.next(conn, task, row['current_step'])
@@ -159,6 +183,9 @@ class TaskStore:
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task['id'], task['current_step']))).fetchone()
             await conn.execute('DELETE FROM chore_jobs WHERE task_id=%s', (task['id'],))
+            if task['mode'] == 'RUN' and step['outcome_pending']:
+                await self.next(conn, task['id'], task['current_step'])
+                return None
             if task['mode'] == 'RUN' and step['risk'] == 'USER_ONLY':
                 await self.next(conn, task['id'], task['current_step'])
                 return None
@@ -174,7 +201,8 @@ class TaskStore:
             token = uuid4()
             await conn.execute('''UPDATE chore_tasks SET status='RUNNING',lease_token=%s,
                 lease_until=now()+interval '45 seconds',updated_at=now() WHERE id=%s''', (token, task['id']))
-            await conn.execute("UPDATE chore_steps SET status='RUNNING',attempts=attempts+1 WHERE task_id=%s AND position=%s",
+            await conn.execute("""UPDATE chore_steps SET status='RUNNING',attempts=attempts+1,
+                outcome_pending=outcome_pending OR risk<>'READ' WHERE task_id=%s AND position=%s""",
                                (task['id'], task['current_step']))
             await self.event(conn, task['id'], 'DISPATCHED', {'position': task['current_step'],
                 'attempt_id': str(token), 'mode': task['mode'], 'action_hash': step['action_hash']})
@@ -194,9 +222,13 @@ class TaskStore:
                 return False
             step = claimed['step']
             if not_applied:
-                await conn.execute("UPDATE chore_steps SET status='PENDING',result=%s WHERE task_id=%s AND position=%s",
+                if claimed['mode'] != 'RECONCILE' or not isinstance(result, dict) or not result:
+                    raise TaskError('Non-submission requires reconciliation evidence')
+                await conn.execute("""UPDATE chore_steps SET status='PENDING',outcome_pending=false,result=%s
+                    WHERE task_id=%s AND position=%s""",
                                    (Jsonb(result), task['id'], task['current_step']))
-                await self.next(conn, task['id'], task['current_step'])
+                if not task['stop_requested']:
+                    await self.next(conn, task['id'], task['current_step'])
                 await self.event(conn, task['id'], 'VERIFIED_NOT_APPLIED')
             elif failed or result is None:
                 retry = claimed['mode'] == 'RUN' and step['risk'] == 'READ' and step['attempts'] < 2
@@ -210,10 +242,15 @@ class TaskStore:
                     await self.queue(conn, task['id'], delay=2 ** step['attempts'])
                 await self.event(conn, task['id'], status)
             else:
-                await conn.execute("UPDATE chore_steps SET status='DONE',result=%s WHERE task_id=%s AND position=%s",
+                await conn.execute("""UPDATE chore_steps SET status='DONE',outcome_pending=false,result=%s
+                    WHERE task_id=%s AND position=%s""",
                                    (Jsonb(result), task['id'], task['current_step']))
                 await self.event(conn, task['id'], 'STEP_VERIFIED', {'position': task['current_step']})
-                await self.next(conn, task['id'], task['current_step'] + 1)
+                if not task['stop_requested']:
+                    await self.next(conn, task['id'], task['current_step'] + 1)
+                else:
+                    await conn.execute('UPDATE chore_tasks SET current_step=current_step+1 WHERE id=%s',
+                                       (task['id'],))
             if task['stop_requested'] and not failed and result is not None:
                 await conn.execute('''UPDATE chore_tasks SET status=%s,lease_token=NULL,lease_until=NULL,
                     updated_at=now() WHERE id=%s''', (task['stop_requested'], task['id']))

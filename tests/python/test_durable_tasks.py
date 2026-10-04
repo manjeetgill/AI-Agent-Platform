@@ -281,3 +281,45 @@ def test_task_api_auth_and_exact_approval(monkeypatch):
             'steps': [{'tool': 'send', 'arguments': {'item': 'changed ticket'}}]}).status_code == 409
         assert client.post(f'/v1/tasks/{task}/approve', headers=headers(), json=approval).status_code == 409
         assert client.post(f'/v1/tasks/{task}/cancel', headers=headers()).status_code == 200
+
+
+@pytest.mark.parametrize('command', ['pause', 'cancel'])
+@pytest.mark.parametrize('risk', ['SEND', 'USER_ONLY'])
+def test_queued_reconciliation_preserves_uncertainty(command, risk):
+    async def check():
+        async with fixture_store() as (store, tenant, user):
+            adapter = FakeSite(risk)
+            task = await planned(store, tenant, user, adapter)
+            await store.start(tenant, user, task)
+            if risk == 'SEND':
+                await store.approve(tenant, user, task, adapter.prepare({'item': 'fixture'}).digest)
+                claimed = await store.claim()
+                await store.finish(claimed, failed=True)
+            await store.control(tenant, user, task, 'reconcile')
+            await store.control(tenant, user, task, command)
+            row = await store.get(tenant, user, task)
+            assert row['status'] == 'OUTCOME_UNKNOWN'
+            assert row['steps'][0]['outcome_pending']
+            with pytest.raises(TaskError):
+                await store.control(tenant, user, task, 'resume')
+            with pytest.raises(TaskError):
+                await store.approve(tenant, user, task, adapter.prepare({'item': 'fixture'}).digest)
+            other = await planned(store, tenant, user, FakeSite())
+            with pytest.raises(UniqueViolation):
+                await store.start(tenant, user, other)
+            assert await store.claim() is None
+            # A worker restart during reconciliation also preserves uncertainty.
+            await store.control(tenant, user, task, 'reconcile')
+            claimed = await store.claim()
+            async with store.pool.connection() as conn:
+                await conn.execute("UPDATE chore_tasks SET lease_until=now()-interval '1 second' WHERE id=%s", (task,))
+            await store.recover()
+            assert not await store.finish(claimed, {'late': True})
+            adapter.verified = Reconciliation(False, {'verified_state': 'not-applied'})
+            await store.control(tenant, user, task, 'reconcile')
+            await tick(store, Registry({risk.lower(): adapter}))
+            row = await store.get(tenant, user, task)
+            assert row['status'] == ('PAUSED' if command == 'pause' else 'CANCELLED')
+            assert not row['steps'][0]['outcome_pending']
+            assert adapter.calls == 0
+    asyncio.run(check())
