@@ -4,6 +4,14 @@ Independent Python service extracted from NRAIAlgo on 2026-10-04. This project o
 
 NRAIAlgo is the first consumer. Its application UI, login/session validation, HTTP facade and evidence connector stay in its own repository. The only shared boundary is the versioned HTTP/delegation contract in `docs/INTEGRATION_PROTOCOL.md`. The platform still includes NRAIAlgo-oriented research agents and tools; extraction does not make their contracts generic.
 
+## Reuse across apps and businesses
+
+The generic task API supports app-specific built-in catalogues, private user agents, configurable
+planning limits and explicitly enabled business tool packages. New domains supply adapters and
+versioned templates without editing the engine. See [multi-app onboarding](docs/MULTI_APP_PLATFORM.md)
+and the separate [shipping tool example](examples/shipping_plugin/pyproject.toml).
+Legacy NRAIAlgo research endpoints remain app-specific; use the generic task API for new apps.
+
 ## Prepared local setup (macOS with PostgreSQL 17)
 
 ```sh

@@ -79,6 +79,9 @@ class TaskStore:
             if row['source_agent_id']:
                 raise TaskError('Agent invocations have immutable plans')
             if row['source_app_id']:
+                from .app_catalogue import policy
+                if len(actions) > (await policy(conn, row['source_app_id'])).max_plan_steps:
+                    raise TaskError('Plan exceeds app step limit')
                 for action in actions:
                     if not await self.granted(conn, row['source_app_id'], action.tool):
                         raise TaskError('Tool is not granted to this app')

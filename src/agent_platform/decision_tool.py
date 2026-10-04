@@ -71,5 +71,6 @@ class DecisionComparison:
 
 
 def default_registry():
+    from .tool_plugins import load_plugins
     from .weather_tool import WeatherForecast
-    return Registry({'decision.compare': DecisionComparison(), 'weather.forecast': WeatherForecast()})
+    return load_plugins(Registry({'decision.compare': DecisionComparison(), 'weather.forecast': WeatherForecast()}))

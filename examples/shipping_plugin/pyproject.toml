@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-shipping-example"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["ai-agent-platform>=0.1.0"]
+
+[project.entry-points."agent_platform.tools"]
+shipping-example = "shipping_example:tools"

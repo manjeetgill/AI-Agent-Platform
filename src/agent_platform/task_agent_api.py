@@ -6,6 +6,7 @@ from psycopg.errors import UniqueViolation
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from .app_catalogue import policy
 from .flags import enabled
 from .runtime_errors import RunFailure
 from .service_identity import authenticate
@@ -60,10 +61,13 @@ def install_task_agents(app, registry):
             permitted = await grants(conn, claims)
             if not catalog(registry, permitted):
                 raise HTTPException(409, 'No typed tools are granted to this app')
+            limits = await policy(conn, claims['app_id'])
+            if not limits.planning_calls_per_day or not limits.user_planning_calls_per_day:
+                raise HTTPException(403, 'AI planning is disabled for this app')
             # Reserve before the provider call; failures count too. Both limits commit atomically.
             for table, columns, values, limit in [
-                ('app_planning_usage', 'app_id', [claims['app_id']], 500),
-                ('agent_planning_usage', 'app_id,owner_id', [claims['app_id'], claims['user']], 50),
+                ('app_planning_usage', 'app_id', [claims['app_id']], limits.planning_calls_per_day),
+                ('agent_planning_usage', 'app_id,owner_id', [claims['app_id'], claims['user']], limits.user_planning_calls_per_day),
             ]:
                 placeholders = ','.join(['%s'] * len(values))
                 row = await (await conn.execute(f'''INSERT INTO {table}({columns},calls)
@@ -72,7 +76,10 @@ def install_task_agents(app, registry):
                 if not row:
                     raise HTTPException(429, 'Daily planning limit reached')
         try:
-            return await propose(request.app.state.runtime.gateway, body.request, registry, permitted)
+            proposal = await propose(request.app.state.runtime.gateway, body.request, registry, permitted)
+            if proposal.get('blueprint') and len(proposal['blueprint']['steps']) > limits.max_plan_steps:
+                raise HTTPException(422, 'Planner exceeded app step limit')
+            return proposal
         except (TaskError, ValidationError, ValueError):
             raise HTTPException(422, 'Planner could not produce a valid plan for the permitted tools') from None
         except (RunFailure, TimeoutError):
@@ -82,6 +89,8 @@ def install_task_agents(app, registry):
     async def save(body: SaveAgent, request: Request, authorization: str | None = Header(default=None)):
         pool, claims = await context(request, authorization, 'agents:write')
         async with pool.connection() as conn, conn.transaction():
+            if len(body.blueprint.steps) > (await policy(conn, claims['app_id'])).max_plan_steps:
+                raise HTTPException(422, 'Plan exceeds app step limit')
             checked(body.blueprint, await grants(conn, claims))
             value = body.blueprint.model_dump()
             fingerprint = digest(value)
@@ -113,6 +122,43 @@ def install_task_agents(app, registry):
                 ' ORDER BY created_at DESC,id DESC LIMIT %s', (*params, limit+1))).fetchall()
             return {'agents': rows[:limit], 'next_cursor': str(rows[limit-1]['id']) if len(rows)>limit else None}
 
+    @router.get('/catalogue')
+    async def catalogue(request: Request, authorization: str | None = Header(default=None),
+                        limit: int = Query(default=50, ge=1, le=100), after: str = ''):
+        pool, claims = await context(request, authorization, 'agents:read')
+        async with pool.connection() as conn:
+            rows = await (await conn.execute("""SELECT * FROM (SELECT DISTINCT ON(slug) id,slug,version,blueprint,enabled
+                FROM platform_agent_templates WHERE app_id=%s ORDER BY slug,version DESC) latest
+                WHERE enabled AND slug>%s ORDER BY slug LIMIT %s""", (claims['app_id'], after, limit+1))).fetchall()
+            permitted = await grants(conn, claims)
+            limits = await policy(conn, claims['app_id'])
+            for row in rows:
+                try:
+                    blueprint = Blueprint.model_validate(row['blueprint'])
+                    validate(blueprint, registry, permitted)
+                    row['available'] = len(blueprint.steps) <= limits.max_plan_steps
+                except (TaskError, ValueError):
+                    row['available'] = False
+            return {'templates': rows[:limit], 'next_after': rows[limit-1]['slug'] if len(rows)>limit else None,
+                    'policy': limits.model_dump()}
+
+    @router.post('/catalogue/{template_id}/instantiate', status_code=201)
+    async def instantiate(template_id: UUID, body: InvokeAgent, request: Request,
+                          authorization: str | None = Header(default=None)):
+        pool, claims = await context(request, authorization, 'agents:write')
+        async with pool.connection() as conn:
+            row = await (await conn.execute('SELECT * FROM platform_agent_templates WHERE id=%s AND app_id=%s AND enabled',
+                                           (template_id, claims['app_id']))).fetchone()
+            if not row:
+                raise HTTPException(404, 'Template not found')
+            blueprint = Blueprint.model_validate(row['blueprint'])
+            checked(blueprint, await grants(conn, claims), body.arguments)
+            if body.arguments is not None:
+                blueprint = blueprint.model_copy(update={'steps': [step.model_copy(update={'arguments': arguments})
+                    for step, arguments in zip(blueprint.steps, body.arguments, strict=True)]})
+        # Reuse the normal owner-scoped validation and idempotent save path. Instantiation never executes.
+        return await save(SaveAgent(blueprint=blueprint, idempotency_key=body.idempotency_key), request, authorization)
+
     @router.get('/{agent_id}')
     async def detail(agent_id: UUID, request: Request, authorization: str | None = Header(default=None)):
         pool, claims = await context(request, authorization, 'agents:read')
@@ -140,6 +186,8 @@ def install_task_agents(app, registry):
                         raise HTTPException(409, 'Idempotency key belongs to another invocation')
                     task_id = previous['id']
                 else:
+                    if len(blueprint.steps) > (await policy(conn, claims['app_id'])).max_plan_steps:
+                        raise HTTPException(422, 'Plan exceeds app step limit')
                     actions = checked(blueprint, await grants(conn, claims), body.arguments)
                     task_id = uuid4()
                     inserted = await (await conn.execute('''INSERT INTO chore_tasks
