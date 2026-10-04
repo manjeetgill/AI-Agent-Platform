@@ -49,6 +49,9 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
             application.state.repository = repository
         application.state.runtime = runtime or Runtime(
             os.environ.get('AI_PLATFORM_CONNECTOR_URL', ''), key, os.environ.get('NVIDIA_API_KEY', ''))
+        from .research_tool import install_research_tool
+        if getattr(application.state.repository, "pool", None) is not None:
+            install_research_tool(registry, application.state.repository.pool, application.state.runtime)
         application.state.workflow_tasks = set()
         try:
             yield

@@ -136,11 +136,20 @@ def main():
         env['PYTHONPATH'] = str(ROOT / 'src')
         subprocess.run([sys.executable, '-m', 'agent_platform.migrate'], env=env, cwd=ROOT, check=True)
         print('Platform: http://127.0.0.1:4060. Ctrl-C stops the API; database and reports persist.', flush=True)
+        worker = subprocess.Popen([sys.executable, '-m', 'agent_platform.task_worker'], env=env, cwd=ROOT) if values.get('AI_DURABLE_TASKS') == '1' else None
         try:
             subprocess.run([sys.executable, '-m', 'uvicorn', 'agent_platform.app:app',
                 '--host', '127.0.0.1', '--port', '4060', '--no-access-log'], env=env, cwd=ROOT, check=True)
         except KeyboardInterrupt:
             pass
+        finally:
+            if worker is not None:
+                worker.terminate()
+                try:
+                    worker.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    worker.kill()
+                    worker.wait()
 
 
 if __name__ == '__main__':

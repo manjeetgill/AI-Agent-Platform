@@ -62,6 +62,8 @@ async def serve(registry):
             kwargs={'row_factory': dict_row, 'connect_timeout': 3,
                     'options': '-c statement_timeout=5000'}, open=False) as pool:
         await pool.wait(timeout=10)
+        from .research_tool import install_research_tool
+        install_research_tool(registry, pool)
         store = TaskStore(pool)
         while True:
             if not await tick(store, registry):

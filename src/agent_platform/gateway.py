@@ -55,7 +55,10 @@ class NVIDIAProvider:
 
 
 class Gateway:
-    def __init__(self, provider: ModelProvider, *, client=None):
+    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2):
+        if max_attempts not in {1, 2}:
+            raise ValueError("Gateway supports one or two attempts")
+        self.max_attempts = max_attempts
         self.provider = provider
         self.client = client
         self.fast_model = os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
@@ -110,10 +113,10 @@ class Gateway:
         client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(50, connect=5))
         total_tokens = 0
         try:
-            for attempt in range(2):
+            for attempt in range(self.max_attempts):
                 try:
                     response = await client.post(url, headers=headers, json=payload)
-                    if response.status_code in {429, 500, 502, 503, 504} and not attempt:
+                    if response.status_code in {429, 500, 502, 503, 504} and attempt + 1 < self.max_attempts:
                         await asyncio.sleep(0.5)
                         continue
                     response.raise_for_status()
@@ -122,10 +125,10 @@ class Gateway:
                     output = validator(schema.model_validate_json(content))
                     return output, total_tokens, self.provider.name, model
                 except (KeyError, IndexError, TypeError, ValueError, ValidationError):
-                    if attempt:
+                    if attempt + 1 == self.max_attempts:
                         raise RunFailure('INVALID_MODEL_OUTPUT') from None
                 except RunFailure as exc:
-                    if attempt or exc.code not in {'UNSUPPORTED_CONTEXT', 'UNSUPPORTED_SOURCE', 'UNSUPPORTED_FACT', 'UNSUPPORTED_NUMBER'}:
+                    if attempt + 1 == self.max_attempts or exc.code not in {'UNSUPPORTED_CONTEXT', 'UNSUPPORTED_SOURCE', 'UNSUPPORTED_FACT', 'UNSUPPORTED_NUMBER'}:
                         raise
                     payload['messages'].append({'role': 'assistant', 'content': content})
                     payload['messages'].append({'role': 'user', 'content':

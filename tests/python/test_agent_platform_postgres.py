@@ -39,7 +39,7 @@ def test_versioning_idempotency_and_isolation_in_postgres(monkeypatch):
                 assert await schema_ready(connection)
             await repository.ensure_builtins(tenant, owner, BUILTINS)
             own = await repository.list_agents(tenant, owner)
-            assert len(own) == 5
+            assert {item['name'] for item in own} == {item['name'] for item in BUILTINS.values()}
             assert await repository.list_agents(tenant, stranger) == []
             first = AgentDraft(name='My research', instructions='Review saved evidence',
                                allowed_tools=['scanner_evidence'])
