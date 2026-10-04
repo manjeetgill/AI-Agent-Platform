@@ -37,6 +37,11 @@ PostgreSQL tests require `AGENT_TEST_DATABASE_URL` pointing to a disposable migr
 
 ## Status
 
+The [browser task revision](docs/BROWSER_TASK_REVISION.md) now includes a durable PostgreSQL
+queue, exact-action approvals, pause/cancel fencing, and reconciliation of uncertain outcomes.
+Its task API is disabled by default. Chrome control, site adapters, the profile vault and the
+task UI are not implemented yet; all execution tests use synthetic adapters.
+
 This preserves the existing partial implementation. Scheduled triggers, notifications, broader trading RAG, production load tests and credentialed browser/provider verification remain unfinished. No live execution tools are present. This extraction does not declare production readiness.
 
 The GitHub repository has not been created or connected. This folder is ready to use as its independent source project.

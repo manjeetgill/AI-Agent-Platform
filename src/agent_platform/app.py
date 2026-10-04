@@ -19,10 +19,12 @@ from .migrate import schema_ready
 from .models import AgentDraft, AgentIdea, PreferenceIn, RunRequest, StrategyPlan, WorkflowRequest
 from .repository import Repository
 from .runtime import RunFailure, Runtime
+from .task_api import install_tasks
+from .tasks import Registry
 from .tokens import TokenError, verify
 
 
-def create_app(*, repository=None, runtime=None, signing_key=None):
+def create_app(*, repository=None, runtime=None, signing_key=None, task_registry=None):
     key = signing_key or os.environ.get('AI_PLATFORM_SIGNING_KEY', '')
     database_url = os.environ.get('AI_PLATFORM_DATABASE_URL', '')
     memory_enabled = enabled('AI_MEMORY', default=True)
@@ -348,6 +350,7 @@ def create_app(*, repository=None, runtime=None, signing_key=None):
             raise HTTPException(404, 'Run not found')
         return row
 
+    install_tasks(app, actor, task_registry or Registry())
     return app
 
 
