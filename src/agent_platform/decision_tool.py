@@ -71,4 +71,5 @@ class DecisionComparison:
 
 
 def default_registry():
-    return Registry({'decision.compare': DecisionComparison()})
+    from .weather_tool import WeatherForecast
+    return Registry({'decision.compare': DecisionComparison(), 'weather.forecast': WeatherForecast()})

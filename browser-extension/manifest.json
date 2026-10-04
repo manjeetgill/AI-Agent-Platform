@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Agent Workspace Browser Runner",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "description": "Prepare approved Wikipedia searches. Never submits forms or enters secrets.",
+  "permissions": [
+    "storage",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:4061/*",
+    "https://www.wikipedia.org/*"
+  ],
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.wikipedia.org/*"
+      ],
+      "js": [
+        "guard.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
+}
