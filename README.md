@@ -99,7 +99,8 @@ A different consumer can implement the same signed connector endpoint.
 methodology/version/source coverage, limitations, freshness and a digest. Reports
 use `numeric_claims` for exact copies of numerical measurements: label, unit and
 value must all match a supplied measurement. Free prose is qualitative; digit
-and common spelled-number claims are rejected and repaired once. This validation
+and common spelled-number prose statements are omitted with a visible note.
+Incorrect typed numerical claims are rejected and repaired once. This validation
 is a guard against numeric invention, not proof of every semantic model claim.
 Evidence over the bounded size/count limit fails instead of silently dropping
 research facts. Scanner evidence additionally supplies typed mean/median volume

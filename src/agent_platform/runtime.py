@@ -1,6 +1,5 @@
 """Bounded read-only tool call followed by a validated model report."""
 import json
-import math
 import re
 
 import httpx
@@ -51,15 +50,35 @@ def validate_report(report, evidence):
             original = verified.get(claim.label)
             if (not original or original.get('unit') != claim.unit
                     or not isinstance(original.get('value'), (int, float))
-                    or not math.isclose(claim.value, original['value'], rel_tol=1e-8, abs_tol=1e-8)):
+                    or isinstance(original.get('value'), bool)
+                    or claim.value != original['value']):
                 raise RunFailure('UNSUPPORTED_NUMBER')
-        # Numerical claims have an exact typed channel; prose cannot re-label or round them.
-        prose = [report.summary, report.why_triggered or '', report.data_freshness,
-                 *[f.text for f in report.supporting + report.conflicting],
-                 *report.missing, *report.risks, *report.historical_context,
-                 *report.invalidation_conditions, *report.questions]
-        if any(re.search(r'\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|half|twice|double|triple)\b', text, re.IGNORECASE) for text in prose):
-            raise RunFailure('UNSUPPORTED_NUMBER')
+        # Numerical prose has no label/unit binding, even when the number happens
+        # to exist elsewhere. Omit whole statements, never rewrite their meaning.
+        numeric = re.compile(r'\d|\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion|half|twice|double|triple)\b', re.IGNORECASE)
+        omitted = False
+        def qualitative(text):
+            nonlocal omitted
+            if numeric.search(text):
+                omitted = True
+                return False
+            return True
+        changes = {}
+        for key in ('summary', 'why_triggered', 'data_freshness'):
+            original = getattr(report, key)
+            if original is None:
+                continue
+            sentences = re.split(r'(?<=[.!?])\s+', original)
+            retained = ' '.join(s for s in sentences if qualitative(s))
+            changes[key] = retained or ('Review the verified measurements and source coverage.' if key == 'summary'
+                                        else 'See saved source timestamps.' if key == 'data_freshness' else None)
+        for key in ('supporting', 'conflicting'):
+            changes[key] = [f for f in getattr(report, key) if qualitative(f.text)]
+        for key in ('missing', 'risks', 'historical_context', 'invalidation_conditions', 'questions'):
+            changes[key] = [text for text in getattr(report, key) if qualitative(text)]
+        if omitted:
+            changes['missing'] = ['Some numerical model prose was omitted. Use the verified measurements for quantities.'] + changes['missing'][:11]
+        report = report.model_copy(update=changes)
     return report
 
 
