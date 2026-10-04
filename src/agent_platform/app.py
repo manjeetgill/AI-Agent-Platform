@@ -13,15 +13,17 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from .catalog import BUILTINS, TEMPLATES
+from .decision_tool import default_registry
 from .flags import capabilities, enabled
 from .gateway import model_configuration
 from .migrate import schema_ready
 from .models import AgentDraft, AgentIdea, PreferenceIn, RunRequest, StrategyPlan, WorkflowRequest
 from .repository import Repository
 from .runtime import RunFailure, Runtime
+from .task_agent_api import install_task_agents
 from .task_api import install_tasks
-from .tasks import Registry
 from .tokens import TokenError, verify
+from .vision import install_vision
 
 
 def create_app(*, repository=None, runtime=None, signing_key=None, task_registry=None):
@@ -350,7 +352,10 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
             raise HTTPException(404, 'Run not found')
         return row
 
-    install_tasks(app, actor, task_registry or Registry())
+    registry = task_registry if task_registry is not None else default_registry()
+    install_vision(app, actor)
+    install_tasks(app, actor, registry)
+    install_task_agents(app, registry)
     return app
 
 

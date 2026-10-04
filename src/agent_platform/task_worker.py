@@ -8,7 +8,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from .task_store import TaskStore
-from .tasks import Reconciliation, Registry
+from .tasks import Reconciliation
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +39,8 @@ async def tick(store, registry):
                     return True
                 result = await adapter.execute(action, task_id=str(claimed['id']),
                     attempt_id=str(claimed['lease_token']), authorized=authorized)
+                if result is not None and hasattr(adapter, 'output_model'):
+                    result = adapter.output_model.model_validate(result, strict=True).model_dump()
             # Only bounded, redacted adapter evidence is persisted; never raw browser dumps.
             if result is not None and (not isinstance(result, dict)
                     or len(json.dumps(result, allow_nan=False).encode()) > 16000):
@@ -67,4 +69,5 @@ async def serve(registry):
 
 
 if __name__ == '__main__':
-    asyncio.run(serve(Registry()))
+    from .decision_tool import default_registry
+    asyncio.run(serve(default_registry()))

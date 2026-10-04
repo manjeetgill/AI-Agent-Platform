@@ -1,7 +1,7 @@
 # Multi-app task API: first increment
 
 The durable task API now supports operator-provisioned organisations, applications, scoped
-service keys and app-bound external users. This applies to `/v1/tasks` only. Existing research
+service keys and app-bound external users. This applies to `/v1/tasks`; [task-agent flow](TASK_AGENT_FLOW.md) adds `/v1/task-agents`. Existing research
 agent endpoints still require NRAIAlgo's signed delegation; service keys do not grant access there.
 The default feature flag remains off, and no live browser adapter is installed.
 
@@ -114,3 +114,9 @@ an uncertain external outcome is resolved.
 
 The browser still needs local takeover and stale-command rejection. A database lease alone
 cannot prevent a remote browser from acting after disconnection.
+
+## Reusable agents
+
+Migration 009 adds `agents:read`, `agents:write`, and `agents:run` scopes plus explicit application
+tool grants. See [request-to-agent flow](TASK_AGENT_FLOW.md) for setup and endpoints. Existing
+service-user tasks also require tool grants after this migration.

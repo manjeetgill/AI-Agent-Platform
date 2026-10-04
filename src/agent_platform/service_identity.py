@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-SCOPES = {'tasks:read', 'tasks:write', 'tasks:approve'}
+SCOPES = {'tasks:read', 'tasks:write', 'tasks:approve', 'agents:read', 'agents:write', 'agents:run'}
 
 
 async def provision(pool, *, tenant, organisation, app_name, scopes, days=30, app_id=None):
@@ -78,10 +78,22 @@ async def main():
     create.add_argument('--app-id', type=UUID, help='Rotate a key while preserving app/user identity')
     revoke = sub.add_parser('revoke')
     revoke.add_argument('key_id', type=UUID)
+    for command in ('grant-tool', 'revoke-tool'):
+        tool = sub.add_parser(command)
+        tool.add_argument('app_id', type=UUID)
+        tool.add_argument('tool')
     args = parser.parse_args()
     async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False,
                                    kwargs={'row_factory': dict_row}) as pool:
-        if args.command == 'revoke':
+        if args.command in {'grant-tool', 'revoke-tool'}:
+            async with pool.connection() as conn:
+                if args.command == 'grant-tool':
+                    await conn.execute('INSERT INTO platform_tool_grants(app_id,tool) VALUES(%s,%s) ON CONFLICT DO NOTHING',
+                                       (args.app_id, args.tool))
+                else:
+                    await conn.execute('DELETE FROM platform_tool_grants WHERE app_id=%s AND tool=%s',
+                                       (args.app_id, args.tool))
+        elif args.command == 'revoke':
             async with pool.connection() as conn:
                 await conn.execute('UPDATE platform_service_keys SET revoked_at=now() WHERE id=%s', (args.key_id,))
         else:

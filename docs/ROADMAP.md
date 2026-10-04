@@ -7,13 +7,17 @@
 - Organisations, applications, scoped expiring/revocable service keys, app-bound external users.
 - Task creation idempotency, owner-scoped keyset pagination, replayable event API and SSE.
 - Operator-installed typed action adapters, mutation audit principals, versioned task routes.
+- Request-to-agent API, immutable saved plans, typed invocation, version checks and atomic task creation.
+- App tool grants enforced through dispatch, bounded planning request quotas, and a read-only decision comparison tool.
+
+See [task-agent flow](TASK_AGENT_FLOW.md) for the new pilot and its limitations.
 
 See [service API](SERVICE_API.md) for rollout and integration. This foundation is tested with
 synthetic adapters and is not a production browser agent.
 
 ## Next: execution policy and accounting
 
-Persist per-app and per-user tool grants, atomic quota/cost reservations, usage records per model
+Extend app tool grants to per-user policy; add atomic cost reservations and usage records per model
 attempt and tool dispatch, deadlines, cancellation and bounded retries. Release reservations or
 settle actual usage transactionally. Test simultaneous calls at quota boundaries and provider
 failure after consumption. Uncertain submission must remain unresolved even when a budget expires.
@@ -27,7 +31,7 @@ fixture before enabling a live site. Payments, passwords and OTP entry remain us
 
 ## Then: reusable agents and model gateway
 
-Add typed template inputs/outputs, version-pinned invocations, user/org/global sharing with explicit
+Extend typed tool plans with dependent steps and aggregate outputs; add user/org/global sharing with explicit
 publication permission, bounded planner/tool loop, provider routing and failover, streaming model
 output and complete usage accounting. Test changes to site adapters and template schemas.
 

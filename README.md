@@ -51,3 +51,10 @@ The GitHub repository has not been created or connected. This folder is ready to
 The first service API increment adds scoped application credentials, app-bound users, pagination
 and replayable task events. See [integration and rollout](docs/SERVICE_API.md) and the
 [remaining roadmap](docs/ROADMAP.md). Browser execution remains disabled by default.
+
+## Request-to-agent pilot
+
+[Request → saved agent → durable execution](docs/TASK_AGENT_FLOW.md) now connects the multi-app API
+using typed, explicitly granted tools. Includes a read-only decision comparison adapter and a
+[runnable HTTP example](examples/task_agent_flow.py). Natural-language planning requires the
+configured model; flags remain off until operator setup. No browser automation is bundled.

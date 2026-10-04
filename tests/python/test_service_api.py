@@ -22,6 +22,9 @@ def test_app_credentials_scopes_rotation_and_event_replay(monkeypatch):
         async with AsyncConnectionPool(db, open=False, kwargs={'row_factory': dict_row}) as pool:
             common = {'tenant': tenant, 'organisation': 'Fixture org', 'app_name': 'Fixture app'}
             primary = await provision(pool, **common, scopes=['tasks:read', 'tasks:write', 'tasks:approve'])
+            async with pool.connection() as conn:
+                await conn.execute('INSERT INTO platform_tool_grants(app_id,tool) VALUES(%s,%s)',
+                                   (primary['app_id'], 'send'))
             readonly = await provision(pool, **common, scopes=['tasks:read'], app_id=primary['app_id'])
             writer = await provision(pool, **common, scopes=['tasks:write'], app_id=primary['app_id'])
             other = await provision(pool, **common, scopes=['tasks:read'])

@@ -7,9 +7,10 @@ from .tasks import TaskError
 
 
 class TaskStore:
-    def __init__(self, pool, principal=None):
+    def __init__(self, pool, principal=None, app_id=None):
         self.pool = pool
         self.principal = principal
+        self.app_id = app_id
 
     async def event(self, conn, task, name, details=None):
         await conn.execute('INSERT INTO chore_events(task_id,event,details) VALUES(%s,%s,%s)',
@@ -44,9 +45,9 @@ class TaskStore:
 
     async def create(self, tenant, user, body):
         async with self.pool.connection() as conn, conn.transaction():
-            row = await (await conn.execute('''INSERT INTO chore_tasks(id,tenant_id,owner_id,request,request_key)
-                VALUES(%s,%s,%s,%s,%s) ON CONFLICT(tenant_id,owner_id,request_key) DO NOTHING RETURNING *''',
-                (uuid4(), tenant, user, body.request, body.idempotency_key))).fetchone()
+            row = await (await conn.execute('''INSERT INTO chore_tasks(id,tenant_id,owner_id,request,request_key,source_app_id)
+                VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(tenant_id,owner_id,request_key) DO NOTHING RETURNING *''',
+                (uuid4(), tenant, user, body.request, body.idempotency_key, self.app_id))).fetchone()
             if row:
                 await self.event(conn, row['id'], 'CREATED')
             else:
@@ -75,6 +76,12 @@ class TaskStore:
             row = await self.owned(conn, tenant, user, task)
             if row['status'] != 'DRAFT':
                 raise TaskError('Only draft plans can be edited')
+            if row['source_agent_id']:
+                raise TaskError('Agent invocations have immutable plans')
+            if row['source_app_id']:
+                for action in actions:
+                    if not await self.granted(conn, row['source_app_id'], action.tool):
+                        raise TaskError('Tool is not granted to this app')
             await conn.execute('DELETE FROM chore_steps WHERE task_id=%s', (task,))
             for position, action in enumerate(actions):
                 await conn.execute('''INSERT INTO chore_steps(task_id,position,tool,tool_version,arguments,
@@ -183,6 +190,12 @@ class TaskStore:
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task['id'], task['current_step']))).fetchone()
             await conn.execute('DELETE FROM chore_jobs WHERE task_id=%s', (task['id'],))
+            if task['mode'] == 'RUN' and task['source_app_id'] and not await self.granted(
+                    conn, task['source_app_id'], step['tool']):
+                await conn.execute("UPDATE chore_tasks SET status='PAUSED',updated_at=now() WHERE id=%s", (task['id'],))
+                await conn.execute('DELETE FROM chore_approvals WHERE task_id=%s AND consumed_at IS NULL', (task['id'],))
+                await self.event(conn, task['id'], 'TOOL_GRANT_REQUIRED', {'tool': step['tool']})
+                return None
             if task['mode'] == 'RUN' and step['outcome_pending']:
                 await self.next(conn, task['id'], task['current_step'])
                 return None
@@ -208,10 +221,17 @@ class TaskStore:
                 'attempt_id': str(token), 'mode': task['mode'], 'action_hash': step['action_hash']})
             return {**task, 'lease_token': token, 'step': step}
 
+    async def granted(self, conn, app_id, tool):
+        return await (await conn.execute('SELECT 1 FROM platform_tool_grants WHERE app_id=%s AND tool=%s',
+                                        (app_id, tool))).fetchone() is not None
+
     async def authorized(self, task, token):
         async with self.pool.connection() as conn:
-            return await (await conn.execute('''SELECT 1 FROM chore_tasks WHERE id=%s AND lease_token=%s
-                AND status='RUNNING' AND lease_until>now()''', (task, token))).fetchone() is not None
+            return await (await conn.execute('''SELECT 1 FROM chore_tasks t
+                JOIN chore_steps s ON s.task_id=t.id AND s.position=t.current_step
+                WHERE t.id=%s AND t.lease_token=%s AND t.status='RUNNING' AND t.lease_until>now()
+                AND (t.source_app_id IS NULL OR EXISTS(SELECT 1 FROM platform_tool_grants g
+                    WHERE g.app_id=t.source_app_id AND g.tool=s.tool))''', (task, token))).fetchone() is not None
 
     async def finish(self, claimed, result=None, *, failed=False, not_applied=False):
         async with self.pool.connection() as conn, conn.transaction():

@@ -31,8 +31,8 @@ def install_tasks(app, actor, registry):
     router = APIRouter(prefix='/v1/tasks', dependencies=[Depends(credential_contract)])
 
     async def context(request, authorization, scope=None):
-        if not enabled('AI_BROWSER_TASKS'):
-            raise HTTPException(503, 'Browser tasks are disabled')
+        if not (enabled('AI_DURABLE_TASKS') or enabled('AI_BROWSER_TASKS')):
+            raise HTTPException(503, 'Durable tasks are disabled')
         pool = getattr(request.app.state.repository, 'pool', None)
         if pool is None:
             raise HTTPException(503, 'Durable task storage unavailable')
@@ -42,7 +42,7 @@ def install_tasks(app, actor, registry):
         else:
             claims = actor(authorization)
         principal = claims.get('principal', 'user:' + str(claims['user']))
-        return TaskStore(pool, principal=principal), claims['tenant'], claims['user']
+        return TaskStore(pool, principal=principal, app_id=claims.get('app_id')), claims['tenant'], claims['user']
 
     async def perform(operation):
         try:

@@ -59,8 +59,8 @@ extension/device pairing are not implemented here. NRAIAlgo's current facade doe
 - `POST /v1/tasks/{id}/approve`: `decision: "yes"` and exact `action_hash`
 - `POST /v1/tasks/{id}/pause`, `/resume`, `/cancel`, `/reconcile`
 
-Workers accept an explicit Registry of operator-installed adapters. The CLI refuses to start
-with an empty registry. Never load arbitrary tools from model output or user requests. READ
+Workers accept an explicit Registry of operator-installed adapters. The default CLI now registers
+only the side-effect-free decision comparison tool; an explicit empty registry is rejected. Never load arbitrary tools from model output or user requests. READ
 adapters and reconciliation methods must be audited for absence of side effects. SEND summaries
 must include actual destination, fields, commitments, amount and currency. Changed details
 invalidate approval. Payment, login and secret entry must always be USER_ONLY in site adapters.
