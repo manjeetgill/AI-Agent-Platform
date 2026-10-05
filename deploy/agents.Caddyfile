@@ -10,12 +10,12 @@ agents.myalgodesk.in, shayak.myalgodesk.in {
     }
     @clinic {
         host shayak.myalgodesk.in
-        path /integrations/agent-platform/whatsapp
+        path /integrations/agent-platform/whatsapp /integrations/agent-platform/calling
     }
     handle @clinic {
         reverse_proxy 172.24.0.1:44001
     }
-    @public path /webhooks/whatsapp/* /webhooks/meta /connect/whatsapp/* /connect/whatsapp-assets/*
+    @public path /webhooks/calling/* /webhooks/whatsapp/* /webhooks/meta /connect/whatsapp/* /connect/whatsapp-assets/*
     handle @public {
         reverse_proxy agent-platform-api-1:4060
     }

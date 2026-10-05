@@ -4,7 +4,7 @@ import http.client
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args): pass
  def do_POST(self):
-  if self.path!='/integrations/agent-platform/whatsapp': self.send_error(404); return
+  if self.path not in ('/integrations/agent-platform/whatsapp','/integrations/agent-platform/calling'): self.send_error(404); return
   try: n=int(self.headers.get('Content-Length','0'))
   except ValueError: self.send_error(400); return
   if not 0<n<=65536 or self.headers.get('Transfer-Encoding'): self.send_error(413); return

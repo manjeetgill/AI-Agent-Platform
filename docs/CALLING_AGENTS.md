@@ -1,6 +1,7 @@
 # Calling agents: inbound foundation
 
-Status: local implementation, not a deployed or live-phone-tested service. Calling
+Status: inbound foundation deployed to the existing pilot server on 5 October 2026;
+signed HTTPS Sahayak readiness verified, but no live phone call has been tested. Calling
 is independent of WhatsApp; connecting a WhatsApp number does not authorize its use
 for telephone calls. No number was purchased and no provider account was changed.
 
@@ -68,8 +69,8 @@ Only set `number_verified` after independently checking number authorization and
 provider ownership. This is an operator attestation, not automatic provider proof.
 The registry is server-only and binds both app and owner. Restart API after changes.
 Expose only POST `/webhooks/calling/{id}/inbound`, `/turn/{turn}`, and `/status` on
-HTTPS. Do not expose the private management API. The current deployed proxy is
-unchanged; add calling ingress only when the provider is configured.
+HTTPS. Do not expose the private management API. The pilot proxy exposes signed calling callbacks; unknown or unconfigured agents
+cannot execute calls. Private management endpoints remain inaccessible publicly.
 
 Copy the `setup` response URLs to the provider's number configuration: inbound Voice
 webhook and call-status callback, both POST. Then enable and place a real inbound
@@ -83,8 +84,8 @@ to real inbound calls; configure account spending controls before activation.
 Twilio handles speech recognition and speech synthesis. The platform converts one
 speech/keypad result into one signed request to your app. Your app can use its AI
 agent, knowledge and tools to decide the response. **This release does not implement
-a second general AI reasoning loop inside calling or automatically wire Sahayak's
-booking handler.** It supplies the authenticated runtime contract for that adapter.
+a second general AI reasoning loop inside calling.** Sahayak now implements
+the signed booking adapter and owns the restricted appointment conversation.
 
 Signature: HMAC-SHA256 over `X-Agent-Timestamp + '.' + raw request bytes`, in hex in
 `X-Agent-Signature`. Verify within five minutes, validate `app_id`/`agent_id` against
@@ -152,11 +153,36 @@ app handlers: owner isolation, signature checks, XML injection, duplicate-turn
 fencing, uncertain results, activation, pause and out-of-order status updates.
 No claims of actual phone delivery or speech quality follow from these tests.
 
-Remaining: authorized provider account/voice number, public deployment, live call
-validation, the Sahayak voice-to-booking adapter, UI onboarding, live transfers,
+Remaining: authorized provider account/voice number, permanent Sahayak deployment,
+live call validation, customer voice onboarding, live transfers,
 recording consent/retention, outbound approvals and production metering/quotas.
 
 Provider references:
 - https://www.twilio.com/docs/usage/security
 - https://www.twilio.com/docs/voice/twiml/gather
 - https://www.twilio.com/docs/voice/twiml/say
+
+## Sahayak pilot deployment
+
+The inactive clinic draft is `418c8845-97b3-4346-983b-1acc1a2c4731`.
+The operator requested **+91 77039 61610**. This is an intended number only;
+WhatsApp messaging authorization is not proof of PSTN voice routing. Do not set
+`number_verified` or activate until the chosen voice provider confirms routing
+and authorization. WhatsApp voice requires its own media adapter, which is not
+implemented by this Twilio HTTP turn adapter.
+
+The pilot handler is
+`https://shayak.myalgodesk.in/integrations/agent-platform/calling`.
+It uses the existing signed relay to the local Sahayak API. The laptop and SSH
+tunnel must remain running; it is not a permanent deployment of Sahayak.
+
+Migration 022 and the Twilio SDK are installed. The pilot image was built on the
+running image with only the calling module, dependency and app registration
+added, preserving the deployed WhatsApp behavior. Runtime tag:
+`agent-platform:calling-pilot`; previous image: `agent-platform:before-calling`.
+The normal source Dockerfile includes the same dependency for subsequent builds.
+
+Verified: signed public readiness returns 200, unsigned requests fail, main app
+login returns 200 and unauthenticated main API returns 401, private calling
+management remains 404 publicly. No outbound call was made, no number purchased,
+and no recording/live transfer was enabled. A real call remains the final gate.
