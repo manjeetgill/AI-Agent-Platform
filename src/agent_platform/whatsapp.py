@@ -142,6 +142,13 @@ async def ingest(pool, channel, payload):
                     if at > datetime.now(UTC) + timedelta(minutes=5):
                         continue
                     body = msg.get("text", {}).get("body", "") if msg.get("type") == "text" else ""
+                    if msg.get('type') == 'interactive' and channel.get('execution_mode') == 'SAHAYAK':
+                        selection = msg.get('interactive', {})
+                        if isinstance(selection, dict):
+                            chosen = selection.get('button_reply') or selection.get('list_reply') or {}
+                            body = chosen.get('id', '') if isinstance(chosen, dict) else ''
+                            if not isinstance(body, str) or not re.fullmatch(r'sc:[a-f0-9]{20}:\d', body):
+                                body = ''
                     if not isinstance(body, str):
                         body = ""
                     conversation = await (

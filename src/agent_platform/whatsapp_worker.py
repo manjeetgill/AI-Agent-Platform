@@ -16,22 +16,19 @@ from .whatsapp import audit
 
 
 async def send(config, phone, customer, text):
+    payload = {'messaging_product':'whatsapp','to':customer}
+    if isinstance(text, dict):
+        payload.update({'type':'interactive','interactive':text})
+    else:
+        payload.update({'type':'text','text':{'body':text,'preview_url':False}})
     if config.get('provider') == 'chakra':
         from .chakra_client import send_message
-        return await send_message(config, phone, {
-            'messaging_product': 'whatsapp', 'to': customer, 'type': 'text',
-            'text': {'body': text, 'preview_url': False},
-        })
+        return await send_message(config, phone, payload)
     async with httpx.AsyncClient(timeout=httpx.Timeout(12, connect=3)) as client:
         response = await client.post(
             f"https://graph.facebook.com/{config['graph_version']}/{phone}/messages",
             headers={"Authorization": "Bearer " + config["access_token"]},
-            json={
-                "messaging_product": "whatsapp",
-                "to": customer,
-                "type": "text",
-                "text": {"body": text, "preview_url": False},
-            },
+            json=payload,
         )
         response.raise_for_status()
         return response.json()["messages"][0]["id"]
@@ -95,7 +92,9 @@ async def tick(pool, model=None, sender=send):
                 reply = '\n\n'.join(clinical['replies'])
                 bridge_handoff = clinical['handledBy'] == 'human' or clinical['redFlag']
                 handoff = not reply
-                result = {'source': 'sahayak', 'bridge_handoff': bridge_handoff, 'citations': []}
+                from .whatsapp_interactive import interactive_reply
+                controls = interactive_reply(reply, clinical.get('options')) if not bridge_handoff else None
+                result = {'source': 'sahayak', 'bridge_handoff': bridge_handoff, 'citations': [], 'interactive': controls}
             else:
                 async with asyncio.timeout(45):
                     result = await knowledge.answer(
@@ -210,7 +209,8 @@ async def tick(pool, model=None, sender=send):
             return True
         try:
             async with asyncio.timeout(15):
-                outbound = await sender(config, channel["phone_id"], conversation["customer"], msg["reply"])
+                content = (msg['evidence'] or {}).get('interactive') if not msg['human_reply'] else None
+                outbound = await sender(config, channel["phone_id"], conversation["customer"], content or msg["reply"])
             if not isinstance(outbound, str) or not 1 <= len(outbound) <= 300:
                 raise ValueError("Invalid provider response")
             await conn.execute(

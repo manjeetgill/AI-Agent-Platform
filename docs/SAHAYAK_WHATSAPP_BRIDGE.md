@@ -57,3 +57,18 @@ One-time operator settings on the platform:
 After verification, Sahayak obtains the deterministic channel, records its clinic association, registers the derived encrypted bridge configuration, and configures the Chakra webhook. No per-channel environment editing is needed. Existing configured channels cannot be reassigned to a different clinic by repeating setup. Enable still checks provider webhook verification, worker heartbeat and a signed Sahayak probe. A second-number test is needed before customer use.
 
 Apply platform migration 021 and Sahayak migration 020 for this wizard. The UI distinguishes missing provider authorization setup from missing clinic details. A configured local service credential alone does not make new-number signup available: Chakra partner settings and a public webhook URL must also be supplied.
+
+## Native WhatsApp choices
+
+Clinic bridge responses may include validated `options` (button label and up to
+10 choices). The platform renders up to three short choices as reply buttons or
+uses a list. It preserves full text when the reply exceeds the interactive body
+limit. Inbound `button_reply` and `list_reply` IDs are sent to Sahayak for matching
+against the current conversation state; provider-supplied titles are never treated
+as instructions. Old-step choices cannot confirm a different booking. Controls
+are persisted in the existing message evidence and share the same dispatch fence.
+No automatic resend as text follows an uncertain provider outcome.
+
+Deployed to the clinic pilot on 2026-10-05. Twenty-two focused platform tests
+passed, including both inbound interactive formats and one-send behavior. Real
+phone rendering/tap delivery still requires a fresh user message after deployment.

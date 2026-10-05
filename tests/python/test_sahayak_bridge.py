@@ -112,3 +112,45 @@ def test_clinic_binding_is_encrypted_idempotent_and_not_reassignable(monkeypatch
             assert client.put(route,headers={**headers,'X-External-User-ID':'other'},json=payload).status_code==404
         finally:
             clean(key)
+
+def test_clinic_choices_are_sent_once_as_native_controls(monkeypatch):
+    with environment(monkeypatch) as (client, _, key, _):
+        try:
+            _, channel, _ = setup(client, key, monkeypatch)
+            sql("UPDATE whatsapp_channels SET execution_mode='SAHAYAK' WHERE id=%s", (channel['id'],))
+            async def clinic(*args, **kwargs):
+                return {'replies':['First visit or follow-up?'],'handledBy':'agent','redFlag':False,
+                        'options':{'button':'Choose','choices':[{'id':'sc:'+'a'*20+':0','title':'First visit'},{'id':'sc:'+'a'*20+':1','title':'Follow-up'}]}}
+            monkeypatch.setattr(sahayak_bridge, 'request', clinic)
+            inbound(client,channel,mid='interactive-test')
+            work()
+            sent=[]
+            async def send(*args):sent.append(args[-1]);return uuid4().hex
+            work(sender=send);work(sender=send)
+            assert len(sent)==1 and sent[0]['type']=='button'
+            assert sent[0]['action']['buttons'][0]['reply']['title']=='First visit'
+        finally:clean(key)
+
+
+def test_interactive_limits_and_long_text_fallback():
+    from agent_platform.whatsapp_interactive import interactive_reply
+    options={'button':'Choose','choices':[{'id':'sc:'+'a'*20+':'+str(n),'title':'Option '+str(n)} for n in range(4)]}
+    assert interactive_reply('Choose',options)['type']=='list'
+    assert interactive_reply('x'*1025,options) is None
+    options['choices'][1]['id']=options['choices'][0]['id']
+    with pytest.raises(ValueError):interactive_reply('Choose',options)
+
+@pytest.mark.parametrize('kind',['button_reply','list_reply'])
+def test_provider_taps_preserve_option_id_for_clinic_validation(monkeypatch,kind):
+    import hashlib,hmac,time
+    with environment(monkeypatch) as (client,_,key,_):
+        try:
+            _,channel,_=setup(client,key,monkeypatch)
+            sql("UPDATE whatsapp_channels SET execution_mode='SAHAYAK' WHERE id=%s",(channel['id'],))
+            choice='sc:'+'b'*20+':1'
+            value={'metadata':{'phone_number_id':channel['phone_id']},'messages':[{'id':uuid4().hex,'from':'919999000001','timestamp':str(int(time.time())),'type':'interactive','interactive':{'type':kind,kind:{'id':choice,'title':'Do not trust title'}}}]}
+            raw=json.dumps({'object':'whatsapp_business_account','entry':[{'changes':[{'value':value}]}]}).encode()
+            sig='sha256='+hmac.new(b'fixture-secret',raw,hashlib.sha256).hexdigest()
+            assert client.post('/webhooks/whatsapp/'+channel['id'],content=raw,headers={'X-Hub-Signature-256':sig}).status_code==200
+            assert rows(channel)[0]['body']==choice and rows(channel)[0]['status']=='PENDING'
+        finally:clean(key)
