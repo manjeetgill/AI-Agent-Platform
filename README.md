@@ -135,3 +135,12 @@ broker execution privileges or autonomously run sensitivity searches.
 Opt-in inbound text support with document-scoped RAG, durable replies, conversation
 history and human handover APIs. The local setup wizard and inbox are at
 `http://127.0.0.1:4061/whatsapp` (start `scripts/console.py`). See [setup and limitations](docs/WHATSAPP_SUPPORT.md).
+
+## Calling agents
+
+An inbound calling foundation is available through `/v1/calling`: app/owner-isolated
+agent setup, provider-signed webhooks, durable speech/keypad turns, pause/activation
+and call history. The first adapter is Twilio. Live calling requires an authorized
+voice number and a signed handler in the integrating app. No live phone service is
+configured by default. See [Calling integration](docs/CALLING_AGENTS.md) and the
+[backend client example](examples/calling-integration/client.py).
