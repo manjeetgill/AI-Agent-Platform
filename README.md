@@ -129,3 +129,9 @@ options and approved robustness results. `trading_review` and
 `012_research_workflows.sql` before startup. NRAIAlgo owns approved experiment
 plans and read-only monitoring/delivery consent; this platform does not acquire
 broker execution privileges or autonomously run sensitivity searches.
+
+### WhatsApp support agents
+
+Opt-in inbound text support with document-scoped RAG, durable replies, conversation
+history and human handover APIs. The local setup wizard and inbox are at
+`http://127.0.0.1:4061/whatsapp` (start `scripts/console.py`). See [setup and limitations](docs/WHATSAPP_SUPPORT.md).

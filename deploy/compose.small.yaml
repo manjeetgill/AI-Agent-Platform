@@ -1,0 +1,31 @@
+# Overlay for the existing 2 GB pilot Droplet. Keep the operator console private.
+services:
+  db:
+    restart: unless-stopped
+    mem_limit: 192m
+    cpus: 0.35
+    command: [postgres, -c, shared_buffers=32MB, -c, max_connections=40, -c, work_mem=2MB]
+  migrate:
+    image: agent-platform:pilot
+    mem_limit: 160m
+  api:
+    networks: [default, edge]
+    image: agent-platform:pilot
+    mem_limit: 192m
+    cpus: 0.50
+    command: [uvicorn, agent_platform.app:app, --host, 0.0.0.0, --port, '4060', --no-access-log]
+  worker:
+    image: agent-platform:pilot
+    mem_limit: 128m
+    cpus: 0.25
+  whatsapp-worker:
+    image: agent-platform:pilot
+    mem_limit: 128m
+    cpus: 0.25
+  meta-worker:
+    image: agent-platform:pilot
+    mem_limit: 128m
+    cpus: 0.25
+networks:
+  edge:
+    name: agent-platform-edge

@@ -2,7 +2,7 @@
 import asyncio
 import json
 import os
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import httpx
 from pydantic import ValidationError
@@ -54,10 +54,38 @@ class NVIDIAProvider:
         return payload['choices'][0]['message']['content'], max(0, int(usage.get('total_tokens') or 0))
 
 
+class FallbackProvider(NVIDIAProvider):
+    """Explicitly configured provider; credentials never cross provider origins."""
+    ENDPOINTS: ClassVar[dict[str, str]] = {
+        'openrouter': 'https://openrouter.ai/api/v1/chat/completions',
+        'together': 'https://api.together.xyz/v1/chat/completions',
+        'gemini': 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    }
+
+    def __init__(self, name, key):
+        self.name = name
+        super().__init__(key, self.ENDPOINTS[name])
+
+    def request(self, model, policy, data):
+        # Plain JSON prompting keeps NVIDIA-specific options out of other providers.
+        payload = {
+            'model': model, 'temperature': 0.1, 'max_tokens': 1600,
+            'messages': [
+                {'role': 'system', 'content': policy + '\nReturn only the JSON object, without Markdown fences.'},
+                {'role': 'user', 'content': json.dumps(data, default=str)},
+            ],
+        }
+
+        if self.name == 'gemini':
+            payload['response_format'] = {'type': 'json_object'}
+        return self.url, {'Authorization': 'Bearer ' + self.key}, payload
+
+
 class Gateway:
-    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2):
+    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True):
         if max_attempts not in {1, 2}:
             raise ValueError("Gateway supports one or two attempts")
+        self.allow_fallback = allow_fallback
         self.max_attempts = max_attempts
         self.provider = provider
         self.client = client
@@ -116,6 +144,19 @@ class Gateway:
             for attempt in range(self.max_attempts):
                 try:
                     response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code in {429, 503} and self.allow_fallback:
+                        name = os.environ.get('AI_PLATFORM_FALLBACK_PROVIDER', '').strip()
+                        key = os.environ.get('AI_PLATFORM_FALLBACK_API_KEY', '').strip()
+                        fallback_model = os.environ.get('AI_PLATFORM_FALLBACK_MODEL', '').strip()
+                        if name in FallbackProvider.ENDPOINTS and key and fallback_model:
+                            fallback = Gateway(FallbackProvider(name, key), client=client,
+                                               max_attempts=1, allow_fallback=False)
+                            fallback.fast_model = fallback.reasoning_model = fallback_model
+                            # Retain the exact schema and evidence validator; no fallback for
+                            # timeouts, invalid output, or uncertain transport outcomes.
+                            result, used, provider, selected = await fallback.structured(
+                                task, policy, data, schema, validator)
+                            return result, total_tokens + used, provider, selected
                     if response.status_code in {429, 500, 502, 503, 504} and attempt + 1 < self.max_attempts:
                         await asyncio.sleep(0.5)
                         continue

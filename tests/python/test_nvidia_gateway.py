@@ -62,3 +62,55 @@ def test_evidence_validation_gets_one_correction_without_weakening_rules(monkeyp
     asyncio.run(run())
     assert len(calls) == 2
     assert 'UNSUPPORTED_CONTEXT' in calls[1]['messages'][-1]['content']
+
+
+@pytest.mark.parametrize('status', [429, 503])
+@pytest.mark.parametrize('provider,host', [('openrouter', 'openrouter.ai'),
+                                           ('gemini', 'generativelanguage.googleapis.com')])
+def test_configured_fallback_keeps_validation_and_separates_keys(monkeypatch, status, provider, host):
+    from agent_platform.knowledge import Generated
+    monkeypatch.setenv('AI_PLATFORM_NVIDIA_FAST_MODEL', MODEL)
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_PROVIDER', provider)
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_API_KEY', 'fallback-key')
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_MODEL', 'selected/model')
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if request.url.host == 'integrate.api.nvidia.com':
+            assert request.headers['authorization'] == 'Bearer primary-key'
+            return httpx.Response(status)
+        assert request.url.host == host
+        assert request.headers['authorization'] == 'Bearer fallback-key'
+        return httpx.Response(200, json={'choices': [{'message': {'content': '{"claims":[],"missing":[]}'}}],
+                                        'usage': {'total_tokens': 12}})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            result = await Gateway(NVIDIAProvider('primary-key'), client=client, max_attempts=1).structured(
+                'research', 'Use supplied evidence', {}, Generated, lambda v: v)
+            assert result[1:] == (12, provider, 'selected/model')
+    asyncio.run(run())
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'invalid', 'unauthorized'])
+def test_fallback_never_repeats_uncertain_or_invalid_calls(monkeypatch, failure):
+    from agent_platform.knowledge import Generated
+    monkeypatch.setenv('AI_PLATFORM_NVIDIA_FAST_MODEL', MODEL)
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_PROVIDER', 'openrouter')
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_API_KEY', 'fallback-key')
+    monkeypatch.setenv('AI_PLATFORM_FALLBACK_MODEL', 'selected/model')
+    calls = []
+    def respond(request):
+        calls.append(request)
+        if failure == 'timeout':
+            raise httpx.ReadTimeout('timeout')
+        if failure == 'unauthorized':
+            return httpx.Response(401)
+        return httpx.Response(200, json={'choices': [{'message': {'content': 'invalid'}}]})
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            with pytest.raises(RunFailure):
+                await Gateway(NVIDIAProvider('primary-key'), client=client, max_attempts=1).structured(
+                    'research', 'Use supplied evidence', {}, Generated, lambda v: v)
+    asyncio.run(run())
+    assert len(calls) == 1

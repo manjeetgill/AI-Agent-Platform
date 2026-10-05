@@ -11,6 +11,7 @@ values = load()
 database(values)
 os.environ.update(values)
 os.environ.update(AI_DURABLE_TASKS='1', AI_TASK_AGENTS='1')
+os.environ.setdefault('AI_WHATSAPP_CONNECTIONS_FILE', str(ROOT/'.runtime/local/whatsapp-connections.json'))
 import sys
 
 sys.path.insert(0, str(ROOT/'src'))
@@ -18,6 +19,8 @@ from agent_platform.console_app import create_console
 from agent_platform.decision_tool import default_registry
 from agent_platform.migrate import migrate
 from agent_platform.task_worker import serve
+from agent_platform.whatsapp_worker import serve as serve_whatsapp
+from agent_platform.meta_worker import serve as serve_meta
 
 
 async def main():
@@ -33,11 +36,15 @@ async def main():
     server = uvicorn.Server(uvicorn.Config(create_console(registry=registry), host='127.0.0.1', port=4061,
                                            access_log=False))
     worker = asyncio.create_task(serve(registry))
+    whatsapp_worker = asyncio.create_task(serve_whatsapp())
+    meta_worker = asyncio.create_task(serve_meta())
     try:
         await server.serve()
     finally:
         worker.cancel()
-        await asyncio.gather(worker, return_exceptions=True)
+        whatsapp_worker.cancel()
+        meta_worker.cancel()
+        await asyncio.gather(worker, whatsapp_worker, meta_worker, return_exceptions=True)
 
 
 if __name__ == '__main__':

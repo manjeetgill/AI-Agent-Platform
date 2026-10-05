@@ -1,0 +1,28 @@
+agents.myalgodesk.in, shayak.myalgodesk.in {
+    header {
+        -Server
+        X-Content-Type-Options nosniff
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=31536000"
+    }
+    request_body {
+        max_size 256000
+    }
+    @clinic {
+        host shayak.myalgodesk.in
+        path /integrations/agent-platform/whatsapp
+    }
+    handle @clinic {
+        reverse_proxy 172.24.0.1:44001
+    }
+    @public path /webhooks/whatsapp/* /webhooks/meta /connect/whatsapp/* /connect/whatsapp-assets/*
+    handle @public {
+        reverse_proxy agent-platform-api-1:4060
+    }
+    handle / {
+        respond "NRAIAlgo agent connection service. Customer onboarding is not yet public." 200
+    }
+    handle {
+        respond 404
+    }
+}

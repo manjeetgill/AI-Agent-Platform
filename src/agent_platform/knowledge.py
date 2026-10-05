@@ -59,7 +59,7 @@ def chunks(text):
     return [text[start : start + 1000] for start in range(0, len(text), 850)]
 
 
-async def search(pool, app, user, question, limit=6):
+async def search(pool, app, user, question, limit=6, documents=None):
     async with pool.connection() as conn:
         rows = await (
             await conn.execute(
@@ -67,8 +67,9 @@ async def search(pool, app, user, question, limit=6):
             FROM knowledge_documents d JOIN knowledge_chunks c ON c.document_id=d.id,
             to_tsquery('english',replace(plainto_tsquery('english',%s)::text,' & ',' | ')) q
             WHERE d.app_id=%s AND (d.owner_id=%s OR d.visibility='app') AND c.search @@ q
+            AND (%s::uuid[] IS NULL OR (d.id=ANY(%s::uuid[]) AND d.visibility='app'))
             ORDER BY ts_rank_cd(c.search,q) DESC,d.id,c.position LIMIT %s""",
-                (question, app, user, limit),
+                (question, app, user, documents, documents, limit),
             )
         ).fetchall()
     return [
@@ -85,8 +86,8 @@ async def search(pool, app, user, question, limit=6):
     ]
 
 
-async def answer(pool, gateway, app, user, question, key, authorized=None):
-    fingerprint = digest({"question": question})
+async def answer(pool, gateway, app, user, question, key, authorized=None, documents=None):
+    fingerprint = digest({"question": question, **({"documents": sorted(map(str, documents))} if documents is not None else {})})
     async with pool.connection() as conn, conn.transaction():
         prior = await (
             await conn.execute(
@@ -139,7 +140,7 @@ async def answer(pool, gateway, app, user, question, key, authorized=None):
         if not inserted:
             raise TaskError("Question is already being processed; read its saved outcome using the same key")
     try:
-        sources = await search(pool, app, user, question)
+        sources = await search(pool, app, user, question, documents=documents)
         if not sources:
             result = Answer(
                 claims=[],

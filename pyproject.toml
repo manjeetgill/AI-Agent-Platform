@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Independent read-only research agent service"
 requires-python = ">=3.11"
 dependencies = [
+  "cryptography==46.0.7",
   "Pillow==12.3.0",
   "fastapi==0.141.1", "httpx==0.28.1", "pydantic==2.13.5",
   "psycopg[binary]==3.3.6", "psycopg-pool==3.3.3", "uvicorn==0.53.0",

@@ -368,6 +368,18 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     registry = task_registry if task_registry is not None else default_registry()
     from .knowledge import install_knowledge
     install_knowledge(app)
+    from .whatsapp import install_whatsapp
+    install_whatsapp(app)
+    from .business_workspaces import install_business_workspaces
+    from .chakra_onboarding import install_chakra_onboarding
+    install_business_workspaces(app)
+    install_chakra_onboarding(app)
+    from .meta_onboarding import install_onboarding
+    from .meta_webhook import install_meta_webhook
+    install_onboarding(app)
+    install_meta_webhook(app)
+    from .whatsapp_outbound import install_outbound
+    install_outbound(app)
     install_vision(app, actor)
     install_tasks(app, actor, registry)
     install_task_agents(app, registry)
