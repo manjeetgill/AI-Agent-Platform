@@ -76,6 +76,10 @@ def post(client, agent, cfg, suffix, **extra):
 
 
 def enable(client, h, a, monkeypatch):
+    async def verified(*args, **kwargs):
+        return {"ready": True, "code": "ready", "message": "Ready"}
+    monkeypatch.setattr("agent_platform.calling.provider_readiness", verified)
+
     async def handler(cfg, p):
         if p.get("probe"):
             return {"ready": True, "event_id": p["event_id"]}
@@ -251,3 +255,16 @@ def test_paused_draft_can_attach_verified_connection(monkeypatch):
         assert r.status_code == 200 and r.json()["greeting"] == changed["greeting"]
         enable(c, h, a, monkeypatch)
         assert c.put(f"/v1/calling/agents/{a['id']}", headers=h, json=body).status_code == 409
+
+
+def test_activation_checks_real_provider_routing(monkeypatch):
+    with environment(monkeypatch) as (c, _, key, _):
+        h, a, _, _ = fixture(c, key, monkeypatch)
+        async def no_number(*args, **kwargs):
+            return {"ready": False, "code": "number_missing", "message": "Incoming number not connected"}
+        monkeypatch.setattr("agent_platform.calling.provider_readiness", no_number)
+        ready = c.get(f"/v1/calling/agents/{a['id']}/readiness", headers=h)
+        assert ready.status_code == 200 and ready.json()["code"] == "number_missing"
+        assert c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": True}).status_code == 409
+        assert c.get(f"/v1/calling/agents/{a['id']}/setup", headers=h).json()["enabled"] is False
+        assert c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": False}).status_code == 200

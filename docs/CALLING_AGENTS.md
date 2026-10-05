@@ -17,10 +17,13 @@ existing channel scopes. Keep credentials on the app backend, never in browser c
   makes identical creates idempotent; changed content returns 409.
 - GET `/v1/calling/agents`: paginated list (`before`, `next_before`).
 - PUT `/v1/calling/agents/{id}`: change settings while paused with no active calls.
-- GET `/v1/calling/agents/{id}/setup`: redacted readiness and provider callback URLs.
+- GET `/v1/calling/agents/{id}/setup`: saved configuration and provider callback URLs.
+- GET `/v1/calling/agents/{id}/readiness`: checks the actual incoming-number resource,
+  voice capability, exact callback routing, then signed app readiness.
 - POST `/v1/calling/agents/{id}/preview`: configuration preview; no phone/app calls.
 - POST `/v1/calling/agents/{id}/activation`: `{ "enabled": true/false }`. Enabling
-  requires operator-authorized provider credentials and a signed app readiness probe.
+  requires provider-confirmed incoming-number ownership, matching voice/status
+  callback routing and a signed app readiness probe.
 - GET `/v1/calling/agents/{id}/calls`: paginated states, turns and reported duration.
 
 Create payload:
@@ -186,3 +189,24 @@ Verified: signed public readiness returns 200, unsigned requests fail, main app
 login returns 200 and unauthenticated main API returns 401, private calling
 management remains 404 publicly. No outbound call was made, no number purchased,
 and no recording/live transfer was enabled. A real call remains the final gate.
+
+## Provider verification and clinic controls
+
+Activation now reads Twilio's incoming-phone-number resource using the configured
+account. An empty result (including a number registered only as a verified caller
+ID), wrong account, missing voice capability, wrong webhook method/URL or another
+TwiML application/SIP trunk controlling the number blocks activation. A provider
+timeout also blocks activation; pausing does not need provider access.
+The readiness response explains the failed step without returning credentials.
+This version validates direct Twilio incoming-number routing. Other carrier/SIP
+and WhatsApp voice paths need their own verified adapter; they are not enabled by
+an operator flag.
+
+Sahayak's Phone calls tab now checks readiness, allows a doctor to pause/enable
+incoming calls, and lists actual saved call activity with pagination. Enabling
+asks the doctor to acknowledge provider charges. Readiness and history use the
+clinic's backend identity; browser requests cannot supply another agent ID.
+The real audio/appointment test remains a separate human verification step.
+
+Provider API reference:
+https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource

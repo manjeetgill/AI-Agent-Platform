@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import Field
 
 from .calling_provider import settings, verify, xml_reply
+from .calling_readiness import provider_readiness
 from .service_identity import authenticate
 from .tasks import Strict
 
@@ -253,6 +254,27 @@ def install_calling(app):
             "recording": False,
         }
 
+    @router.get("/v1/calling/agents/{ident}/readiness")
+    async def readiness(ident: UUID, request: Request):
+        pool, claims = await auth(request)
+        async with pool.connection() as conn:
+            row = await owned(conn, ident, claims)
+        try:
+            cfg = settings(row)
+        except (ValueError, TypeError):
+            return {"ready": False, "code": "configuration", "message": "Your setup team must connect an authorized incoming voice number.", "enabled": row["enabled"], "live_call_verified": False}
+        provider = await provider_readiness(cfg, urls(row, cfg))
+        if not provider["ready"]:
+            return {**provider, "enabled": row["enabled"], "live_call_verified": False}
+        probe = str(uuid4())
+        try:
+            answer = await invoke(cfg, {"probe": True, "event_id": probe, "agent_id": str(ident), "app_id": str(row["app_id"])})
+            if answer != {"ready": True, "event_id": probe}:
+                raise ValueError()
+        except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError):
+            return {"ready": False, "code": "handler", "message": "The connected app is unavailable. Restore it before enabling calls.", "enabled": row["enabled"], "live_call_verified": False}
+        return {**provider, "enabled": row["enabled"], "live_call_verified": False}
+
     @router.post("/v1/calling/agents/{ident}/activation")
     async def activation(ident: UUID, body: Activation, request: Request):
         pool, claims = await auth(request, True)
@@ -261,6 +283,9 @@ def install_calling(app):
             if body.enabled:
                 try:
                     cfg = settings(row)
+                    provider = await provider_readiness(cfg, urls(row, cfg))
+                    if not provider["ready"]:
+                        raise HTTPException(409, provider["message"])
                     probe_id = str(uuid4())
                     result = await invoke(
                         cfg,
