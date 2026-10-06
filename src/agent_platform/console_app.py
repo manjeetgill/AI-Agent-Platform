@@ -11,7 +11,7 @@ from .app import create_app
 from .service_identity import provision
 
 ASSETS = Path(__file__).with_name('console')
-PATH = re.compile(r'(?:(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|knowledge/documents|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
+PATH = re.compile(r'(?:(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|knowledge/documents|voice/(capabilities|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
 
 
 def local(request, *, mutation=False):
@@ -41,7 +41,7 @@ def create_console(*, registry=None, app=None):
             credential = await provision(pool, tenant='local-console', organisation='Local operator', app_name='Console',
                 app_id=existing['id'] if existing else None, scopes=['agents:read', 'agents:write', 'agents:run',
                     'tasks:read', 'tasks:write', 'tasks:approve', 'channels:read', 'channels:write',
-                    'knowledge:read', 'knowledge:write', 'knowledge:publish'])
+                    'knowledge:read', 'knowledge:write', 'knowledge:publish', 'telephony:read', 'telephony:write'])
             instance.state.console_credential = credential['credential']
             instance.state.console_app_id = credential['app_id']
             async with pool.connection() as conn:
@@ -76,6 +76,24 @@ def create_console(*, registry=None, app=None):
     from .whatsapp_console import install_connection_form
     install_connection_form(application, local)
 
+    @application.get('/voice')
+    async def voice_home(request: Request):
+        local(request)
+        return FileResponse(ASSETS/'voice.html', headers={'Cache-Control':'no-store',
+            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; form-action 'self'"})
+
+    @application.get('/telephony')
+    async def telephony_home(request: Request):
+        local(request)
+        return FileResponse(ASSETS/'telephony.html', headers={'Cache-Control':'no-store',
+            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+
+    @application.get('/calling')
+    async def calling_home(request: Request):
+        local(request)
+        return FileResponse(ASSETS/'calling.html', headers={'Cache-Control':'no-store',
+            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+
     @application.get('/whatsapp/send')
     async def whatsapp_send(request: Request):
         local(request)
@@ -85,11 +103,11 @@ def create_console(*, registry=None, app=None):
     @application.get('/console/{asset}')
     async def asset(asset: str, request: Request):
         local(request)
-        if asset not in {'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js'}:
+        if asset not in {'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'telephony.js'}:
             raise HTTPException(404)
         return FileResponse(ASSETS/asset)
 
-    @application.api_route('/console/api/{path:path}', methods=['GET', 'POST', 'PUT'])
+    @application.api_route('/console/api/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH'])
     async def proxy(path: str, request: Request):
         local(request, mutation=True)
         if not PATH.fullmatch(path) or path.endswith('/stream'):

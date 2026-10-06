@@ -104,6 +104,8 @@ async def audit(conn, channel, conversation, event, actor):
 
 async def ingest(pool, channel, payload):
     """Atomic message + queue record; retrying a webhook cannot create a second job."""
+    from .calling_worker import ingest as ingest_calls
+    await ingest_calls(pool, channel, payload)
     async with pool.connection() as conn, conn.transaction():
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
@@ -252,6 +254,14 @@ def install_whatsapp(app):
             "worker_online": bool(health),
             "model_configured": bool(health and health["model_configured"]),
         }
+
+    @router.get('/v1/whatsapp/usage')
+    async def usage(request: Request):
+        pool, claims = await context(request, 'channels:read')
+        async with pool.connection() as conn:
+            policy = await (await conn.execute('SELECT expires_at,whatsapp_turns,whatsapp_sends,voice_calls FROM channel_trial_policies WHERE app_id=%s', (claims['app_id'],))).fetchone()
+            rows = await (await conn.execute("SELECT resource,units FROM channel_trial_usage WHERE app_id=%s AND day=(now() AT TIME ZONE 'UTC')::date", (claims['app_id'],))).fetchall()
+        return {'trial_policy': policy, 'usage_today': rows, 'unit': 'operations', 'monetary_budget': False}
 
     @router.post("/v1/whatsapp/channels", status_code=201)
     async def create(body: Channel, request: Request):

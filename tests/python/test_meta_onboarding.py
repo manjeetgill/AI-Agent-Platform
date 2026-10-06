@@ -132,6 +132,11 @@ def test_customer_signup_ownership_replay_webhook_and_revocation(monkeypatch):
         conn=sql('SELECT * FROM meta_connections WHERE phone_id=%s',(phone,))[0]
         assert conn['state']=='CONNECTED' and provider.subscription and provider.callback
         assert client.get('/v1/whatsapp/onboarding/'+data['id'],headers=headers).json()['state']=='CONNECTED'
+        channel_path='/v1/whatsapp/onboarding/'+data['id']+'/channel'
+        prepared=client.get(channel_path,headers=headers)
+        assert prepared.status_code==200 and prepared.json()['phone_id']==phone
+        assert prepared.json()['enabled'] is False
+        assert client.get(channel_path,headers=other).status_code==409
         assert phone in client.get('/v1/whatsapp/setup',headers=headers).json()['phone_ids']
         assert phone not in client.get('/v1/whatsapp/setup',headers=other).json()['phone_ids']
         assert client.post('/v1/whatsapp/connections/'+str(conn['id'])+'/disconnect',headers=other,json={'confirm':True}).status_code==404
@@ -139,6 +144,7 @@ def test_customer_signup_ownership_replay_webhook_and_revocation(monkeypatch):
         provider.revoked=True;sql("UPDATE meta_connections SET checked_at=now()-interval '6 minutes' WHERE id=%s",(conn['id'],))
         assert work(provider,health=True)
         assert sql('SELECT state FROM meta_connections WHERE id=%s',(conn['id'],))[0]['state']=='REAUTH_REQUIRED'
+        assert client.get(channel_path,headers=headers).status_code==409
         assert phone not in client.get('/v1/whatsapp/setup',headers=headers).json()['phone_ids']
         assert client.post('/v1/whatsapp/connections/'+str(conn['id'])+'/disconnect',headers=headers,json={'confirm':True}).status_code==200
         assert work(provider,health=True)
@@ -195,3 +201,34 @@ def test_unknown_registration_never_repeats_and_webhook_auth(monkeypatch):
         assert client.post('/webhooks/meta',content=raw,headers={'X-Hub-Signature-256':signature}).status_code==400
         sql('DELETE FROM whatsapp_channels WHERE app_id=%s',(key['app_id'],))
         sql('DELETE FROM knowledge_documents WHERE id=%s',(doc['id'],))
+
+
+def test_connected_channel_requires_owner_and_live_connection(monkeypatch):
+    settings(monkeypatch)
+    with environment(monkeypatch) as (client, _, key, _):
+        headers, _channel, _ = setup(client, key, monkeypatch)
+        data, _, _ = begin(client, headers)
+        path = '/v1/whatsapp/onboarding/' + data['id'] + '/channel'
+        assert client.get(path, headers=headers).status_code == 409
+        # An unverified browser completion can never attach an existing channel.
+        other = {**headers, 'X-External-User-ID': 'another-owner'}
+        assert client.get(path, headers=other).status_code == 409
+        result = client.get('/v1/whatsapp/onboarding/config', headers=headers)
+        assert result.json()['provider'] == 'meta'
+        assert result.json()['public_customer_approval'] == 'not_verified'
+
+
+def test_configuration_diagnostics_require_read_scope_and_hide_secrets(monkeypatch):
+    settings(monkeypatch)
+    monkeypatch.delenv('AI_META_CONFIGURATION_ID')
+    with environment(monkeypatch) as (client, _, key, _):
+        headers = {'Authorization': 'Bearer ' + key['credential'], 'X-External-User-ID': 'integration-check'}
+        sql('UPDATE platform_service_keys SET scopes=%s WHERE id=%s', (['channels:read'], key['key_id']))
+        result = client.get('/v1/whatsapp/onboarding/config', headers=headers)
+        assert result.status_code == 200
+        assert result.json()['missing'] == ['configuration_id']
+        assert 's'*32 not in result.text and 'v'*40 not in result.text
+        assert client.get('/v1/whatsapp/onboarding/config').status_code == 401
+        assert client.post('/v1/whatsapp/onboarding', headers=headers, json={}).status_code == 403
+        sql('UPDATE platform_service_keys SET scopes=%s WHERE id=%s', (['tasks:read'], key['key_id']))
+        assert client.get('/v1/whatsapp/onboarding/config', headers=headers).status_code == 403

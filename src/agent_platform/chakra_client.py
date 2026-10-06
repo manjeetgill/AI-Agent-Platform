@@ -46,7 +46,7 @@ def verify_event(raw, signature, secret, *, phone_id, waba_id):
             for change in entry['changes']:
                 if not isinstance(change, dict) or not isinstance(change.get('value'), dict):
                     raise TypeError()
-                if (change.get('field') == 'messages'
+                if (change.get('field') in {'messages', 'calls'}
                     and change['value'].get('metadata', {}).get('phone_number_id') != phone_id):
                     raise ChakraError('WRONG_PHONE_NUMBER')
         return payload

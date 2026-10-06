@@ -1,0 +1,21 @@
+[
+  {
+    "name": "booking.slots",
+    "label": "Check available appointments",
+    "description": "Read available appointment slot IDs and human-readable times before booking.",
+    "risk": "READ",
+    "requires_subject": false,
+    "fields": []
+  },
+  {
+    "name": "booking.create",
+    "label": "Book an appointment",
+    "description": "Book a previously offered slot for the patient. Ask for slot_id and patient_name if missing. Requires app-verified identity and caller confirmation.",
+    "risk": "WRITE",
+    "requires_subject": true,
+    "fields": [
+      {"name": "slot_id", "label": "Selected slot", "type": "string", "required": true, "choices": []},
+      {"name": "patient_name", "label": "Patient name", "type": "string", "required": true, "choices": []}
+    ]
+  }
+]

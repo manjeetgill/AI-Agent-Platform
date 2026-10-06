@@ -65,7 +65,7 @@ def install_meta_webhook(app):
                     async with pool.connection() as conn:
                         await conn.execute('UPDATE meta_connections SET checked_at=NULL WHERE waba_id=%s',(entry['id'],))
                     continue
-                if change.get('field') != 'messages':
+                if change.get('field') not in {'messages', 'calls'}:
                     continue
                 if not isinstance(value.get('metadata'), dict):
                     raise HTTPException(400, 'Invalid message metadata')

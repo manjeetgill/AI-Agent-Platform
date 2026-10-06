@@ -1,0 +1,57 @@
+# Standalone, local-only pilot. Do not merge this with the production compose project.
+name: agent-asterisk-pilot
+services:
+  asterisk:
+    build:
+      context: ..
+      dockerfile: deploy/asterisk/Dockerfile
+    ports:
+      - '127.0.0.1:15060:5060/udp'
+      - '127.0.0.1:18000-18019:18000-18019/udp'
+    secrets: [sip_password]
+    read_only: true
+    tmpfs: ['/tmp:size=32m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 192m
+    cpus: 0.5
+    restart: unless-stopped
+    networks: [voice, sip]
+    healthcheck:
+      test: ['CMD', '/usr/local/bin/asterisk-healthcheck']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging: &logs
+      driver: json-file
+      options: {max-size: 1m, max-file: '2'}
+  voice-bridge:
+    build:
+      context: ..
+      dockerfile: deploy/asterisk/Bridge.Dockerfile
+    environment:
+      AI_ASTERISK_CONFIG: /run/secrets/bridge_config
+    secrets: [bridge_config]
+    volumes: [call_state:/state]
+    read_only: true
+    tmpfs: ['/tmp:size=16m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+    # AudioSocket has no authentication/encryption; never publish its port.
+    networks: [voice, egress]
+    logging: *logs
+networks:
+  voice: {internal: true}
+  egress: {}
+  sip: {}
+secrets:
+  sip_password:
+    file: ../.runtime/asterisk/sip-password
+  bridge_config:
+    file: ../.runtime/asterisk/bridge.json
+
+volumes:
+  call_state: {}

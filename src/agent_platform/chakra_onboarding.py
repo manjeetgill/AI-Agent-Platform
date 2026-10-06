@@ -8,13 +8,15 @@ import asyncio
 import json
 import os
 import re
+from typing import Literal
 from urllib.parse import urlsplit
-from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+from pydantic import Field
 
 from .meta_crypto import keyring, seal, unseal
 from .service_identity import authenticate
@@ -23,6 +25,13 @@ from .tasks import Strict
 
 class Completed(Strict):
     plugin_id: UUID
+
+
+class ChannelSetup(Strict):
+    # Preserve older clinic clients which send no body. Other apps set these explicitly.
+    name: str = Field(default='Clinic appointment assistant', min_length=1, max_length=80)
+    execution_mode: Literal['RAG', 'SAHAYAK'] = 'SAHAYAK'
+    documents: list[UUID] = Field(default_factory=list, max_length=50)
 
 
 def settings():
@@ -130,16 +139,23 @@ def install_chakra_onboarding(app):
         return {'id': row['id'], 'connect_token': unseal(row['token_cipher'], context(row))}
 
     @router.post('/onboarding/{session_id}/channel')
-    async def ensure_channel(session_id: UUID, request: Request):
+    async def ensure_channel(session_id: UUID, request: Request, body: ChannelSetup | None = None):
+        body = body or ChannelSetup()
         pool, claims = await auth(request)
         async with pool.connection() as conn, conn.transaction():
             connection = await (await conn.execute("SELECT c.* FROM chakra_customer_connections c JOIN chakra_signup_sessions s ON s.id=c.id WHERE c.id=%s AND c.app_id=%s AND c.owner_id=%s AND c.state='CONNECTED' AND s.state='CONNECTED' FOR UPDATE OF c", (session_id, claims['app_id'], claims['user']))).fetchone()
             if not connection:
                 raise HTTPException(409, 'Number ownership must be verified before preparing the agent')
+            if body.execution_mode == 'RAG' and not body.documents:
+                raise HTTPException(422, 'Select business FAQs before preparing a knowledge agent')
+            for document in body.documents:
+                allowed = await (await conn.execute("SELECT id FROM knowledge_documents WHERE id=%s AND app_id=%s AND visibility='app'", (document, claims['app_id']))).fetchone()
+                if not allowed:
+                    raise HTTPException(422, 'Document is not published for this business')
             ident = uuid5(NAMESPACE_URL, 'sahayak-channel:'+str(session_id))
-            await conn.execute("INSERT INTO whatsapp_channels(id,app_id,owner_id,phone_id,name,documents,execution_mode) VALUES(%s,%s,%s,%s,'Clinic appointment assistant','{}','SAHAYAK') ON CONFLICT(phone_id) DO NOTHING", (ident,claims['app_id'],claims['user'],connection['phone_id']))
+            await conn.execute("INSERT INTO whatsapp_channels(id,app_id,owner_id,phone_id,name,documents,execution_mode) VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(phone_id) DO NOTHING", (ident,claims['app_id'],claims['user'],connection['phone_id'],body.name,body.documents,body.execution_mode))
             row = await (await conn.execute('SELECT * FROM whatsapp_channels WHERE phone_id=%s', (connection['phone_id'],))).fetchone()
-            if row['id'] != ident or str(row['app_id']) != str(claims['app_id']) or str(row['owner_id']) != str(claims['user']) or row['execution_mode'] != 'SAHAYAK':
+            if row['id'] != ident or str(row['app_id']) != str(claims['app_id']) or str(row['owner_id']) != str(claims['user']) or row['execution_mode'] != body.execution_mode or row['name'] != body.name or set(row['documents']) != set(body.documents):
                 raise HTTPException(409, 'Existing number configuration needs operator review')
             return {k: row[k] for k in ('id','app_id','phone_id','enabled','execution_mode','webhook_verified_at')}
 

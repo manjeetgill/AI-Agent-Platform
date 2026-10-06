@@ -6,7 +6,7 @@ agents.myalgodesk.in, shayak.myalgodesk.in {
         Strict-Transport-Security "max-age=31536000"
     }
     request_body {
-        max_size 256000
+        max_size 524288
     }
     @clinic {
         host shayak.myalgodesk.in
@@ -15,7 +15,23 @@ agents.myalgodesk.in, shayak.myalgodesk.in {
     handle @clinic {
         reverse_proxy 172.24.0.1:44001
     }
-    @public path /webhooks/calling/* /webhooks/whatsapp/* /webhooks/meta /connect/whatsapp/* /connect/whatsapp-assets/*
+    # Service/gateway credentials are validated by the platform on every route.
+    # No operator console or legacy unscoped API is exposed here.
+    @appagents {
+        host agents.myalgodesk.in
+        path /v1/whatsapp/* /v1/telephony/* /v1/voice/agents /v1/voice/agents/* /v1/knowledge/documents /v1/knowledge/documents/*
+    }
+    handle @appagents {
+        reverse_proxy agent-platform-api-1:4060
+    }
+    @businesspages {
+        host agents.myalgodesk.in
+        path /about /privacy /data-deletion /app-icon.png
+    }
+    handle @businesspages {
+        reverse_proxy agent-platform-api-1:4060
+    }
+    @public path /voice/call /voice/assets/* /public/voice/* /webhooks/calling/* /webhooks/whatsapp/* /webhooks/meta /connect/whatsapp/* /connect/whatsapp-assets/*
     handle @public {
         reverse_proxy agent-platform-api-1:4060
     }

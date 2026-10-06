@@ -68,5 +68,21 @@ services:
     tmpfs: ['/tmp:size=64m,mode=1777']
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+  voice-worker:
+    profiles: [voice]
+    build:
+      context: .
+      args: {INSTALL_VOICE: '1'}
+    env_file: .env
+    command: [python, -m, agent_platform.calling_worker]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=64m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
 volumes:
   agent_data:

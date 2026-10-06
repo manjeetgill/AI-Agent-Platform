@@ -205,6 +205,10 @@ async def tick_outbound(pool, sender=send_template, catalogue=templates):
         except Exception:  # noqa: BLE001 -- safe to fail before dispatch
             await conn.execute("UPDATE whatsapp_outbound SET status='FAILED',error='Template or connection unavailable; no message dispatched' WHERE id=%s", (job['id'],))
             return True
+        from .channel_trials import reserve_committed
+        if not await reserve_committed(pool, channel['app_id'], 'whatsapp_sends', job['id']):
+            await conn.execute("UPDATE whatsapp_outbound SET status='CANCELLED',error='Pilot usage limit or expiry reached' WHERE id=%s", (job['id'],))
+            return True
         # Fence commits independently before any network send. A rolled-back job cannot send twice.
         async with pool.connection() as fence:
             inserted = await (await fence.execute('INSERT INTO whatsapp_dispatches(message_id) VALUES(%s) ON CONFLICT DO NOTHING RETURNING message_id', (job['id'],))).fetchone()

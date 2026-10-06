@@ -11,7 +11,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install --no-cache-dir . && useradd --uid 10001 --create-home app
+ARG INSTALL_VOICE=0
+RUN if [ "$INSTALL_VOICE" = "1" ]; then apt-get update && apt-get install -y --no-install-recommends espeak-ng && rm -rf /var/lib/apt/lists/* && pip install --no-cache-dir '.[voice]'; else pip install --no-cache-dir .; fi \
+    && useradd --uid 10001 --create-home app
 USER app
 EXPOSE 4060
 CMD ["uvicorn", "agent_platform.app:app", "--host", "0.0.0.0", "--port", "4060"]

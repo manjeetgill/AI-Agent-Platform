@@ -83,14 +83,25 @@ async def tick(pool, model=None, sender=send):
                         (job["id"],),
                     )
                 return True
+            from .channel_trials import reserve_committed
+            if not await reserve_committed(pool, channel['app_id'], 'whatsapp_turns', job['id']):
+                async with pool.connection() as conn:
+                    await conn.execute("UPDATE whatsapp_messages SET status='CANCELLED' WHERE id=%s", (job['id'],))
+                    await audit(conn, channel['id'], job['conversation_id'], 'trial:blocked', 'worker')
+                return True
             clinic_mode = channel.get('execution_mode') == 'SAHAYAK'
             bridge_handoff = False
             if clinic_mode:
                 from .sahayak_bridge import request as clinic_request
+                from .voice_handoffs import issue, public_origin
                 async with asyncio.timeout(45):
-                    clinical = await clinic_request(channel, job['id'], conversation['customer'], job['body'], pool=pool)
+                    clinical = await clinic_request(channel, job['id'], conversation['customer'], job['body'], pool=pool, voice_available=bool(public_origin()))
                 reply = '\n\n'.join(clinical['replies'])
                 bridge_handoff = clinical['handledBy'] == 'human' or clinical['redFlag']
+                if clinical.get('voice_requested') is True and not bridge_handoff:
+                    link = await issue(pool, channel, conversation, job)
+                    reply += '\n\n' + link
+                    clinical.pop('options', None)
                 handoff = not reply
                 from .whatsapp_interactive import interactive_reply
                 controls = interactive_reply(reply, clinical.get('options')) if not bridge_handoff else None
@@ -191,6 +202,11 @@ async def tick(pool, model=None, sender=send):
             if not permitted:
                 await conn.execute("UPDATE whatsapp_messages SET status='HANDOFF' WHERE id=%s", (msg["id"],))
                 return True
+        from .channel_trials import reserve_committed
+        if not await reserve_committed(pool, channel['app_id'], 'whatsapp_sends', msg['id']):
+            await conn.execute("UPDATE whatsapp_messages SET status='CANCELLED' WHERE id=%s", (msg['id'],))
+            await audit(conn, channel['id'], conversation['id'], 'trial:blocked', 'worker')
+            return True
         config = await managed_config(pool, channel["phone_id"], channel["app_id"], channel["owner_id"])
         # Independent committed dispatch fence survives a crash while the send lock is held.
         await conn.execute(

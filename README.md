@@ -138,9 +138,22 @@ history and human handover APIs. The local setup wizard and inbox are at
 
 ## Calling agents
 
-An inbound calling foundation is available through `/v1/calling`: app/owner-isolated
-agent setup, provider-signed webhooks, durable speech/keypad turns, pause/activation
-and call history. The first adapter is Twilio. Live calling requires an authorized
-voice number and a signed handler in the integrating app. No live phone service is
-configured by default. See [Calling integration](docs/CALLING_AGENTS.md) and the
+WhatsApp calling is available through `/v1/calling`: app/owner-isolated agent setup,
+existing Meta/Chakra business-number connections, permission checks, approved test
+calls and an optional WebRTC audio worker. The local setup screen is `/calling`.
+Calling is disabled until the number, audio runtime and business handler are ready;
+the ordinary telephone connector has been removed. See [Calling integration](docs/CALLING_AGENTS.md) and the
 [backend client example](examples/calling-integration/client.py).
+
+## Internet voice pilot
+
+Create an FAQ voice agent and talk in the browser at `http://127.0.0.1:4061/voice` after starting the local console. No phone number or WhatsApp connection is required. See [browser voice setup, API and app integration](docs/WEB_VOICE.md) for configuration, limits and public deployment requirements.
+
+### App-owned telephone connections
+
+Multiple apps can register isolated inbound calling connections using their
+own authorized carrier/Asterisk gateways. Number verification, activation, scoped
+gateway credentials, platform speech, app-provided booking tools, explicit confirmation, app-wide quotas and durable call turns are provided by
+`/v1/telephony`. See [setup and API contract](docs/APP_OWNED_CALLING.md).
+The operator console is `/telephony`. Actual telephone service requires the app's
+carrier route and a successful live test; outbound calls are not enabled by this adapter.

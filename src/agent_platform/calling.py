@@ -1,4 +1,4 @@
-"""Reusable inbound calling: owner-scoped setup, durable turns and signed app callbacks."""
+"""Reusable WhatsApp calling management; business apps retain their own identities."""
 
 import hashlib
 import hmac
@@ -8,11 +8,11 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import Field
 
-from .calling_provider import settings, verify, xml_reply
-from .calling_readiness import provider_readiness
+from . import calling_provider as provider
+from .meta_worker import managed_config
 from .service_identity import authenticate
 from .tasks import Strict
 
@@ -20,7 +20,7 @@ from .tasks import Strict
 class Agent(Strict):
     external_id: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_.:-]+$")
     name: str = Field(min_length=1, max_length=120)
-    connection_ref: str | None = Field(default=None, min_length=1, max_length=100)
+    connection_ref: None = None  # Retained in the request contract; retired registries cannot be attached.
     language: Literal["en-IN", "en-US", "hi-IN"] = "en-IN"
     greeting: str = Field(min_length=1, max_length=800)
     handoff_message: str = Field(min_length=1, max_length=800)
@@ -31,18 +31,22 @@ class Activation(Strict):
     enabled: bool
 
 
-class AppReply(Strict):
-    event_id: UUID
-    action: Literal["continue", "end", "handoff"]
-    text: str = Field(min_length=1, max_length=1200)
+class Connection(Strict):
+    channel_id: UUID
+    authorized_to_connect: Literal[True]
 
 
-def urls(agent, cfg):
-    base = cfg["public_url"].rstrip("/") + "/webhooks/calling/" + str(agent["id"])
-    return {"inbound": base + "/inbound", "status": base + "/status"}
+class TestCall(Strict):
+    recipient: str = Field(pattern=r"^\+[1-9]\d{7,14}$")
+    idempotency_key: str = Field(min_length=8, max_length=100, pattern=r"^[a-zA-Z0-9_.:-]+$")
+
+
+class Approval(Strict):
+    approved: Literal[True]
 
 
 async def invoke(cfg, payload):
+    """Stable signed business-handler contract shared by apps, including Sahayak."""
     raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode()
     stamp = str(int(time.time()))
     sig = hmac.new(cfg["handler_secret"].encode(), stamp.encode() + b"." + raw, hashlib.sha256).hexdigest()
@@ -60,6 +64,97 @@ async def invoke(cfg, payload):
         if len(response.content) > 16384:
             raise ValueError("Oversized app response")
         return response.json()
+
+
+async def connected(pool, agent):
+    async with pool.connection() as conn:
+        row = await (
+            await conn.execute(
+                "SELECT * FROM whatsapp_channels WHERE id=%s AND app_id=%s AND owner_id=%s",
+                (agent["whatsapp_channel_id"], agent["app_id"], agent["owner_id"]),
+            )
+        ).fetchone()
+    if not row:
+        raise HTTPException(409, "Connect an authorized WhatsApp business number first")
+    cfg = await managed_config(pool, row["phone_id"], row["app_id"], row["owner_id"])
+    return row, cfg
+
+
+def configuration_hash(agent):
+    return hashlib.sha256(
+        json.dumps(
+            {
+                k: str(agent[k])
+                for k in ("id", "whatsapp_channel_id", "greeting", "language", "handoff_message", "max_turns")
+            },
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+async def check_ready(pool, agent):
+    try:
+        channel, cfg = await connected(pool, agent)
+    except HTTPException:
+        return {
+            "ready": False,
+            "code": "whatsapp_connection",
+            "message": "Connect your WhatsApp business number first.",
+        }
+    result = await provider.readiness(cfg, channel["phone_id"])
+    if not result["ready"]:
+        return result
+    async with pool.connection() as conn:
+        worker = await (
+            await conn.execute(
+                "SELECT 1 FROM whatsapp_call_worker_health WHERE last_seen>now()-interval '30 seconds' AND media_ready"
+            )
+        ).fetchone()
+    if not worker:
+        return {
+            "ready": False,
+            "code": "voice_runtime",
+            "message": "WhatsApp number connected. The platform's live audio worker is not ready.",
+        }
+    import os
+
+    from .calling_dialogue import handler
+
+    if channel["execution_mode"] == "SAHAYAK" or str(agent["id"]) in json.loads(
+        os.environ.get("AI_CALLING_APP_HANDLERS", "{}")
+    ):
+        try:
+            cfg = handler(agent)
+            event = str(uuid4())
+            reply = await invoke(
+                cfg,
+                {
+                    "probe": True,
+                    "event_id": event,
+                    "agent_id": str(agent["id"]),
+                    "app_id": str(agent["app_id"]),
+                },
+            )
+            if reply != {"ready": True, "event_id": event}:
+                raise ValueError()
+        except (ValueError, KeyError, TypeError, httpx.HTTPError):
+            return {
+                "ready": False,
+                "code": "app_handler",
+                "message": "Your app's business-action handler is unavailable or not configured.",
+            }
+    return {
+        "ready": True,
+        "code": "ready",
+        "message": "WhatsApp calling and the audio worker are ready. Complete a real call test.",
+    }
+
+
+def call_view(row):
+    return {k: row[k] for k in ("id", "recipient", "state", "created_at")} | {
+        "summary": f"Make one WhatsApp agent test call to {row['recipient']}, with a 2-minute local audio limit. Meta/provider and AI usage charges may apply. No recording.",
+        "max_duration_seconds": 120,
+    }
 
 
 def install_calling(app):
@@ -87,121 +182,45 @@ def install_calling(app):
             raise HTTPException(404, "Calling agent not found")
         return row
 
-    async def audit(conn, ident, event, actor):
-        await conn.execute(
-            "INSERT INTO calling_audit(agent_id,event,actor) VALUES(%s,%s,%s)", (ident, event, actor)
-        )
-
     @router.get("/v1/calling/capabilities")
     async def capabilities(request: Request):
         _, claims = await auth(request)
         return {
             "app_id": claims["app_id"],
             "owner_id": claims["user"],
-            "providers": ["twilio"],
+            "providers": ["meta", "chakra"],
+            "channel": "whatsapp",
+            "ordinary_phone_calls": False,
             "inbound": True,
-            "outbound": False,
+            "outbound": "approved_test_only",
             "recording": False,
             "live_transfer": False,
-            "runtime": "speech-or-keypad turns through signed app handler",
+            "requires_audio_worker": True,
         }
 
     @router.post("/v1/calling/agents", status_code=201)
     async def create(body: Agent, request: Request):
         pool, claims = await auth(request, True)
         values = body.model_dump()
-        agent = {**values, "id": uuid4(), "app_id": claims["app_id"], "owner_id": claims["user"]}
-        if body.connection_ref:
-            try:
-                settings(agent)
-            except (ValueError, TypeError):
-                raise HTTPException(
-                    409, "Operator must configure an authorized number and signed app handler"
-                ) from None
         async with pool.connection() as conn, conn.transaction():
             await conn.execute("SELECT id FROM platform_apps WHERE id=%s FOR UPDATE", (claims["app_id"],))
-            existing = await (
+            row = await (
                 await conn.execute(
                     "SELECT * FROM calling_agents WHERE app_id=%s AND owner_id=%s AND external_id=%s",
                     (claims["app_id"], claims["user"], body.external_id),
                 )
             ).fetchone()
-            if existing:
-                if any(existing[k] != v for k, v in values.items()):
+            if row:
+                if any(row[k] != v for k, v in values.items()):
                     raise HTTPException(409, "External reference already used with different settings")
-                return existing
-            if (
-                body.connection_ref
-                and await (
-                    await conn.execute(
-                        "SELECT 1 FROM calling_agents WHERE connection_ref=%s", (body.connection_ref,)
-                    )
-                ).fetchone()
-            ):
-                raise HTTPException(409, "Connection already assigned")
+                return row
+            keys = ("external_id", "name", "language", "greeting", "handoff_message", "max_turns")
             row = await (
                 await conn.execute(
-                    """INSERT INTO calling_agents
-                (id,app_id,owner_id,external_id,name,connection_ref,language,greeting,handoff_message,max_turns)
-                VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *""",
-                    tuple(
-                        agent[k]
-                        for k in (
-                            "id",
-                            "app_id",
-                            "owner_id",
-                            "external_id",
-                            "name",
-                            "connection_ref",
-                            "language",
-                            "greeting",
-                            "handoff_message",
-                            "max_turns",
-                        )
-                    ),
+                    "INSERT INTO calling_agents(id,app_id,owner_id,external_id,name,language,greeting,handoff_message,max_turns) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+                    (uuid4(), claims["app_id"], claims["user"], *(values[k] for k in keys)),
                 )
             ).fetchone()
-            await audit(conn, row["id"], "created", claims["principal"])
-        return row
-
-    @router.put("/v1/calling/agents/{ident}")
-    async def update(ident: UUID, body: Agent, request: Request):
-        pool, claims = await auth(request, True)
-        async with pool.connection() as conn, conn.transaction():
-            row = await owned(conn, ident, claims, True)
-            if (
-                row["enabled"]
-                or await (
-                    await conn.execute(
-                        "SELECT 1 FROM calling_calls WHERE agent_id=%s AND state='ACTIVE'", (ident,)
-                    )
-                ).fetchone()
-            ):
-                raise HTTPException(409, "Pause and finish active calls before changing settings")
-            if body.external_id != row["external_id"]:
-                raise HTTPException(409, "External reference cannot change")
-            if body.connection_ref:
-                try:
-                    settings({**row, **body.model_dump()})
-                except (ValueError, TypeError):
-                    raise HTTPException(409, "Operator must configure the authorized connection") from None
-                if await (
-                    await conn.execute(
-                        "SELECT 1 FROM calling_agents WHERE connection_ref=%s AND id<>%s",
-                        (body.connection_ref, ident),
-                    )
-                ).fetchone():
-                    raise HTTPException(409, "Connection already assigned")
-            keys = ("name", "connection_ref", "language", "greeting", "handoff_message", "max_turns")
-            row = await (
-                await conn.execute(
-                    "UPDATE calling_agents SET "
-                    + ",".join(k + "=%s" for k in keys)
-                    + " WHERE id=%s RETURNING *",
-                    tuple(getattr(body, k) for k in keys) + (ident,),
-                )
-            ).fetchone()
-            await audit(conn, ident, "updated", claims["principal"])
         return row
 
     @router.get("/v1/calling/agents")
@@ -210,101 +229,125 @@ def install_calling(app):
         async with pool.connection() as conn:
             rows = await (
                 await conn.execute(
-                    """SELECT * FROM calling_agents WHERE app_id=%s AND owner_id=%s
-                AND (%s::uuid IS NULL OR id<%s) ORDER BY id DESC LIMIT 51""",
+                    "SELECT * FROM calling_agents WHERE app_id=%s AND owner_id=%s AND (%s::uuid IS NULL OR id<%s) ORDER BY id DESC LIMIT 51",
                     (claims["app_id"], claims["user"], before, before),
                 )
             ).fetchall()
         return {"agents": rows[:50], "next_before": str(rows[49]["id"]) if len(rows) > 50 else None}
 
+    @router.post("/v1/calling/agents/{ident}/connection")
+    async def connect(ident: UUID, body: Connection, request: Request):
+        pool, claims = await auth(request, True)
+        async with pool.connection() as conn, conn.transaction():
+            # Lock the channel as well to serialize competing bindings from two agents.
+            channel = await (
+                await conn.execute(
+                    "SELECT * FROM whatsapp_channels WHERE id=%s AND app_id=%s AND owner_id=%s FOR UPDATE",
+                    (body.channel_id, claims["app_id"], claims["user"]),
+                )
+            ).fetchone()
+            if not channel:
+                raise HTTPException(404, "WhatsApp connection not found")
+            agent = await owned(conn, ident, claims, True)
+            if agent["enabled"]:
+                raise HTTPException(409, "Pause the agent before changing its number")
+            if await (
+                await conn.execute(
+                    "SELECT 1 FROM calling_agents WHERE whatsapp_channel_id=%s AND id<>%s",
+                    (body.channel_id, ident),
+                )
+            ).fetchone():
+                raise HTTPException(409, "WhatsApp number already has a calling agent")
+            await conn.execute(
+                "UPDATE calling_agents SET whatsapp_channel_id=%s,connection_ref=NULL WHERE id=%s",
+                (body.channel_id, ident),
+            )
+            await conn.execute(
+                "INSERT INTO calling_audit(agent_id,event,actor) VALUES(%s,'whatsapp_connected',%s)",
+                (ident, claims["principal"]),
+            )
+        return {
+            "connected": True,
+            "channel": "whatsapp",
+            "enabled": False,
+            "next_step": "Check calling eligibility and audio readiness",
+        }
+
     @router.get("/v1/calling/agents/{ident}/setup")
+    @router.get("/v1/calling/agents/{ident}/connection")
     async def setup(ident: UUID, request: Request):
         pool, claims = await auth(request)
         async with pool.connection() as conn:
-            row = await owned(conn, ident, claims)
-        try:
-            cfg = settings(row)
-        except (ValueError, TypeError):
-            return {
-                "configured": False,
-                "enabled": False,
-                "next_step": "Operator connects an authorized voice number and app handler",
-            }
+            agent = await owned(conn, ident, claims)
         return {
-            "configured": True,
-            "enabled": row["enabled"],
-            "number": cfg["number"],
-            "webhooks": urls(row, cfg),
-            "method": "POST",
-            "next_step": "Configure provider webhooks, then enable and make a real inbound test call",
-        }
-
-    @router.post("/v1/calling/agents/{ident}/preview")
-    async def preview(ident: UUID, request: Request):
-        pool, claims = await auth(request)
-        async with pool.connection() as conn:
-            row = await owned(conn, ident, claims)
-        return {
-            "simulation": True,
-            "provider_called": False,
-            "greeting": row["greeting"],
-            "language": row["language"],
-            "handoff_message": row["handoff_message"],
-            "max_turns": row["max_turns"],
-            "recording": False,
+            "configured": bool(agent["whatsapp_channel_id"]),
+            "enabled": agent["enabled"],
+            "channel": "whatsapp",
+            "channel_id": agent["whatsapp_channel_id"],
+            "next_step": "Check WhatsApp calling readiness"
+            if agent["whatsapp_channel_id"]
+            else "Select your connected WhatsApp business number",
         }
 
     @router.get("/v1/calling/agents/{ident}/readiness")
     async def readiness(ident: UUID, request: Request):
         pool, claims = await auth(request)
         async with pool.connection() as conn:
-            row = await owned(conn, ident, claims)
-        try:
-            cfg = settings(row)
-        except (ValueError, TypeError):
-            return {"ready": False, "code": "configuration", "message": "Your setup team must connect an authorized incoming voice number.", "enabled": row["enabled"], "live_call_verified": False}
-        provider = await provider_readiness(cfg, urls(row, cfg))
-        if not provider["ready"]:
-            return {**provider, "enabled": row["enabled"], "live_call_verified": False}
-        probe = str(uuid4())
-        try:
-            answer = await invoke(cfg, {"probe": True, "event_id": probe, "agent_id": str(ident), "app_id": str(row["app_id"])})
-            if answer != {"ready": True, "event_id": probe}:
-                raise ValueError()
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError):
-            return {"ready": False, "code": "handler", "message": "The connected app is unavailable. Restore it before enabling calls.", "enabled": row["enabled"], "live_call_verified": False}
-        return {**provider, "enabled": row["enabled"], "live_call_verified": False}
+            agent = await owned(conn, ident, claims)
+        return {**await check_ready(pool, agent), "enabled": agent["enabled"], "live_call_verified": False}
 
     @router.post("/v1/calling/agents/{ident}/activation")
-    async def activation(ident: UUID, body: Activation, request: Request):
+    async def activate(ident: UUID, body: Activation, request: Request):
         pool, claims = await auth(request, True)
         async with pool.connection() as conn, conn.transaction():
-            row = await owned(conn, ident, claims, True)
+            agent = await owned(conn, ident, claims, True)
             if body.enabled:
-                try:
-                    cfg = settings(row)
-                    provider = await provider_readiness(cfg, urls(row, cfg))
-                    if not provider["ready"]:
-                        raise HTTPException(409, provider["message"])
-                    probe_id = str(uuid4())
-                    result = await invoke(
-                        cfg,
-                        {
-                            "probe": True,
-                            "event_id": probe_id,
-                            "agent_id": str(ident),
-                            "app_id": str(row["app_id"]),
-                        },
-                    )
-                    if result != {"ready": True, "event_id": probe_id}:
-                        raise ValueError("Handler not ready")
-                except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError):
-                    raise HTTPException(
-                        409, "Authorized provider connection and reachable app handler required"
-                    ) from None
+                ready = await check_ready(pool, agent)
+                if not ready["ready"]:
+                    raise HTTPException(409, ready["message"])
             await conn.execute("UPDATE calling_agents SET enabled=%s WHERE id=%s", (body.enabled, ident))
-            await audit(conn, ident, "enabled:" + str(body.enabled), claims["principal"])
+            await conn.execute(
+                "INSERT INTO calling_audit(agent_id,event,actor) VALUES(%s,%s,%s)",
+                (ident, "enabled:" + str(body.enabled), claims["principal"]),
+            )
         return {"enabled": body.enabled, "live_call_verified": False}
+
+    @router.post("/v1/calling/agents/{ident}/provider-settings")
+    async def enable_provider(ident: UUID, body: Approval, request: Request):
+        pool, claims = await auth(request, True)
+        async with pool.connection() as conn:
+            agent = await owned(conn, ident, claims)
+        channel, cfg = await connected(pool, agent)
+        current = await provider.readiness(cfg, channel["phone_id"])
+        if current["code"] != "calling_disabled":
+            return current  # Never change SIP routing or overwrite an unknown configuration.
+        async with pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO calling_audit(agent_id,event,actor) VALUES(%s,'whatsapp_calling_enable_requested',%s)",
+                (ident, claims["principal"]),
+            )
+        try:
+            await provider.request(
+                cfg,
+                channel["phone_id"],
+                "settings",
+                method="POST",
+                payload={"calling": {"status": "ENABLED"}},
+            )
+        except provider.CallingError:
+            pass  # Read the real state before suggesting any further action.
+        return await provider.readiness(cfg, channel["phone_id"])
+
+    @router.post("/v1/calling/agents/{ident}/preview")
+    async def preview(ident: UUID, request: Request):
+        pool, claims = await auth(request)
+        async with pool.connection() as conn:
+            agent = await owned(conn, ident, claims)
+        return {
+            "simulation": True,
+            "provider_called": False,
+            **{k: agent[k] for k in ("greeting", "language", "handoff_message", "max_turns")},
+        }
 
     @router.get("/v1/calling/agents/{ident}/calls")
     async def history(ident: UUID, request: Request, before: UUID | None = None):
@@ -313,210 +356,101 @@ def install_calling(app):
             await owned(conn, ident, claims)
             rows = await (
                 await conn.execute(
-                    """SELECT id,state,last_turn,duration_seconds,created_at,updated_at
-                FROM calling_calls WHERE agent_id=%s AND (%s::uuid IS NULL OR id<%s) ORDER BY id DESC LIMIT 51""",
+                    "SELECT id,state,last_turn,duration_seconds,created_at,updated_at FROM calling_calls WHERE agent_id=%s AND (%s::uuid IS NULL OR id<%s) ORDER BY id DESC LIMIT 51",
                     (ident, before, before),
                 )
             ).fetchall()
         return {"calls": rows[:50], "next_before": str(rows[49]["id"]) if len(rows) > 50 else None}
 
-    async def inbound_context(ident, request):
-        pool = request.app.state.repository.pool
+    @router.get("/v1/calling/agents/{ident}/permission")
+    async def permission(ident: UUID, recipient: str, request: Request):
+        pool, claims = await auth(request)
         async with pool.connection() as conn:
-            row = await (await conn.execute("SELECT * FROM calling_agents WHERE id=%s", (ident,))).fetchone()
+            agent = await owned(conn, ident, claims)
+        channel, cfg = await connected(pool, agent)
+        try:
+            return await provider.permission(cfg, channel["phone_id"], recipient)
+        except provider.CallingError:
+            raise HTTPException(409, "Unable to verify recipient's WhatsApp call permission") from None
+
+    @router.post("/v1/calling/agents/{ident}/test-calls", status_code=201)
+    async def test_call(ident: UUID, body: TestCall, request: Request):
+        pool, claims = await auth(request, True)
+        async with pool.connection() as conn, conn.transaction():
+            agent = await owned(conn, ident, claims, True)
+            prior = await (
+                await conn.execute(
+                    "SELECT * FROM whatsapp_call_requests WHERE agent_id=%s AND idempotency_key=%s",
+                    (ident, body.idempotency_key),
+                )
+            ).fetchone()
+            if prior:
+                if prior["recipient"] != body.recipient:
+                    raise HTTPException(409, "Request already used for another recipient")
+                return call_view(prior)
+            if not agent["enabled"]:
+                raise HTTPException(409, "Enable the WhatsApp calling agent first")
+            row = await (
+                await conn.execute(
+                    "INSERT INTO whatsapp_call_requests(id,agent_id,recipient,idempotency_key,state,configuration_hash) VALUES(%s,%s,%s,%s,'AWAITING_APPROVAL',%s) RETURNING *",
+                    (uuid4(), ident, body.recipient, body.idempotency_key, configuration_hash(agent)),
+                )
+            ).fetchone()
+        return call_view(row)
+
+    @router.get("/v1/calling/agents/{ident}/test-calls/{test_id}")
+    async def get_test(ident: UUID, test_id: UUID, request: Request):
+        pool, claims = await auth(request)
+        async with pool.connection() as conn:
+            await owned(conn, ident, claims)
+            row = await (
+                await conn.execute(
+                    "SELECT * FROM whatsapp_call_requests WHERE id=%s AND agent_id=%s", (test_id, ident)
+                )
+            ).fetchone()
         if not row:
             raise HTTPException(404)
-        try:
-            cfg = settings(row)
-        except (ValueError, TypeError):
-            raise HTTPException(503, "Calling connection unavailable") from None
-        raw = bytearray()
-        async for part in request.stream():
-            raw.extend(part)
-            if len(raw) > 65536:
-                raise HTTPException(413)
-        try:
-            if request.url.query:
-                raise ValueError("Unexpected query")
-            params = verify(bytes(raw), request.headers, cfg, request.url.path)
-        except (ValueError, UnicodeError):
-            raise HTTPException(403, "Invalid calling webhook") from None
-        return pool, row, cfg, params
+        return call_view(row)
 
-    def response(xml):
-        return Response(xml, media_type="application/xml", headers={"Cache-Control": "no-store"})
-
-    @router.post("/webhooks/calling/{ident}/inbound")
-    async def inbound(ident: UUID, request: Request):
-        pool, agent, cfg, params = await inbound_context(ident, request)
-        if params.get("Direction") != "inbound":
-            raise HTTPException(403, "Only inbound calls are supported")
-        if not agent["enabled"]:
-            return response(xml_reply(agent["handoff_message"], agent["language"]))
+    @router.post("/v1/calling/agents/{ident}/test-calls/{test_id}/approve", status_code=202)
+    async def approve_test(ident: UUID, test_id: UUID, body: Approval, request: Request):
+        pool, claims = await auth(request, True)
         async with pool.connection() as conn, conn.transaction():
-            await conn.execute(
-                """INSERT INTO calling_calls(id,agent_id,provider_call_id,caller)
-                VALUES(%s,%s,%s,%s) ON CONFLICT(agent_id,provider_call_id) DO NOTHING""",
-                (uuid4(), ident, params["CallSid"], params.get("From", "anonymous")[:100]),
-            )
-            call = await (
+            await conn.execute("SELECT id FROM platform_apps WHERE id=%s FOR UPDATE", (claims["app_id"],))
+            agent = await owned(conn, ident, claims, True)
+            row = await (
                 await conn.execute(
-                    "SELECT * FROM calling_calls WHERE agent_id=%s AND provider_call_id=%s",
-                    (ident, params["CallSid"]),
+                    "SELECT *,created_at>now()-interval '5 minutes' AS fresh FROM whatsapp_call_requests WHERE id=%s AND agent_id=%s FOR UPDATE",
+                    (test_id, ident),
                 )
             ).fetchone()
-        action = (
-            urls(agent, cfg)["inbound"].replace("/inbound", "/turn/1")
-            if call["state"] == "ACTIVE" and call["last_turn"] == 0
-            else None
-        )
-        return response(
-            xml_reply(agent["greeting"] if action else agent["handoff_message"], agent["language"], action)
-        )
-
-    @router.post("/webhooks/calling/{ident}/turn/{turn}")
-    async def turn(ident: UUID, turn: int, request: Request):
-        pool, agent, cfg, params = await inbound_context(ident, request)
-        fallback = xml_reply(agent["handoff_message"], agent["language"])
-        text = (params.get("SpeechResult") or params.get("Digits") or "").strip()
-        digest = hashlib.sha256(text.encode()).hexdigest()
-        event = uuid4()
-        async with pool.connection() as conn, conn.transaction():
-            call = await (
-                await conn.execute(
-                    "SELECT * FROM calling_calls WHERE agent_id=%s AND provider_call_id=%s FOR UPDATE",
-                    (ident, params["CallSid"]),
-                )
-            ).fetchone()
-            if not call:
+            if not row:
                 raise HTTPException(404)
-            previous = await (
-                await conn.execute(
-                    "SELECT * FROM calling_turns WHERE call_id=%s AND turn=%s", (call["id"], turn)
-                )
-            ).fetchone()
-            if previous:
-                if previous["request_hash"] != digest:
-                    raise HTTPException(409, "Conflicting call turn")
-                return response(previous["response_xml"] or fallback)
+            if row["state"] != "AWAITING_APPROVAL":
+                return call_view(row)
             if (
-                not agent["enabled"]
-                or call["state"] != "ACTIVE"
-                or turn != call["last_turn"] + 1
-                or turn > agent["max_turns"]
-                or not text
-                or len(text) > 4000
-                or time.time() - call["created_at"].timestamp() > 900
+                not row["fresh"]
+                or not agent["enabled"]
+                or row["configuration_hash"] != configuration_hash(agent)
             ):
+                raise HTTPException(409, "Approval expired, agent paused or configuration changed")
+            ready = await check_ready(pool, agent)
+            if not ready["ready"]:
+                raise HTTPException(409, ready["message"])
+            limits = await (
                 await conn.execute(
-                    "UPDATE calling_calls SET state='HANDOFF',updated_at=now() WHERE id=%s AND state='ACTIVE'",
-                    (call["id"],),
+                    "SELECT count(*) FILTER (WHERE r.approved_by IS NOT NULL AND r.created_at>now()-interval '24 hours') AS daily,count(*) FILTER (WHERE r.state IN ('QUEUED','SENDING','SUBMITTED','CONNECTED','UNKNOWN')) AS pending FROM whatsapp_call_requests r JOIN calling_agents a ON a.id=r.agent_id WHERE a.app_id=%s",
+                    (claims["app_id"],),
                 )
-                return response(fallback)
-            if await (
+            ).fetchone()
+            if limits["pending"] or limits["daily"] >= 3:
+                raise HTTPException(409, "One active test per app and three approved tests per 24 hours")
+            row = await (
                 await conn.execute(
-                    "SELECT 1 FROM calling_turns WHERE call_id=%s AND state IN ('PROCESSING','UNKNOWN')",
-                    (call["id"],),
+                    "UPDATE whatsapp_call_requests SET state='QUEUED',approved_by=%s,updated_at=now() WHERE id=%s RETURNING *",
+                    (claims["principal"], test_id),
                 )
-            ).fetchone():
-                return response(fallback)
-            await conn.execute(
-                "INSERT INTO calling_turns(id,call_id,turn,request_hash,state) VALUES(%s,%s,%s,%s,'PROCESSING')",
-                (event, call["id"], turn, digest),
-            )
-            await conn.execute(
-                "UPDATE calling_calls SET last_turn=%s,updated_at=now() WHERE id=%s", (turn, call["id"])
-            )
-        # PROCESSING committed before network IO: crash/timeout never invokes this turn twice.
-        try:
-            result = AppReply.model_validate(
-                await invoke(
-                    cfg,
-                    {
-                        "probe": False,
-                        "event_id": str(event),
-                        "call_id": str(call["id"]),
-                        "agent_id": str(ident),
-                        "app_id": str(agent["app_id"]),
-                        "caller": call["caller"],
-                        "input": text,
-                        "input_trust": "untrusted_caller_data",
-                        "turn": turn,
-                        "language": agent["language"],
-                    },
-                )
-            )
-            if result.event_id != event:
-                raise ValueError("Wrong event")
-            action = (
-                urls(agent, cfg)["inbound"].replace("/inbound", f"/turn/{turn + 1}")
-                if result.action == "continue" and turn < agent["max_turns"]
-                else None
-            )
-            xml = xml_reply(result.text, agent["language"], action)
-            state = "ACTIVE" if action else "HANDOFF" if result.action == "handoff" else "COMPLETED"
-            if result.action == "continue" and not action:
-                xml, state = fallback, "HANDOFF"
-            turn_state = "DONE"
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, TimeoutError):
-            xml, state, turn_state = fallback, "HANDOFF", "UNKNOWN"
-        async with pool.connection() as conn, conn.transaction():
-            current = await (
-                await conn.execute("SELECT state FROM calling_calls WHERE id=%s FOR UPDATE", (call["id"],))
             ).fetchone()
-            enabled = await (
-                await conn.execute("SELECT enabled FROM calling_agents WHERE id=%s", (ident,))
-            ).fetchone()
-            if current["state"] != "ACTIVE" or not enabled["enabled"]:
-                xml = fallback
-                state = "HANDOFF"
-            await conn.execute(
-                "UPDATE calling_turns SET state=%s,response_xml=%s WHERE id=%s", (turn_state, xml, event)
-            )
-            await conn.execute(
-                "UPDATE calling_calls SET state=%s,updated_at=now() WHERE id=%s AND state='ACTIVE'",
-                (state, call["id"]),
-            )
-        return response(xml)
-
-    @router.post("/webhooks/calling/{ident}/status")
-    async def status(ident: UUID, request: Request):
-        pool, _, _, params = await inbound_context(ident, request)
-        try:
-            seq = int(params.get("SequenceNumber", "-1"))
-            duration = int(params.get("CallDuration", "0"))
-            if seq < 0 or not 0 <= duration <= 86400:
-                raise ValueError()
-        except ValueError:
-            raise HTTPException(422, "Invalid call status") from None
-        status = params.get("CallStatus")
-        if status not in {"completed", "busy", "failed", "no-answer", "canceled"}:
-            return {"received": True}
-        async with pool.connection() as conn, conn.transaction():
-            # Preserve terminal events even when they precede a delayed inbound delivery.
-            await conn.execute(
-                """INSERT INTO calling_calls(id,agent_id,provider_call_id,caller,state)
-                VALUES(%s,%s,%s,%s,%s) ON CONFLICT(agent_id,provider_call_id) DO NOTHING""",
-                (
-                    uuid4(),
-                    ident,
-                    params["CallSid"],
-                    params.get("From", "anonymous")[:100],
-                    "COMPLETED" if status == "completed" else "FAILED",
-                ),
-            )
-            await conn.execute(
-                """UPDATE calling_calls SET state=CASE WHEN state='HANDOFF' THEN state ELSE %s END,
-                duration_seconds=%s,status_sequence=%s,updated_at=now() WHERE agent_id=%s AND provider_call_id=%s AND status_sequence<%s""",
-                (
-                    "COMPLETED" if status == "completed" else "FAILED",
-                    duration,
-                    seq,
-                    ident,
-                    params["CallSid"],
-                    seq,
-                ),
-            )
-        return {"received": True}
+        return call_view(row)
 
     app.include_router(router)

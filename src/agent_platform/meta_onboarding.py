@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import Field, SecretStr
 
-from .meta_client import MetaClient, MetaError, config
+from .meta_client import MetaClient, MetaError, config, setup_status
 from .meta_crypto import aad, seal
 from .service_identity import authenticate
 from .tasks import Strict
@@ -97,6 +97,9 @@ async def parse(request, model):
 
 
 def install_onboarding(app):
+    from .public_pages import install_public_pages
+
+    install_public_pages(app)
     router = APIRouter()
 
     async def api_context(request, scope='channels:write'):
@@ -126,12 +129,11 @@ def install_onboarding(app):
 
     @router.get('/v1/whatsapp/onboarding/config')
     async def configuration(request: Request):
-        await api_context(request)
-        try:
-            cfg = config()
-            return {'available': True, 'public_url': cfg['public_url']}
-        except MetaError:
-            return {'available': False, 'message': MESSAGES['PLATFORM_SETUP_REQUIRED']}
+        await api_context(request, 'channels:read')
+        result = setup_status()
+        if result['available']:
+            result['public_url'] = config()['public_url']
+        return result
 
     @router.post('/v1/whatsapp/onboarding', status_code=201)
     async def start(request: Request):
@@ -156,6 +158,26 @@ def install_onboarding(app):
         if not row:
             raise HTTPException(404, 'Connection attempt not found')
         return safe_session(await current_session(pool, row))
+
+    @router.get('/v1/whatsapp/onboarding/{session_id}/channel')
+    async def connected_channel(session_id: UUID, request: Request):
+        pool, claims = await api_context(request, 'channels:read')
+        async with pool.connection() as conn:
+            row = await (await conn.execute("""
+                SELECT ch.id,ch.app_id,ch.phone_id,ch.enabled,ch.execution_mode,ch.webhook_verified_at
+                FROM meta_signup_sessions s
+                JOIN meta_connections c ON c.id=s.connection_id
+                    AND c.app_id=s.app_id AND c.owner_id=s.owner_id
+                JOIN whatsapp_channels ch ON ch.phone_id=c.phone_id
+                    AND ch.app_id=c.app_id AND ch.owner_id=c.owner_id
+                WHERE s.id=%s AND s.app_id=%s AND s.owner_id=%s
+                    AND s.state='CONNECTED' AND c.state='CONNECTED'
+                    AND c.checked_at>now()-interval '15 minutes'
+                    AND (c.token_expires_at IS NULL OR c.token_expires_at>now())
+                """, (session_id, claims['app_id'], claims['user']))).fetchone()
+        if not row:
+            raise HTTPException(409, 'A verified, healthy Meta connection is required before preparing the agent')
+        return row
 
     @router.get('/connect/whatsapp/{session_id}')
     async def page(session_id: UUID):

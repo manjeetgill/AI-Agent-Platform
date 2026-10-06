@@ -37,6 +37,35 @@ class CallingClient:
     def setup(self, agent_id):
         return self._request("GET", f"/agents/{agent_id}/setup")
 
+    def connect_whatsapp(self, agent_id, channel_id, *, authorized_to_connect):
+        """Reuse this customer's authorized WhatsApp business connection."""
+        return self._request(
+            "POST",
+            f"/agents/{agent_id}/connection",
+            json={"channel_id": channel_id, "authorized_to_connect": authorized_to_connect},
+        )
+
+    def connection(self, agent_id):
+        return self._request("GET", f"/agents/{agent_id}/connection")
+
+    def permission(self, agent_id, recipient):
+        return self._request("GET", f"/agents/{agent_id}/permission", params={"recipient": recipient})
+
+    def prepare_test(self, agent_id, recipient, idempotency_key):
+        return self._request(
+            "POST",
+            f"/agents/{agent_id}/test-calls",
+            json={"recipient": recipient, "idempotency_key": idempotency_key},
+        )
+
+    def approve_test(self, agent_id, test_id):
+        return self._request(
+            "POST", f"/agents/{agent_id}/test-calls/{test_id}/approve", json={"approved": True}
+        )
+
+    def readiness(self, agent_id):
+        return self._request("GET", f"/agents/{agent_id}/readiness")
+
     def preview(self, agent_id):
         return self._request("POST", f"/agents/{agent_id}/preview")
 

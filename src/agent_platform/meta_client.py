@@ -51,6 +51,32 @@ def config(*, signup=True):
     return result
 
 
+def setup_status():
+    """Non-secret configuration diagnostics; configuration is not Meta approval."""
+    checks = {}
+    for name in ('APP_ID', 'CONFIGURATION_ID'):
+        checks[name.lower()] = bool(re.fullmatch(r'\d{5,30}', os.environ.get('AI_META_' + name, '')))
+    checks['app_secret'] = len(os.environ.get('AI_META_APP_SECRET', '')) >= 16
+    checks['verify_token'] = len(os.environ.get('AI_META_VERIFY_TOKEN', '')) >= 32
+    try:
+        url = urlsplit(os.environ.get('AI_META_PUBLIC_URL', ''))
+        checks['public_https'] = bool(url.scheme == 'https' and url.hostname and not
+            (url.username or url.password or url.query or url.fragment) and url.path in ('', '/'))
+    except ValueError:
+        checks['public_https'] = False
+    checks['graph_version'] = bool(re.fullmatch(r'v\d+\.\d+', os.environ.get('AI_META_GRAPH_VERSION', 'v26.0')))
+    try:
+        keyring()
+        checks['credential_encryption'] = True
+    except (ValueError, KeyError, TypeError, AttributeError):
+        checks['credential_encryption'] = False
+    return {'provider': 'meta', 'available': all(checks.values()), 'checks': checks,
+            'missing': [name for name, passed in checks.items() if not passed],
+            'public_customer_approval': 'not_verified',
+            'message': ('Configuration is present. Meta approval and a real customer test must still be verified.'
+                if all(checks.values()) else 'The platform owner must finish Meta setup before connecting a number.')}
+
+
 class MetaClient:
     def __init__(self, settings=None, transport=None):
         self.settings = settings or config()

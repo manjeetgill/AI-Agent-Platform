@@ -1,212 +1,111 @@
-# Calling agents: inbound foundation
+# WhatsApp calling agents
 
-Status: inbound foundation deployed to the existing pilot server on 5 October 2026;
-signed HTTPS Sahayak readiness verified, but no live phone call has been tested. Calling
-is independent of WhatsApp; connecting a WhatsApp number does not authorize its use
-for telephone calls. No number was purchased and no provider account was changed.
+Calling now uses **Meta WhatsApp Cloud API or the existing Chakra connection**.
+The previous ordinary telephone adapter and SDK have been removed. Calls ring
+inside WhatsApp; typing an ordinary mobile number does not connect it to an agent.
 
-## What an integrating app gets
+## Customer and app flow
 
-The `/v1/calling` API uses existing backend service credentials with `channels:read`
-and `channels:write`, plus `X-External-User-ID`. Agents, configuration, history and
-activation are isolated by platform app and owner. A business workspace can use its
-existing channel scopes. Keep credentials on the app backend, never in browser code.
+Each subscribing app uses its own backend service credential and customer/business
+identity (`X-External-User-ID`). The business connects WhatsApp through existing
+onboarding, creates a calling agent, selects its authorized WhatsApp channel, checks
+readiness, then activates it. No provider tokens are exposed to the browser.
 
-- GET `/v1/calling/capabilities`: supported features and operator binding identity.
-- POST `/v1/calling/agents`: save a draft or operator-bound agent. `external_id`
-  makes identical creates idempotent; changed content returns 409.
-- GET `/v1/calling/agents`: paginated list (`before`, `next_before`).
-- PUT `/v1/calling/agents/{id}`: change settings while paused with no active calls.
-- GET `/v1/calling/agents/{id}/setup`: saved configuration and provider callback URLs.
-- GET `/v1/calling/agents/{id}/readiness`: checks the actual incoming-number resource,
-  voice capability, exact callback routing, then signed app readiness.
-- POST `/v1/calling/agents/{id}/preview`: configuration preview; no phone/app calls.
-- POST `/v1/calling/agents/{id}/activation`: `{ "enabled": true/false }`. Enabling
-  requires provider-confirmed incoming-number ownership, matching voice/status
-  callback routing and a signed app readiness probe.
-- GET `/v1/calling/agents/{id}/calls`: paginated states, turns and reported duration.
+The local customer-flow preview is `http://127.0.0.1:4061/calling`. Its loopback-only
+proxy is for testing; customer apps must proxy the API with their own authenticated
+user-to-business mapping. The existing public pilot ingress keeps `/v1` private.
 
-Create payload:
+- GET `/v1/calling/capabilities`: channel, provider and feature support.
+- POST `/v1/calling/agents`: draft, idempotent by external ID. Same fields as before;
+  `connection_ref` must now be null. Greeting, language, handoff text and turn limit.
+- GET `/v1/calling/agents`: app/owner-scoped paginated list.
+- POST `/v1/calling/agents/{id}/connection`: `channel_id` plus
+  `authorized_to_connect: true`. Reuses the same owner's WhatsApp channel.
+- GET `/setup` or `/connection`: saved connection status; not a live-call claim.
+- GET `/readiness`: checks provider calling settings and audio-worker heartbeat.
+- POST `/provider-settings`: `approved: true` enables calling on the bound number,
+  then reads the actual provider state. It does not overwrite SIP routing.
+- POST `/activation`: `enabled: true/false`. Pause prevents future answering and
+  the audio worker closes active sessions when it next observes the pause.
+- POST `/preview`: configuration only, no external call.
+- GET `/calls`: paginated call activity; caller numbers are omitted.
+- GET `/permission?recipient=+E164`: fresh provider call permission and action limit.
+- POST `/test-calls`: `recipient`, `idempotency_key`; saves an exact call summary.
+- POST `/test-calls/{test_id}/approve`: `approved: true`; queue only, never dials
+  from the web request. Approval expires after five minutes.
+- GET `/test-calls/{test_id}`: saved outcome. SUBMITTED means provider acceptance,
+  not proof that a recipient answered or audio worked.
 
-```json
-{
-  "external_id": "clinic-reception",
-  "name": "Clinic receptionist",
-  "connection_ref": null,
-  "language": "en-IN",
-  "greeting": "Hello. I am the clinic's automated assistant. How can I help?",
-  "handoff_message": "I cannot complete that safely. Please contact reception.",
-  "max_turns": 15
-}
-```
+`examples/calling-integration/client.py` is a backend integration example.
 
-`connection_ref: null` saves a draft. Languages currently accepted: en-IN, en-US,
-hi-IN. After the operator connects an authorized voice-capable number, update the
-draft with its connection reference. An operator connection reference cannot be assigned to two
-agents; keep one registry entry per authorized provider number. Do not advertise customer signup as automatic: provider verification and
-number provisioning remain operator steps in this version.
+## Platform setup
 
-## One-time operator setup
+1. Apply migration 023. It pauses existing calling agents while preserving history.
+2. Install `pip install '.[voice]'` in the voice worker, or use the Compose `voice`
+   profile. Text/API workers do not need WebRTC dependencies.
+3. Enable calling in the number's Meta/Chakra settings and subscribe the app/plugin
+   to the `calls` webhook field. Existing signed WhatsApp webhook routes ingest calls.
+4. Configure Gemini audio access: `AI_CALLING_AUDIO_API_KEY`, or the existing Gemini
+   fallback key. Speech defaults: `gemini-2.5-flash` for transcription and
+   `gemini-2.5-flash-preview-tts` for speech. Model access/quotas must be checked.
+5. Configure ICE/STUN/TURN if required by the deployment network using
+   `AI_CALLING_ICE_SERVERS` (aiortc RTCIceServer keyword fields). Check real audio
+   connectivity; HTTPS alone does not establish a WebRTC media path.
+6. Set `AI_WHATSAPP_CALLING_ENABLED=1` and start
+   `python -m agent_platform.calling_worker`.
+7. Connect the owned WhatsApp channel, check readiness, activate, then make a real
+   inbound test. An outbound test additionally needs Meta's recipient permission.
 
-Apply migration 022; install dependencies including the pinned official Twilio SDK.
-Store `AI_CALLING_CONNECTIONS` in the backend's private secret configuration:
+There is one active media worker per database, enforced by a PostgreSQL advisory
+lock, and at most two sessions in the pilot worker. Outbound testing permits one
+unresolved request per app and three approvals per rolling 24 hours. This is not a
+load-tested hundreds-of-apps deployment. Production needs explicit media sharding,
+subscription entitlements, metering and further capacity testing.
 
-```json
-{
-  "clinic-voice": {
-    "provider": "twilio",
-    "app_id": "APP_UUID_FROM_CAPABILITIES",
-    "owner_id": "OWNER_UUID_FROM_CAPABILITIES",
-    "number": "+COUNTRYCODE_NUMBER",
-    "number_verified": true,
-    "account_sid": "AC_ACCOUNT_IDENTIFIER",
-    "auth_token": "PRIVATE_PROVIDER_AUTH_TOKEN",
-    "public_url": "https://agents.example.com",
-    "handler_url": "https://your-app.example.com/integrations/calling",
-    "handler_secret": "PRIVATE_RANDOM_SECRET_AT_LEAST_32_CHARACTERS"
-  }
-}
-```
+## Business knowledge and actions
 
-Only set `number_verified` after independently checking number authorization and
-provider ownership. This is an operator attestation, not automatic provider proof.
-The registry is server-only and binds both app and owner. Restart API after changes.
-Expose only POST `/webhooks/calling/{id}/inbound`, `/turn/{turn}`, and `/status` on
-HTTPS. Do not expose the private management API. The pilot proxy exposes signed calling callbacks; unknown or unconfigured agents
-cannot execute calls. Private management endpoints remain inaccessible publicly.
+For a RAG WhatsApp channel, calls use that channel's selected platform documents and
+existing grounded-answer flow. For app actions, configure `AI_CALLING_APP_HANDLERS`
+privately, keyed by calling-agent UUID. Each entry contains matching `app_id`, an
+operator-approved HTTPS `handler_url`, and `handler_secret` (at least 32 characters).
 
-Copy the `setup` response URLs to the provider's number configuration: inbound Voice
-webhook and call-status callback, both POST. Then enable and place a real inbound
-call. Provider signature checks use the configured public origin, not an untrusted
-Host/forwarded header. Wrong account, destination and outbound-call requests fail.
-Recording and outbound dialing are not implemented. Provider charges still apply
-to real inbound calls; configure account spending controls before activation.
+The stable handler contract is HMAC-SHA256 of timestamp + '.' + raw JSON, in
+`X-Agent-Timestamp` and `X-Agent-Signature`. A probe includes `probe:true,event_id,
+agent_id,app_id`; return `ready:true` and the exact event ID. A voice turn includes
+`probe:false,event_id,call_id,agent_id,app_id,caller,input,input_trust,turn,language`.
+Return `event_id`, `action` (continue/end/handoff), and `text` (1–1200 characters).
+Actions such as appointments remain subject to the app's own authorization and
+confirmation rules. Caller ID and transcribed speech do not authenticate a person.
+Sahayak is one client of this generic contract, not the owner of the voice runtime.
 
-## The connected app owns business actions
+## Safety, costs and honest status
 
-Twilio handles speech recognition and speech synthesis. The platform converts one
-speech/keypad result into one signed request to your app. Your app can use its AI
-agent, knowledge and tools to decide the response. **This release does not implement
-a second general AI reasoning loop inside calling.** Sahayak now implements
-the signed booking adapter and owns the restricted appointment conversation.
+- Provider mutations are sent once. Timeouts and uncertain responses are quarantined;
+  a crash does not requeue a possibly accepted call. UNKNOWN requests require an
+  operator to reconcile provider history before another test can be approved.
+- Recipients must grant WhatsApp call permission; a platform approval cannot bypass
+  it. Permission and provider action limits are checked again immediately before dial.
+- Local audio sessions close after 120 seconds and request provider termination.
+  This is not a guaranteed billing cap if provider termination is unavailable.
+- No recording feature is enabled. Audio remains in memory and is transmitted to
+  the configured Gemini account for transcription/synthesis. Provider retention
+  rules still apply. Speech turns store hashes and replies; signaling SDP is removed
+  after processing. A full retention/erasure policy remains a production gate.
+- Business information is treated as evidence, not system instructions. A business
+  action turn is committed PROCESSING before invocation; uncertain actions are not
+  replayed. Missing knowledge and action errors hand off instead of inventing answers.
+- Test-call recipient, exact agent configuration, approver and outcome are durable.
+- No claim of free unlimited calls: Meta/Chakra calling, permission messages, AI and
+  hosting can have charges. Number eligibility is separate from messaging. Chakra's
+  documentation currently excludes coexistence numbers from Calling API support.
+- A readiness check and simulated tests do not establish live phone/audio success.
 
-Signature: HMAC-SHA256 over `X-Agent-Timestamp + '.' + raw request bytes`, in hex in
-`X-Agent-Signature`. Verify within five minutes, validate `app_id`/`agent_id` against
-your saved business binding, and deduplicate `event_id` durably. A probe has
-`probe: true`, `event_id`, `agent_id`, `app_id`; respond exactly
-`{"ready":true,"event_id":"SAME_UUID"}` without business writes.
+## References
 
-A real turn adds:
-
-```json
-{
-  "probe": false,
-  "event_id": "UUID",
-  "call_id": "UUID",
-  "agent_id": "UUID",
-  "app_id": "UUID",
-  "caller": "+CALLER_NUMBER",
-  "input": "I would like an appointment",
-  "input_trust": "untrusted_caller_data",
-  "turn": 1,
-  "language": "en-IN"
-}
-```
-
-Respond within five seconds:
-
-```json
-{"event_id":"SAME_UUID","action":"continue","text":"Is this your first visit?"}
-```
-
-Actions: `continue`, `end`, `handoff`. Text is XML-escaped; it cannot inject Dial,
-Record, URLs or other telephony commands. `handoff` currently records the need for
-human help, speaks your message and ends the call. **It does not transfer the live
-call to a person.** Your app must create its staff follow-up task if needed.
-
-The app must enforce caller consent, caller identity for private data, action
-permissions and explicit confirmation before a booking or financial commitment.
-Caller ID and transcribed speech are not authentication. Never treat speech as
-system instructions. Sahayak should retain its own schedules, appointments,
-patient consent, medical-safety checks and confirmation policy.
-
-## Failure and storage behavior
-
-- A turn is committed as PROCESSING before invoking the app. Repeated delivery
-  reuses its saved XML. Changed input for an existing turn returns 409.
-- A timeout or invalid response becomes UNKNOWN with the safe fallback. No automatic
-  repeat of a possibly completed business action. A crash leaves PROCESSING for
-  operator reconciliation; replay stops safely and never runs that turn again.
-- Pause prevents subsequent new turns; an already running app action cannot be
-  recalled. Completed provider callbacks cannot be reopened by delayed turns.
-- At most 30 turns, a 15-minute turn-admission window, bounded input and five-second
-  app HTTP timeout. These are application safeguards, not a provider billing cap or
-  guaranteed hard call-duration cutoff.
-- Caller number, state, response XML and request hashes are durable. Raw speech,
-  audio recordings and transcripts are not stored by this runtime. Response text
-  can still contain personal data. Set a retention/erasure policy before customer
-  launch; automated retention and billing reconciliation are not implemented yet.
-- Duration is provider-reported usage, not a calculated invoice. Call history omits
-  caller numbers. Audit records contain setup/activation events, not utterances.
-
-## Tests and next gates
-
-Tests exercise the real API and PostgreSQL with simulated provider callbacks and
-app handlers: owner isolation, signature checks, XML injection, duplicate-turn
-fencing, uncertain results, activation, pause and out-of-order status updates.
-No claims of actual phone delivery or speech quality follow from these tests.
-
-Remaining: authorized provider account/voice number, permanent Sahayak deployment,
-live call validation, customer voice onboarding, live transfers,
-recording consent/retention, outbound approvals and production metering/quotas.
-
-Provider references:
-- https://www.twilio.com/docs/usage/security
-- https://www.twilio.com/docs/voice/twiml/gather
-- https://www.twilio.com/docs/voice/twiml/say
-
-## Sahayak pilot deployment
-
-The inactive clinic draft is `418c8845-97b3-4346-983b-1acc1a2c4731`.
-The operator requested **+91 77039 61610**. This is an intended number only;
-WhatsApp messaging authorization is not proof of PSTN voice routing. Do not set
-`number_verified` or activate until the chosen voice provider confirms routing
-and authorization. WhatsApp voice requires its own media adapter, which is not
-implemented by this Twilio HTTP turn adapter.
-
-The pilot handler is
-`https://shayak.myalgodesk.in/integrations/agent-platform/calling`.
-It uses the existing signed relay to the local Sahayak API. The laptop and SSH
-tunnel must remain running; it is not a permanent deployment of Sahayak.
-
-Migration 022 and the Twilio SDK are installed. The pilot image was built on the
-running image with only the calling module, dependency and app registration
-added, preserving the deployed WhatsApp behavior. Runtime tag:
-`agent-platform:calling-pilot`; previous image: `agent-platform:before-calling`.
-The normal source Dockerfile includes the same dependency for subsequent builds.
-
-Verified: signed public readiness returns 200, unsigned requests fail, main app
-login returns 200 and unauthenticated main API returns 401, private calling
-management remains 404 publicly. No outbound call was made, no number purchased,
-and no recording/live transfer was enabled. A real call remains the final gate.
-
-## Provider verification and clinic controls
-
-Activation now reads Twilio's incoming-phone-number resource using the configured
-account. An empty result (including a number registered only as a verified caller
-ID), wrong account, missing voice capability, wrong webhook method/URL or another
-TwiML application/SIP trunk controlling the number blocks activation. A provider
-timeout also blocks activation; pausing does not need provider access.
-The readiness response explains the failed step without returning credentials.
-This version validates direct Twilio incoming-number routing. Other carrier/SIP
-and WhatsApp voice paths need their own verified adapter; they are not enabled by
-an operator flag.
-
-Sahayak's Phone calls tab now checks readiness, allows a doctor to pause/enable
-incoming calls, and lists actual saved call activity with pagination. Enabling
-asks the doctor to acknowledge provider charges. Readiness and history use the
-clinic's backend identity; browser requests cannot supply another agent ID.
-The real audio/appointment test remains a separate human verification step.
-
-Provider API reference:
-https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource
+- https://apidocs.chakrahq.com/api-39108030 (calling settings)
+- https://apidocs.chakrahq.com/api-39108032 (recipient permission)
+- https://apidocs.chakrahq.com/api-39108033 (call signaling)
+- https://chakrahq.com/help/chat/whatsapp-calling-api/whatsapp-calling-setup
+- https://ai.google.dev/gemini-api/docs/audio
+- https://ai.google.dev/gemini-api/docs/speech-generation
+- https://aiortc.readthedocs.io/en/latest/api.html

@@ -120,10 +120,14 @@ def test_saved_signup_resumes_and_prepares_one_clinic_channel(monkeypatch):
             async with AsyncConnectionPool(database(),open=False,kwargs={'row_factory':dict_row}) as pool:
                 await chakra_onboarding.bind(pool,session['id'],phone,waba)
         asyncio.run(approve())
-        channel=client.post(route+'/channel',headers=ha)
+        requested={'name':'Reach customer assistant','execution_mode':'SAHAYAK','documents':[]}
+        channel=client.post(route+'/channel',headers=ha,json=requested)
         assert channel.status_code==200,channel.text
         assert channel.json()['execution_mode']=='SAHAYAK' and channel.json()['enabled'] is False
-        assert client.post(route+'/channel',headers=ha).json()['id']==channel.json()['id']
+        assert client.post(route+'/channel',headers=ha,json=requested).json()['id']==channel.json()['id']
+        assert sql('SELECT name FROM whatsapp_channels WHERE id=%s',(channel.json()['id'],))[0]['name']=='Reach customer assistant'
+        assert client.post(route+'/channel',headers=ha,json={**requested,'name':'Changed'}).status_code==409
+        assert client.post(route+'/channel',headers=ha,json={'name':'Other','execution_mode':'RAG','documents':[str(uuid4())]}).status_code==422
         assert client.post(route+'/channel',headers=headers).status_code==409
         for table in ('platform_service_keys','platform_external_users'):
             sql(f'DELETE FROM {table} WHERE app_id=%s',(workspace['app_id'],))

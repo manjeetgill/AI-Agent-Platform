@@ -1,270 +1,339 @@
 import asyncio
+import hashlib
+import hmac
 import json
-from urllib.parse import urlencode
+import time
 from uuid import uuid4
 
+import httpx
+import pytest
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 from test_task_agents import database, environment, sql
+from test_whatsapp import setup
 
-from agent_platform.calling_provider import signature, xml_reply
-from agent_platform.service_identity import provision
+from agent_platform import calling_provider as provider
+from agent_platform.calling_worker import Worker
 
 
-def fixture(client, key, monkeypatch):
-    tenant = sql("SELECT tenant_id FROM platform_apps WHERE id=%s", (key["app_id"],))[0]["tenant_id"]
-
-    async def make():
-        async with AsyncConnectionPool(database(), open=False, kwargs={"row_factory": dict_row}) as pool:
-            return await provision(
-                pool,
-                tenant=tenant,
-                organisation="Calls",
-                app_name="Calls",
-                app_id=key["app_id"],
-                scopes=["channels:read", "channels:write"],
-            )
-
-    credential = asyncio.run(make())
-    h = {"Authorization": "Bearer " + credential["credential"], "X-External-User-ID": "owner"}
-    owner = client.get("/v1/calling/capabilities", headers=h).json()["owner_id"]
-    cfg = {
-        "provider": "twilio",
-        "app_id": key["app_id"],
-        "owner_id": owner,
-        "number": "+15551234567",
-        "number_verified": True,
-        "account_sid": "AC" + "a" * 32,
-        "auth_token": "private-test-token-123456789",
-        "handler_secret": "s" * 40,
-        "public_url": "https://voice.example",
-        "handler_url": "https://app.example/voice",
-    }
-    ref = uuid4().hex
-    monkeypatch.setenv("AI_CALLING_CONNECTIONS", json.dumps({ref: cfg}))
+def draft(c, key, monkeypatch):
+    h, channel, _ = setup(c, key, monkeypatch)
     body = {
-        "external_id": "frontdesk",
-        "name": "Reception",
-        "connection_ref": ref,
-        "greeting": "Hello, I am the automated receptionist.",
-        "handoff_message": "Please contact reception for help.",
+        "external_id": "business-voice",
+        "name": "Business voice",
+        "greeting": "How can I help?",
+        "handoff_message": "Please contact our team.",
     }
-    r = client.post("/v1/calling/agents", headers=h, json=body)
+    r = c.post("/v1/calling/agents", headers=h, json=body)
     assert r.status_code == 201, r.text
-    agent = r.json()
-    return h, agent, cfg, body
+    return h, channel, r.json(), body
 
 
-def post(client, agent, cfg, suffix, **extra):
-    params = {
-        "AccountSid": cfg["account_sid"],
-        "CallSid": "CA" + "b" * 32,
-        "To": cfg["number"],
-        "From": "+15557654321",
-        "Direction": "inbound",
-        **extra,
-    }
-    path = f"/webhooks/calling/{agent['id']}/{suffix}"
-    return client.post(
-        path,
-        content=urlencode(params),
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "X-Twilio-Signature": signature(cfg["public_url"] + path, params, cfg["auth_token"]),
-        },
+def connect(c, h, a, channel):
+    r = c.post(
+        f"/v1/calling/agents/{a['id']}/connection",
+        headers=h,
+        json={"channel_id": channel["id"], "authorized_to_connect": True},
     )
+    assert r.status_code == 200, r.text
 
 
-def enable(client, h, a, monkeypatch):
-    async def verified(*args, **kwargs):
+def enable(c, h, a, monkeypatch):
+    async def ready(*args):
         return {"ready": True, "code": "ready", "message": "Ready"}
-    monkeypatch.setattr("agent_platform.calling.provider_readiness", verified)
 
-    async def handler(cfg, p):
-        if p.get("probe"):
-            return {"ready": True, "event_id": p["event_id"]}
-        return {"event_id": p["event_id"], "action": "continue", "text": "Which appointment time?"}
-
-    monkeypatch.setattr("agent_platform.calling.invoke", handler)
-    assert (
-        client.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": True}).status_code
-        == 200
+    monkeypatch.setattr(provider, "readiness", ready)
+    sql(
+        "INSERT INTO whatsapp_call_worker_health VALUES('voice',now(),true) ON CONFLICT(id) DO UPDATE SET last_seen=now(),media_ready=true"
     )
-    return handler
+    r = c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": True})
+    assert r.status_code == 200, r.text
 
 
-def test_owner_isolation_draft_and_setup(monkeypatch):
+def webhook(c, channel, event, valid=True):
+    raw = json.dumps(
+        {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "field": "calls",
+                            "value": {"metadata": {"phone_number_id": channel["phone_id"]}, "calls": [event]},
+                        }
+                    ]
+                }
+            ],
+        }
+    ).encode()
+    sig = "sha256=" + hmac.new(b"fixture-secret", raw, hashlib.sha256).hexdigest() if valid else "invalid"
+    return c.post("/webhooks/whatsapp/" + channel["id"], content=raw, headers={"X-Hub-Signature-256": sig})
+
+
+def work(method):
+    async def run():
+        async with AsyncConnectionPool(database(), open=False, kwargs={"row_factory": dict_row}) as pool:
+            return await getattr(Worker(pool), method)()
+
+    return asyncio.run(run())
+
+
+def test_whatsapp_only_and_ownership(monkeypatch):
     with environment(monkeypatch) as (c, _, key, _):
-        h, a, _cfg, body = fixture(c, key, monkeypatch)
-        assert c.post("/v1/calling/agents", headers=h, json=body).json()["id"] == a["id"]
-        wrong = {**h, "X-External-User-ID": "someone-else"}
-        assert c.get(f"/v1/calling/agents/{a['id']}/setup", headers=wrong).status_code == 404
-        assert (
-            c.post("/v1/calling/agents", headers=wrong, json={**body, "external_id": "stolen"}).status_code
-            == 409
-        )
-        preview = c.post(f"/v1/calling/agents/{a['id']}/preview", headers=h).json()
-        assert preview["simulation"] and not preview["provider_called"]
-        assert (
-            c.get(f"/v1/calling/agents/{a['id']}/setup", headers=h)
-            .json()["webhooks"]["inbound"]
-            .startswith("https://voice.example/")
-        )
-        # Draft creation does not claim a live connection.
-        draft = c.post(
-            "/v1/calling/agents", headers=h, json={**body, "external_id": "draft", "connection_ref": None}
-        ).json()
+        h, ch, a, body = draft(c, key, monkeypatch)
+        caps = c.get("/v1/calling/capabilities", headers=h).json()
+        assert caps["providers"] == ["meta", "chakra"] and not caps["ordinary_phone_calls"]
+        assert c.post("/webhooks/calling/" + a["id"] + "/inbound").status_code == 404
         assert (
             c.post(
-                f"/v1/calling/agents/{draft['id']}/activation", headers=h, json={"enabled": True}
+                "/v1/calling/agents",
+                headers=h,
+                json={**body, "external_id": "other", "connection_ref": "old-connection"},
+            ).status_code
+            == 422
+        )
+        connect(c, h, a, ch)
+        other = {**h, "X-External-User-ID": "other-business"}
+        assert c.get(f"/v1/calling/agents/{a['id']}/setup", headers=other).status_code == 404
+        assert (
+            c.post(
+                f"/v1/calling/agents/{a['id']}/connection",
+                headers=other,
+                json={"channel_id": ch["id"], "authorized_to_connect": True},
+            ).status_code
+            == 404
+        )
+        second = c.post("/v1/calling/agents", headers=h, json={**body, "external_id": "second"}).json()
+        assert (
+            c.post(
+                f"/v1/calling/agents/{second['id']}/connection",
+                headers=h,
+                json={"channel_id": ch["id"], "authorized_to_connect": True},
             ).status_code
             == 409
         )
 
+        async def not_set(*args):
+            return {"ready": False, "code": "calling_disabled", "message": "Enable WhatsApp calling"}
 
-def test_call_turn_replay_status_and_pause(monkeypatch):
-    with environment(monkeypatch) as (c, _, key, _):
-        h, a, cfg, _ = fixture(c, key, monkeypatch)
-        handler = enable(c, h, a, monkeypatch)
-        calls = []
-
-        async def counted(cfg, p):
-            calls.append(p)
-            return await handler(cfg, p)
-
-        monkeypatch.setattr("agent_platform.calling.invoke", counted)
-        assert "<Gather" in post(c, a, cfg, "inbound").text
-        first = post(c, a, cfg, "turn/1", SpeechResult="I want an appointment")
-        assert first.status_code == 200 and "Which appointment time?" in first.text
-        assert post(c, a, cfg, "turn/1", SpeechResult="I want an appointment").text == first.text
-        assert len(calls) == 1 and calls[0]["input_trust"] == "untrusted_caller_data"
-        assert post(c, a, cfg, "turn/1", SpeechResult="changed").status_code == 409
-        c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": False})
-        assert "<Hangup" in post(c, a, cfg, "turn/2", Digits="1").text
-        assert len(calls) == 1
+        monkeypatch.setattr(provider, "readiness", not_set)
         assert (
-            post(
-                c, a, cfg, "status", SequenceNumber="2", CallDuration="23", CallStatus="completed"
-            ).status_code
-            == 200
+            c.get(f"/v1/calling/agents/{a['id']}/readiness", headers=h).json()["code"] == "calling_disabled"
         )
-        post(c, a, cfg, "status", SequenceNumber="1", CallDuration="2", CallStatus="failed")
-        history = c.get(f"/v1/calling/agents/{a['id']}/calls", headers=h).json()["calls"]
-        assert len(history) == 1 and history[0]["duration_seconds"] == 23
-        assert "caller" not in history[0]
-
-
-def test_uncertain_handler_is_never_reinvoked(monkeypatch):
-    with environment(monkeypatch) as (c, _, key, _):
-        h, a, cfg, _ = fixture(c, key, monkeypatch)
-        enable(c, h, a, monkeypatch)
-        post(c, a, cfg, "inbound")
-        calls = []
-
-        async def fail(cfg, p):
-            calls.append(p)
-            raise TimeoutError("uncertain side effect")
-
-        monkeypatch.setattr("agent_platform.calling.invoke", fail)
-        first = post(c, a, cfg, "turn/1", SpeechResult="yes")
-        assert "<Hangup" in first.text
-        assert post(c, a, cfg, "turn/1", SpeechResult="yes").text == first.text
-        assert len(calls) == 1
         assert (
-            sql(
-                "SELECT state FROM calling_turns WHERE call_id IN (SELECT id FROM calling_calls WHERE agent_id=%s)",
-                (a["id"],),
-            )[0]["state"]
-            == "UNKNOWN"
+            c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": True}).status_code
+            == 409
         )
 
 
-def test_forgery_wrong_account_and_xml_escape(monkeypatch):
+def test_webhook_signature_duplicate_and_terminal_fence(monkeypatch):
     with environment(monkeypatch) as (c, _, key, _):
-        h, a, cfg, _ = fixture(c, key, monkeypatch)
-        enable(c, h, a, monkeypatch)
-        assert c.post(f"/webhooks/calling/{a['id']}/inbound", content="CallSid=fake").status_code == 403
-        assert post(c, a, cfg, "inbound", AccountSid="AC" + "c" * 32).status_code == 403
-        assert post(c, a, cfg, "inbound", To="+15559999999").status_code == 403
-        assert post(c, a, cfg, "inbound", Direction="outbound-api").status_code == 403
-        assert not c.get(f"/v1/calling/agents/{a['id']}/calls", headers=h).json()["calls"]
-    xml = xml_reply("<Dial>attacker</Dial>", "en-IN")
-    assert "&lt;Dial&gt;" in xml and "<Dial>" not in xml
-
-
-def test_twilio_documented_signature_vector():
-    params = {
-        "CallSid": "CA1234567890ABCDE",
-        "Caller": "+14158675310",
-        "Digits": "1234",
-        "From": "+14158675310",
-        "To": "+18005551212",
-    }
-    # https://www.twilio.com/docs/usage/security: standard HMAC-SHA1 validation.
-    assert (
-        signature("https://example.com/myapp.php?foo=1&bar=2", params, "12345")
-        == "L/OH5YylLD5NRKLltdqwSvS0BnU="
-    )
-
-
-def test_terminal_event_before_inbound_cannot_reopen_call(monkeypatch):
-    with environment(monkeypatch) as (c, _, key, _):
-        h, a, cfg, _ = fixture(c, key, monkeypatch)
-        enable(c, h, a, monkeypatch)
+        h, ch, a, _ = draft(c, key, monkeypatch)
+        connect(c, h, a, ch)
+        event = {"id": "wacid." + uuid4().hex, "event": "terminate", "duration": 12}
+        assert webhook(c, ch, event, False).status_code == 403
+        for _ in range(2):
+            assert webhook(c, ch, event).status_code == 200
         assert (
-            post(
-                c, a, cfg, "status", SequenceNumber="1", CallDuration="3", CallStatus="completed"
-            ).status_code
-            == 200
+            sql("SELECT count(*) AS n FROM whatsapp_call_events WHERE agent_id=%s", (a["id"],))[0]["n"] == 1
         )
-        assert "<Hangup" in post(c, a, cfg, "inbound").text
-        assert "<Hangup" in post(c, a, cfg, "turn/1", SpeechResult="yes").text
+        assert work("event")
+        later = {
+            **event,
+            "event": "connect",
+            "direction": "USER_INITIATED",
+            "timestamp": str(int(time.time())),
+            "session": {"sdp_type": "offer", "sdp": "invalid"},
+        }
+        assert webhook(c, ch, later).status_code == 200
+        assert work("event")
+        calls = c.get(f"/v1/calling/agents/{a['id']}/calls", headers=h).json()["calls"]
+        assert len(calls) == 1 and calls[0]["state"] == "COMPLETED" and calls[0]["duration_seconds"] == 12
         assert not sql(
-            "SELECT * FROM calling_turns WHERE call_id IN (SELECT id FROM calling_calls WHERE agent_id=%s)",
-            (a["id"],),
+            "SELECT 1 FROM whatsapp_call_events WHERE agent_id=%s AND payload ? 'session'", (a["id"],)
         )
 
 
-def test_interrupted_turn_is_fenced_after_restart(monkeypatch):
+def test_exact_test_approval_and_unknown_never_retries(monkeypatch):
     with environment(monkeypatch) as (c, _, key, _):
-        h, a, cfg, _ = fixture(c, key, monkeypatch)
+        h, ch, a, _ = draft(c, key, monkeypatch)
+        connect(c, h, a, ch)
         enable(c, h, a, monkeypatch)
-        post(c, a, cfg, "inbound")
-        call = sql("SELECT id FROM calling_calls WHERE agent_id=%s", (a["id"],))[0]
-        import hashlib
-
-        sql(
-            "INSERT INTO calling_turns(id,call_id,turn,request_hash,state) VALUES(%s,%s,1,%s,'PROCESSING')",
-            (uuid4(), call["id"], hashlib.sha256(b"yes").hexdigest()),
+        path = f"/v1/calling/agents/{a['id']}/test-calls"
+        body = {"recipient": "+919871928555", "idempotency_key": uuid4().hex}
+        r = c.post(path, headers=h, json=body).json()
+        assert r["state"] == "AWAITING_APPROVAL" and body["recipient"] in r["summary"]
+        assert not work("outbound")
+        assert c.post(path, headers=h, json=body).json()["id"] == r["id"]
+        assert c.post(path, headers=h, json={**body, "recipient": "+919999999999"}).status_code == 409
+        assert (
+            c.post(
+                path + "/" + r["id"] + "/approve",
+                headers=h,
+                json={"approved": True, "recipient": "+919999999999"},
+            ).status_code
+            == 422
         )
-        sql("UPDATE calling_calls SET last_turn=1 WHERE id=%s", (call["id"],))
+        for _ in range(2):
+            assert (
+                c.post(path + "/" + r["id"] + "/approve", headers=h, json={"approved": True}).status_code
+                == 202
+            )
+        sends = []
 
-        async def must_not_run(*_):
-            raise AssertionError("Interrupted business action must never be retried")
+        class Media:
+            pc = None
 
-        monkeypatch.setattr("agent_platform.calling.invoke", must_not_run)
-        assert "<Hangup" in post(c, a, cfg, "turn/1", SpeechResult="yes").text
-        assert "<Hangup" in post(c, a, cfg, "turn/2", SpeechResult="next").text
+            def __init__(self, *args):
+                self.pc = self
+
+            async def offer(self):
+                return "fixture-sdp"
+
+            async def close(self):
+                return None
+
+        async def uncertain(*args):
+            sends.append(args)
+            raise provider.CallingError("UNKNOWN", uncertain=True)
+
+        monkeypatch.setattr("agent_platform.calling_worker.calling_media.Session", Media)
+        monkeypatch.setattr(provider, "start_call", uncertain)
+        assert work("outbound") and not work("outbound") and len(sends) == 1
+        assert c.get(path + "/" + r["id"], headers=h).json()["state"] == "UNKNOWN"
+        second = c.post(path, headers=h, json={**body, "idempotency_key": uuid4().hex}).json()
+        assert (
+            c.post(path + "/" + second["id"] + "/approve", headers=h, json={"approved": True}).status_code
+            == 409
+        )
 
 
-def test_paused_draft_can_attach_verified_connection(monkeypatch):
+@pytest.mark.parametrize("mode", ["meta", "chakra"])
+def test_provider_settings_and_permission(mode):
+    cfg = {"provider": mode, "graph_version": "v23.0", "access_token": "secret"}
+
+    def respond(request):
+        assert request.url.host == ("api.chakrahq.com" if mode == "chakra" else "graph.facebook.com")
+        assert request.headers["Authorization"] == "Bearer secret"
+        value = (
+            {"calling": {"status": "ENABLED"}}
+            if request.url.path.endswith("/settings")
+            else {
+                "permission": {"status": "temporary", "expiration_time": int(time.time()) + 100},
+                "actions": [{"action_name": "start_call", "can_perform_action": True}],
+            }
+        )
+        return httpx.Response(200, json={"_data": value} if mode == "chakra" else value)
+
+    async def run():
+        transport = httpx.MockTransport(respond)
+        assert (await provider.readiness(cfg, "123456", transport=transport))["ready"]
+        assert (await provider.permission(cfg, "123456", "+919871928555", transport=transport))["can_call"]
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {
+            "permission": {"status": "temporary", "expiration_time": 1},
+            "actions": [{"action_name": "start_call", "can_perform_action": True}],
+        },
+        {
+            "permission": {"status": "permanent"},
+            "actions": [{"action_name": "start_call", "can_perform_action": False}],
+        },
+        {
+            "permission": {"status": "unknown"},
+            "actions": [{"action_name": "start_call", "can_perform_action": True}],
+        },
+    ],
+)
+def test_permission_expiry_and_provider_limits(value):
+    cfg = {"graph_version": "v23.0", "access_token": "secret"}
+    result = asyncio.run(
+        provider.permission(
+            cfg,
+            "123456",
+            "+919871928555",
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json=value)),
+        )
+    )
+    assert not result["can_call"]
+
+
+def test_success_with_nested_provider_error_is_not_ready():
+    cfg = {"provider": "chakra", "graph_version": "v23.0", "access_token": "secret"}
+    result = asyncio.run(
+        provider.readiness(
+            cfg,
+            "123456",
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(
+                    200, json={"_data": {"error": {"message": "private provider response"}}}
+                )
+            ),
+        )
+    )
+    assert not result["ready"] and "private" not in json.dumps(result)
+
+
+def test_local_webrtc_audio_handshake(monkeypatch):
+    pytest.importorskip("aiortc")
+    from agent_platform.calling_media import Session
+
+    async def quiet(text):
+        return b"\0" * 4800, 24000
+
+    monkeypatch.setattr("agent_platform.calling_audio.speak", quiet)
+
+    async def run():
+        async def dialogue(text):
+            return {"action": "end", "text": "Goodbye"}
+
+        async def ended():
+            return None
+
+        first, second = Session(dialogue, "Hello", ended), Session(dialogue, "Hello", ended)
+        try:
+            offer = await first.offer()
+            answer = await second.remote(offer, "offer")
+            await first.remote(answer, "answer")
+            async with asyncio.timeout(10):
+                while first.pc.connectionState != "connected" or second.pc.connectionState != "connected":
+                    await asyncio.sleep(0.05)
+            assert first.greeted and second.greeted
+        finally:
+            await first.close()
+            await second.close()
+
+    asyncio.run(run())
+
+
+def test_provider_enable_reconciles_timeout_and_requires_approval(monkeypatch):
     with environment(monkeypatch) as (c, _, key, _):
-        h, a, _cfg, body = fixture(c, key, monkeypatch)
-        changed = {**body, "greeting": "Welcome to our automated reception."}
-        r = c.put(f"/v1/calling/agents/{a['id']}", headers=h, json=changed)
-        assert r.status_code == 200 and r.json()["greeting"] == changed["greeting"]
-        enable(c, h, a, monkeypatch)
-        assert c.put(f"/v1/calling/agents/{a['id']}", headers=h, json=body).status_code == 409
+        h, ch, a, _ = draft(c, key, monkeypatch)
+        connect(c, h, a, ch)
+        path = f"/v1/calling/agents/{a['id']}/provider-settings"
+        assert c.post(path, headers=h, json={"approved": False}).status_code == 422
+        reads, sends = [], []
 
+        async def readiness(*args):
+            reads.append(True)
+            return {
+                "ready": len(reads) > 1,
+                "code": "ready" if len(reads) > 1 else "calling_disabled",
+                "message": "checked",
+            }
 
-def test_activation_checks_real_provider_routing(monkeypatch):
-    with environment(monkeypatch) as (c, _, key, _):
-        h, a, _, _ = fixture(c, key, monkeypatch)
-        async def no_number(*args, **kwargs):
-            return {"ready": False, "code": "number_missing", "message": "Incoming number not connected"}
-        monkeypatch.setattr("agent_platform.calling.provider_readiness", no_number)
-        ready = c.get(f"/v1/calling/agents/{a['id']}/readiness", headers=h)
-        assert ready.status_code == 200 and ready.json()["code"] == "number_missing"
-        assert c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": True}).status_code == 409
-        assert c.get(f"/v1/calling/agents/{a['id']}/setup", headers=h).json()["enabled"] is False
-        assert c.post(f"/v1/calling/agents/{a['id']}/activation", headers=h, json={"enabled": False}).status_code == 200
+        async def mutation(*args, **kwargs):
+            sends.append(kwargs)
+            raise provider.CallingError("timeout", uncertain=True)
+
+        monkeypatch.setattr(provider, "readiness", readiness)
+        monkeypatch.setattr(provider, "request", mutation)
+        assert c.post(path, headers=h, json={"approved": True}).json()["ready"]
+        assert len(reads) == 2 and len(sends) == 1
+        assert c.post(path, headers=h, json={"approved": True}).json()["ready"]
+        assert len(sends) == 1

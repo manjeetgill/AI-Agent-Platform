@@ -8,7 +8,6 @@ version = "0.1.0"
 description = "Independent read-only research agent service"
 requires-python = ">=3.11"
 dependencies = [
-  "twilio==9.11.2",
   "cryptography==46.0.7",
   "Pillow==12.3.0",
   "fastapi==0.141.1", "httpx==0.28.1", "pydantic==2.13.5",
@@ -16,13 +15,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+voice = ["aiortc==1.15.0"]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-agent_platform = ["migrations/*.sql", "console/*.html", "console/*.js", "console/*.css"]
+agent_platform = ["migrations/*.sql", "console/*.html", "console/*.js", "console/*.css", "public/*.html", "public/*.png"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

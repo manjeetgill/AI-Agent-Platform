@@ -1,0 +1,7 @@
+# Add to compose.asterisk.yaml after scripts/asterisk_connect_local.py.
+services:
+  voice-bridge:
+    secrets: [platform_ca]
+secrets:
+  platform_ca:
+    file: ../.runtime/asterisk/platform-ca.pem

@@ -1,0 +1,26 @@
+# Use alongside compose.yaml. Configure a private coturn config and the matching
+# AI_VOICE_TURN_SECRET / AI_VOICE_TURN_URLS first. See docs/WEB_VOICE.md.
+services:
+  api:
+    build:
+      context: .
+      args: {INSTALL_VOICE: '1'}
+    mem_limit: 384m
+  turn:
+    build:
+      context: .
+      dockerfile: deploy/Turn.Dockerfile
+    network_mode: host
+    user: '65534:65534'
+    volumes: ['${VOICE_TURN_CONFIG:?Set path to private TURN config}:/etc/coturn/turnserver.conf:ro']
+    command: [-c, /etc/coturn/turnserver.conf]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=8m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: {max-size: 1m, max-file: '2'}

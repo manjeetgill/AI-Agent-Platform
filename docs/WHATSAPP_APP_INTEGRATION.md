@@ -20,7 +20,40 @@ returned `external_user_id`. Issuing a replacement revokes older business keys.
 The parent must hold every delegated scope. Never automatically retry a credential
 rotation after an uncertain response; reconcile or deliberately rotate again.
 
-## Customer flow
+## Default customer flow: direct Meta
+
+New app integrations use Meta directly. Existing Chakra channels keep their
+provider and credentials; changing the default does not migrate a number.
+
+1. With the business-scoped credential, call `GET /v1/whatsapp/onboarding/config`.
+   `available` means configuration is present, **not** Meta approval. `checks`
+   and `missing` contain non-secret setup diagnostics. Public approval remains
+   `not_verified` until the operator verifies it outside this API.
+2. Call `POST /v1/whatsapp/onboarding` once. Open the returned HTTPS `connect_url`.
+   The owner completes Meta authorization/number verification on that page.
+   Never put service credentials, access tokens or app secrets into your UI.
+3. Persist the session ID in your business's backend record; poll
+   `GET /v1/whatsapp/onboarding/{id}` with a bounded timeout. The hosted page
+   offers reconciliation for action-required states. Never blindly restart signup.
+4. Once CONNECTED, call `GET /v1/whatsapp/onboarding/{id}/channel` to retrieve
+   only that owner's healthy channel. An incomplete, expired or revoked
+   connection cannot return a channel. This endpoint does not activate replies.
+5. Configure the agent: add FAQs and documents for RAG, or explicitly select
+   SAHAYAK through the channel workflow endpoint and configure its signed bridge.
+   Meta's worker configures/verifies the webhook; do not call Chakra webhook APIs.
+6. Preview, activate using the existing readiness gate, and perform a real
+   inbound/outbound test. Verify delivery status and an actual booking, then
+   expose the connected state to the business owner.
+
+`examples/whatsapp-integration/connect.js` is the default direct-Meta browser
+component. Proxy its `/api/whatsapp/onboarding` routes from your authenticated
+backend to `/v1/whatsapp/onboarding`; enforce CSRF for writes. Pass a per-business
+storage key and clear it at logout. It keeps only the session ID, never the
+capability URL. The explicit continuation link avoids popup blocking.
+
+See `DIRECT_META_ROLLOUT.md` for operator prerequisites and migration gates.
+
+## Chakra customer flow (partner pilot)
 
 1. Your backend uses the business credential for all following calls.
 2. `GET /v1/whatsapp/chakra/config` checks operator configuration.
@@ -42,7 +75,7 @@ rotation after an uncertain response; reconcile or deliberately rotate again.
    `/conversations/{id}/mode` with `{"mode":"HUMAN"}`. Existing reply endpoint
    remains scoped to the owning business.
 
-`examples/whatsapp-integration/connect.js` is an embeddable customer connection
+`examples/whatsapp-integration/connect-chakra.js` is the legacy customer connection
 component. Map its same-origin `/api/whatsapp/onboarding` routes to the Chakra
 onboarding API through your authenticated backend. Add CSRF protection to these
 backend routes. Use bounded timeouts and show service-unavailable only within the
@@ -74,8 +107,14 @@ contract with Chakra before replacing the operator check. Do not weaken it.
 
 This code does not purchase/upgrade a Chakra plan, grant partner permissions,
 publish an integrating app's login/UI, or prove a second real customer connection.
-Private API ingress must be arranged for the integrating backend; the current
-pilot's public proxy exposes only webhooks and connection pages.
+The integrating backend uses `https://agents.myalgodesk.in` as its base URL.
+The proxy exposes authenticated `/v1/whatsapp/*` and `/v1/knowledge/documents`
+routes on that host. The operator console stays private. Do not call these
+routes directly from a customer browser or expose service credentials there.
+An unauthenticated request must return 401; 404 on `/v1/whatsapp/setup` means
+the API route or deployed version is missing. An authenticated configuration
+response with `available:false` identifies an operator setup issue, not a
+problem with the customer's phone number.
 
 Sources: https://chakrahq.com/help/chat/partner/embed-whatsapp-connect-for-your-customers
 and https://apidocs.chakrahq.com/api-34338973.
@@ -85,3 +124,47 @@ business's non-secret connection metadata. `POST /v1/whatsapp/chakra/connections
 stops platform sends under the same channel lock used by the dispatcher, cancels
 queued replies, and clears the encrypted credential. It does not revoke the
 partner's shared API key or remove Meta authorization for unrelated customers.
+
+
+## Two-app rollout, 2026-10-06
+
+Reach CRM and Sahayak use the same `/v1/whatsapp/chakra` API. The saved
+signup's `POST /onboarding/{id}/channel` now accepts `{name, execution_mode,
+documents}`. `SAHAYAK` is the existing signed business-application bridge mode
+and is used by both apps for compatibility. It does not require a clinic:
+Reach maps its organization to the bridge's historical `clinic_id` field.
+`RAG` requires published documents belonging to this business. Repeating the
+same verified setup returns its channel; changing the definition returns 409.
+The no-body clinic contract remains supported.
+
+Reach includes owner/admin authorization controls, server-persisted signup
+state (migration 0009), bounded requests and a no-retry state after uncertain
+signup. Provider callbacks never prove number ownership. Apply the migration
+before restarting Reach. Existing business workflows and consent remain intact.
+Each Reach business needs a separate platform app credential; neither customer
+service keys nor provider keys are exposed to the embedded SDK.
+
+Server preflight: partner token, webhook secret and graph-version settings were
+absent; Sarvam API access was absent too. Reach had no saved platform connection.
+Sahayak uses loopback 4065, which its service installer forwards to the server.
+No customer number was moved, no subscription purchased, and these changes
+have not yet been deployed. Production approval requires real authorization,
+verified ownership and a delivery test for each business, not just mocked tests.
+
+### Pilot limits
+
+Migration 029 adds explicitly configured expiring per-business operation caps.
+Run `scripts/channel_trial_admin.py APP_UUID --days 7 --whatsapp-turns 25
+--whatsapp-sends 25 --voice-calls 5` with the private database environment.
+Configure every pilot business separately before activation. This command is an
+explicit renewal; it preserves prior usage. There is no automatic renewal or
+provider recharge. GET `/v1/whatsapp/usage` returns this app's policy and usage.
+
+Quotas reserve before WhatsApp generation/application work and before all platform
+WhatsApp sends (including templates/human replies), and before telephone call
+admission. Attempts with uncertain outcomes retain their reservation. Day boundaries
+are UTC. Non-pilot apps without a policy retain existing limits; these are NOT
+rupee budgets or account-wide provider limits. Previews and web voice have their
+existing limits, not this telephone admission quota. Provider rental, subscriptions,
+external dashboard use, calls carried before platform rejection and app-side model
+usage require provider/account controls. Do not call this a monetary spend cap.

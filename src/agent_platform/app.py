@@ -370,6 +370,10 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_knowledge(app)
     from .calling import install_calling
     install_calling(app)
+    from .web_voice import install_web_voice
+    install_web_voice(app)
+    from .telephony import install_telephony
+    install_telephony(app)
     from .whatsapp import install_whatsapp
     install_whatsapp(app)
     from .business_workspaces import install_business_workspaces

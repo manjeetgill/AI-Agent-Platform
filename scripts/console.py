@@ -11,6 +11,7 @@ values = load()
 database(values)
 os.environ.update(values)
 os.environ.update(AI_DURABLE_TASKS='1', AI_TASK_AGENTS='1')
+os.environ.setdefault('AI_WEB_VOICE_ENABLED', '1')
 os.environ.setdefault('AI_WHATSAPP_CONNECTIONS_FILE', str(ROOT/'.runtime/local/whatsapp-connections.json'))
 import sys
 
@@ -21,6 +22,7 @@ from agent_platform.migrate import migrate
 from agent_platform.task_worker import serve
 from agent_platform.whatsapp_worker import serve as serve_whatsapp
 from agent_platform.meta_worker import serve as serve_meta
+from agent_platform.calling_worker import serve as serve_calling
 
 
 async def main():
@@ -38,13 +40,15 @@ async def main():
     worker = asyncio.create_task(serve(registry))
     whatsapp_worker = asyncio.create_task(serve_whatsapp())
     meta_worker = asyncio.create_task(serve_meta())
+    calling_worker = asyncio.create_task(serve_calling())
     try:
         await server.serve()
     finally:
         worker.cancel()
         whatsapp_worker.cancel()
         meta_worker.cancel()
-        await asyncio.gather(worker, whatsapp_worker, meta_worker, return_exceptions=True)
+        calling_worker.cancel()
+        await asyncio.gather(worker, whatsapp_worker, meta_worker, calling_worker, return_exceptions=True)
 
 
 if __name__ == '__main__':

@@ -88,4 +88,25 @@ async function openConversation(c,more=false) {
 $('inbox-channel').onchange=()=>loadInbox().catch(showError);
 $('refresh-inbox').onclick=()=>busy($('refresh-inbox'),async()=>{const current=selected;await loadInbox();if(current){const refreshed=conversations.find(c=>c.id===current.id);if(refreshed)await openConversation(refreshed);}});
 $('more-conversations').onclick=()=>busy($('more-conversations'),()=>loadInbox(true));
+loadSavedConnections().catch(showError);
 loadSetup().then(()=>{if(location.hash==='#inbox'){tab(true);return loadInbox();}}).catch(showError);
+
+async function loadSavedConnections(){
+ const r=await fetch('/console/whatsapp/saved-connections',{headers:{'X-Console-Intent':'user-action'},signal:AbortSignal.timeout(10000)});
+ if(!r.ok)throw Error('Could not load saved Meta connections');
+ const data=await r.json(); const select=$('refresh-phone'),previous=select.value;
+ select.replaceChildren(...data.connections.map(c=>new Option(c.phone_id+' · '+c.graph_version,c.phone_id)));
+ if(data.connections.some(c=>c.phone_id===previous))select.value=previous;
+ $('token-refresh').hidden=!data.connections.length;
+}
+$('token-refresh-form').onsubmit=event=>{event.preventDefault();const form=event.currentTarget;
+ busy(event.submitter,async()=>{
+  const payload=Object.fromEntries(new FormData(form));
+  try{
+   const r=await fetch('/console/whatsapp/refresh-token',{method:'POST',headers:{'Content-Type':'application/json','X-Console-Intent':'user-action'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});
+   const data=await r.json();if(!r.ok)throw Error(data.detail||'Token refresh failed');
+   notice('New token saved privately. Other connection details are unchanged. Verify the connection before activating automatic replies.');
+  }finally{form.elements.access_token.value='';delete payload.access_token;}
+  await loadSetup();
+ });
+};

@@ -35,13 +35,19 @@ async def configured(pool, channel):
     return binding(channel, json.loads(unseal(row['config_cipher'], context(channel)))) if row else binding(channel)
 
 
-async def request(channel, event_id, customer, text, *, probe=False, transport=None, pool=None):
+async def request(channel, event_id, customer, text, *, probe=False, transport=None, pool=None, voice_available=False, voice_resume=False, voice_turn=False):
     cfg = await configured(pool, channel) if pool is not None else binding(channel)
     payload = {'event_id': str(event_id), 'channel_id': str(channel['id']),
                'app_id': str(channel['app_id']), 'clinic_id': cfg['clinic_id'],
                'from': customer, 'text': text}
     if probe:
         payload['probe'] = True
+    if voice_available:
+        payload['voice_available'] = True
+    if voice_resume:
+        payload['voice_resume'] = True
+    if voice_turn:
+        payload['voice_turn'] = True
     raw = json.dumps(payload, separators=(',', ':'), ensure_ascii=False).encode()
     stamp = str(int(time.time()))
     signature = hmac.new(cfg['secret'].encode(), stamp.encode()+b'.'+raw, hashlib.sha256).hexdigest()

@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-SCOPES = {'channels:read', 'channels:write', 'tasks:read', 'tasks:write', 'tasks:approve', 'agents:read', 'agents:write', 'agents:run', 'knowledge:read', 'knowledge:write', 'knowledge:publish'}
+SCOPES = {'telephony:read', 'telephony:write', 'channels:read', 'channels:write', 'tasks:read', 'tasks:write', 'tasks:approve', 'agents:read', 'agents:write', 'agents:run', 'knowledge:read', 'knowledge:write', 'knowledge:publish'}
 
 
 async def provision(pool, *, tenant, organisation, app_name, scopes, days=30, app_id=None):
