@@ -121,6 +121,13 @@ async def ingest(pool, channel, payload):
                              OR (delivery='delivered' AND %s='read'))""",
                             (status["status"], channel["id"], status.get("id"), status["status"]),
                         )
+                        await conn.execute(
+                            """UPDATE whatsapp_alert_deliveries SET delivery=%s,updated_at=now()
+                            WHERE channel_id=%s AND provider_id=%s AND
+                            (delivery IS NULL OR delivery NOT IN ('read','delivered')
+                             OR (delivery='delivered' AND %s='read'))""",
+                            (status['status'], channel['id'], status.get('id'), status['status']),
+                        )
                         # Ignore stale receipts; sent/read evidence takes precedence over uncertainty.
                         await conn.execute(
                             """UPDATE whatsapp_messages m SET delivery=%s,updated_at=now()

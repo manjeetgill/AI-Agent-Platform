@@ -192,13 +192,17 @@ async def tick(pool, model=None, sender=send):
             return True
         # Recheck publication/version immediately before dispatch; hold read locks until dispatched.
         for citation in (msg["evidence"] or {}).get("citations", []):
-            permitted = await (
-                await conn.execute(
-                    """SELECT id FROM knowledge_documents WHERE id=%s AND app_id=%s
-                AND visibility='app' AND version=%s AND id=ANY(%s) FOR SHARE""",
-                    (citation["document_id"], channel["app_id"], citation["version"], channel["documents"]),
-                )
-            ).fetchone()
+            if 'memory_id' in citation:
+                from .agent_memory import current_source
+                permitted = await current_source(conn, citation, channel['app_id'], channel['id'], shared_only=True)
+            else:
+                permitted = await (
+                    await conn.execute(
+                        """SELECT id FROM knowledge_documents WHERE id=%s AND app_id=%s
+                    AND visibility='app' AND version=%s AND id=ANY(%s) FOR SHARE""",
+                        (citation["document_id"], channel["app_id"], citation["version"], channel["documents"]),
+                    )
+                ).fetchone()
             if not permitted:
                 await conn.execute("UPDATE whatsapp_messages SET status='HANDOFF' WHERE id=%s", (msg["id"],))
                 return True
@@ -257,6 +261,9 @@ async def serve():
                 await heartbeat(pool)
                 from .whatsapp_outbound import tick_outbound
                 await tick_outbound(pool)
+                from .whatsapp_alerts import tick_alerts
+                if await tick_alerts(pool):
+                    continue
                 if await tick(pool):
                     continue
             except Exception:  # noqa: BLE001 -- never repeat an uncertain send

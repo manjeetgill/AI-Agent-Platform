@@ -157,3 +157,7 @@ gateway credentials, platform speech, app-provided booking tools, explicit confi
 `/v1/telephony`. See [setup and API contract](docs/APP_OWNED_CALLING.md).
 The operator console is `/telephony`. Actual telephone service requires the app's
 carrier route and a successful live test; outbound calls are not enabled by this adapter.
+
+## Validated agent memory
+
+Provider-neutral memory now includes opt-in candidate capture, review, hybrid lexical/local semantic retrieval, task handoffs, outcome feedback, evaluation and consent-controlled dataset export. Open `/memory` in Agent Workspace. Apply migrations 030 and 031. See [Agent memory](docs/AGENT_MEMORY.md) and [backend app integration](examples/memory-integration/README.md). Actual model training is a separate reviewed operation; this workflow never starts a paid training job automatically.

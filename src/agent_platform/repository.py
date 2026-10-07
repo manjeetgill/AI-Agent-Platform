@@ -31,8 +31,8 @@ class Repository:
     async def add_preference(self, tenant, user, content):
         memory_id = uuid4()
         async with self.pool.connection() as connection:
-            cursor = await connection.execute('''INSERT INTO agent_memory(id,tenant_id,owner_id,kind,content)
-                SELECT %s,%s,%s,'PREFERENCE',%s WHERE
+            cursor = await connection.execute('''INSERT INTO agent_memory(id,tenant_id,owner_id,kind,content,validation_status)
+                SELECT %s,%s,%s,'PREFERENCE',%s,'USER_SUPPLIED' WHERE
                 (SELECT count(*) FROM agent_memory WHERE tenant_id=%s AND owner_id=%s AND kind='PREFERENCE')<20
                 RETURNING id''', (memory_id, tenant, user, content, tenant, user))
             return str(memory_id) if await cursor.fetchone() else None
@@ -59,7 +59,7 @@ class Repository:
 
     async def search_memory(self, tenant, user, query):
         async with self.pool.connection() as connection:
-            cursor = await connection.execute('''SELECT id,kind,content,source_run,created_at FROM agent_memory
+            cursor = await connection.execute('''SELECT id,kind,content,source_run,created_at,validation_status FROM agent_memory
                 WHERE tenant_id=%s AND owner_id=%s AND to_tsvector('english',content) @@ plainto_tsquery('english',%s)
                 ORDER BY created_at DESC LIMIT 20''', (tenant, user, query))
             return await cursor.fetchall()

@@ -366,6 +366,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
         return row
 
     registry = task_registry if task_registry is not None else default_registry()
+    from .agent_memory import install_memory
+    install_memory(app)
     from .knowledge import install_knowledge
     install_knowledge(app)
     from .calling import install_calling
@@ -386,6 +388,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_meta_webhook(app)
     from .whatsapp_outbound import install_outbound
     install_outbound(app)
+    from .whatsapp_alerts import install_alerts
+    install_alerts(app)
     install_vision(app, actor)
     install_tasks(app, actor, registry)
     install_task_agents(app, registry)

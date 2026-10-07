@@ -16,6 +16,8 @@ class TaskStore:
         await conn.execute('INSERT INTO chore_events(task_id,event,details) VALUES(%s,%s,%s)',
                            (task, name, Jsonb({**(details or {}),
                             **({'principal': self.principal} if self.principal else {})})))
+        from .agent_memory import snapshot
+        await snapshot(conn, task, name)
 
     async def page(self, tenant, user, *, limit=50, before=None):
         async with self.pool.connection() as conn, conn.transaction():
@@ -64,6 +66,8 @@ class TaskStore:
                                                     (task,))).fetchall()
             row['events'] = await (await conn.execute('''SELECT id,event,details,created_at FROM chore_events
                 WHERE task_id=%s ORDER BY id DESC LIMIT 100''', (task,))).fetchall()
+            saved = await (await conn.execute('SELECT payload FROM task_handoff_snapshots WHERE task_id=%s', (task,))).fetchone()
+            row['handoff'] = saved['payload'] if saved else None
             # Lease tokens are execution authority, never part of the browser-facing representation.
             row.pop('lease_token', None)
             return row

@@ -76,7 +76,14 @@ def install_task_agents(app, registry):
                 if not row:
                     raise HTTPException(429, 'Daily planning limit reached')
         try:
-            proposal = await propose(request.app.state.runtime.gateway, body.request, registry, permitted)
+            from .agent_memory import current_source, retrieve
+            memories = await retrieve(pool, claims['app_id'], claims['user'], body.request)
+            proposal = await propose(request.app.state.runtime.gateway, body.request, registry, permitted, memories)
+            async with pool.connection() as conn, conn.transaction():
+                for memory in memories:
+                    if not await current_source(conn, memory, claims['app_id'], claims['user']):
+                        raise TaskError('Memory changed during planning; request a new plan')
+            proposal['memory_sources'] = [{'id': m['memory_id'], 'version': m['version']} for m in memories]
             if proposal.get('blueprint') and len(proposal['blueprint']['steps']) > limits.max_plan_steps:
                 raise HTTPException(422, 'Planner exceeded app step limit')
             return proposal
