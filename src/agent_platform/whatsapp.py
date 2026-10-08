@@ -195,6 +195,8 @@ async def ingest(pool, channel, payload):
                         )
                     ).fetchone()
                     if inserted:
+                        from .whatsapp_opt_in import consume_alert_start
+                        await consume_alert_start(conn, channel['id'], conversation['id'], inserted['id'], body, at)
                         if verification:
                             await audit(conn, channel['id'], conversation['id'], 'recipient:verified', 'provider')
                         if clinic_control:

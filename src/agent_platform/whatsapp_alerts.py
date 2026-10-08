@@ -67,7 +67,8 @@ class NotificationDelivery(Strict):
 class AlertDelivery(Strict):
     request_key: str = Field(min_length=8, max_length=100)
     exchange: Literal['NSE', 'BSE']
-    symbol: str = Field(pattern=r'^[A-Z0-9&_.-]{1,120}$')
+    # Exchange index names contain spaces (for example NIFTY 50 and NIFTY BANK).
+    symbol: str = Field(min_length=1, max_length=120, pattern=r'^[A-Z0-9&_.-]+(?: [A-Z0-9&_.-]+)*$')
     timeframe: Literal['live', 'hourly', 'daily', 'weekly']
     condition: Literal['price_above', 'price_below', 'close_above', 'close_below', 'high_reaches', 'low_reaches']
     target: Decimal = Field(gt=0)
@@ -299,7 +300,8 @@ def install_alerts(app):
                 await conn.execute('''UPDATE whatsapp_alert_verifications
                     SET state='CONSUMED',consumed_at=now() WHERE id=%s''', (verified['id'],))
             if not await recent_conversation(conn, route['channel_id'], recipient):
-                raise HTTPException(409, 'Send a WhatsApp message to the connected sender first, then try again')
+                from .whatsapp_opt_in import subscription_blocker
+                raise HTTPException(409, await subscription_blocker(conn, route['channel_id'], recipient, route['sender_number']))
             await conn.execute('''INSERT INTO whatsapp_alert_subscriptions(app_id,owner_id,recipient,consented_at)
                 VALUES(%s,%s,%s,now()) ON CONFLICT(app_id,owner_id) DO UPDATE
                 SET recipient=EXCLUDED.recipient,consented_at=now(),active=true''',
