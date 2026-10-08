@@ -54,6 +54,9 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
             install_research_tool(registry, application.state.repository.pool, application.state.runtime)
             from .knowledge import KnowledgeAnswer
             registry.adapters['knowledge.answer'] = KnowledgeAnswer(application.state.repository.pool)
+            if enabled('AI_AUTOMATIONS'):
+                from .adaptive_runtime import install
+                install(registry, application.state.repository.pool, application.state.runtime.gateway)
         application.state.workflow_tasks = set()
         try:
             yield
@@ -395,6 +398,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_vision(app, actor)
     install_tasks(app, actor, registry)
     install_task_agents(app, registry)
+    from .automation_api import install_automation
+    install_automation(app, registry)
     return app
 
 

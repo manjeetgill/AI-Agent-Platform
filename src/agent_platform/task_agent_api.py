@@ -1,4 +1,5 @@
 """App request -> validated reusable plan -> atomic durable task invocation."""
+import time
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
@@ -75,10 +76,29 @@ def install_task_agents(app, registry):
                     WHERE {table}.calls<%s RETURNING calls''', (*values, limit))).fetchone()
                 if not row:
                     raise HTTPException(429, 'Daily planning limit reached')
+        started = time.monotonic()
+        usage = None
         try:
             from .agent_memory import current_source, retrieve
             memories = await retrieve(pool, claims['app_id'], claims['user'], body.request)
-            proposal = await propose(request.app.state.runtime.gateway, body.request, registry, permitted, memories)
+            preferences = []
+            if enabled('AI_AUTOMATIONS'):
+                from .automation import scope
+                async with pool.connection() as conn, conn.transaction():
+                    await scope(conn, claims)
+                    rows = await (await conn.execute('''SELECT namespace,value FROM automation_preferences
+                        WHERE app_id=%s AND owner_id=%s ORDER BY updated_at DESC LIMIT 3''',
+                        (claims['app_id'], claims['user']))).fetchall()
+                    # Preference documents are untrusted context; budget the serialized total.
+                    import json
+                    size = 0
+                    for row in rows:
+                        size += len(json.dumps(row).encode())
+                        if size <= 4000:
+                            preferences.append(row)
+            proposal = await propose(request.app.state.runtime.gateway, body.request, registry, permitted,
+                                     memories, preferences)
+            usage = proposal.get('usage')
             async with pool.connection() as conn, conn.transaction():
                 for memory in memories:
                     if not await current_source(conn, memory, claims['app_id'], claims['user']):
@@ -91,6 +111,16 @@ def install_task_agents(app, registry):
             raise HTTPException(422, 'Planner could not produce a valid plan for the permitted tools') from None
         except (RunFailure, TimeoutError):
             raise HTTPException(503, 'Planner unavailable; no agent was created') from None
+        finally:
+            from .automation import scope
+            async with pool.connection() as conn, conn.transaction():
+                await scope(conn, claims)
+                await conn.execute('''INSERT INTO platform_model_calls
+                    (id,tenant_id,app_id,owner_id,operation,status,provider,model,total_tokens,latency_ms)
+                    VALUES(%s,%s,%s,%s,'plan',%s,%s,%s,%s,%s)''',
+                    (uuid4(), claims['tenant'], claims['app_id'], claims['user'],
+                     'COMPLETED' if usage else 'FAILED', (usage or {}).get('provider'), (usage or {}).get('model'),
+                     (usage or {}).get('tokens'), max(0, int((time.monotonic()-started)*1000))))
 
     @router.post('', status_code=201)
     async def save(body: SaveAgent, request: Request, authorization: str | None = Header(default=None)):
@@ -180,6 +210,8 @@ def install_task_agents(app, registry):
         try:
             async with pool.connection() as conn, conn.transaction():
                 definition = await owned(conn, claims, agent_id)
+                if definition['status'] != 'ACTIVE':
+                    raise HTTPException(409, 'Agent is not active')
                 blueprint = Blueprint.model_validate(definition['blueprint'])
                 # Fingerprint the caller's exact invocation, including explicit vs saved arguments.
                 fingerprint = digest({'agent_id': str(agent_id), 'version': definition['version'],

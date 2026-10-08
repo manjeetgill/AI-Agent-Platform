@@ -74,7 +74,7 @@ def environment(monkeypatch, registry=None):
                 sql(f'DELETE FROM {table} WHERE task_id IN (SELECT id FROM chore_tasks WHERE tenant_id=%s)', (tenant,))
             sql('DELETE FROM chore_tasks WHERE tenant_id=%s', (tenant,))
             sql('DELETE FROM task_agents WHERE tenant_id=%s', (tenant,))
-            for table in ('platform_tool_grants', 'agent_planning_usage', 'app_planning_usage',
+            for table in ('platform_model_calls', 'platform_tool_grants', 'agent_planning_usage', 'app_planning_usage',
                           'platform_external_users', 'platform_service_keys'):
                 sql(f'DELETE FROM {table} WHERE app_id=%s', (key['app_id'],))
             sql('DELETE FROM platform_apps WHERE id=%s', (key['app_id'],))

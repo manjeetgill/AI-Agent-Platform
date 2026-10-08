@@ -197,6 +197,18 @@ class TaskStore:
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task['id'], task['current_step']))).fetchone()
             await conn.execute('DELETE FROM chore_jobs WHERE task_id=%s', (task['id'],))
+            if task['mode'] == 'RUN' and not await self.automation_allowed(conn, task['id']):
+                await conn.execute("UPDATE chore_tasks SET status='CANCELLED',updated_at=now() WHERE id=%s", (task['id'],))
+                await conn.execute('DELETE FROM chore_approvals WHERE task_id=%s AND consumed_at IS NULL', (task['id'],))
+                await self.event(conn, task['id'], 'AUTOMATION_REVOKED')
+                return None
+            if task['mode'] == 'RUN' and task['source_agent_id']:
+                active = await (await conn.execute("SELECT 1 FROM task_agents WHERE id=%s AND status='ACTIVE'",
+                                                   (task['source_agent_id'],))).fetchone()
+                if not active:
+                    await conn.execute("UPDATE chore_tasks SET status='PAUSED',updated_at=now() WHERE id=%s", (task['id'],))
+                    await self.event(conn, task['id'], 'AGENT_NOT_ACTIVE')
+                    return None
             if task['mode'] == 'RUN' and task['source_app_id'] and not await self.granted(
                     conn, task['source_app_id'], step['tool']):
                 await conn.execute("UPDATE chore_tasks SET status='PAUSED',updated_at=now() WHERE id=%s", (task['id'],))
@@ -233,14 +245,28 @@ class TaskStore:
                                         (app_id, tool))).fetchone() is not None
 
     async def authorized(self, task, token):
-        async with self.pool.connection() as conn:
+        async with self.pool.connection() as conn, conn.transaction():
+            if not await self.automation_allowed(conn, task):
+                return False
             return await (await conn.execute('''SELECT 1 FROM chore_tasks t
                 JOIN chore_steps s ON s.task_id=t.id AND s.position=t.current_step
                 WHERE t.id=%s AND t.lease_token=%s AND t.status='RUNNING' AND t.lease_until>now()
+                AND (t.source_agent_id IS NULL OR EXISTS(SELECT 1 FROM task_agents a
+                    WHERE a.id=t.source_agent_id AND a.status='ACTIVE'))
                 AND (t.source_app_id IS NULL OR EXISTS(SELECT 1 FROM platform_tool_grants g
                     WHERE g.app_id=t.source_app_id AND g.tool=s.tool))''', (task, token))).fetchone() is not None
 
-    async def finish(self, claimed, result=None, *, failed=False, not_applied=False):
+    async def automation_allowed(self, conn, task):
+        from .flags import enabled
+        if not enabled('AI_AUTOMATIONS'):
+            return True
+        from .automation import scope
+        await scope(conn, worker=True)
+        revoked = await (await conn.execute('''SELECT 1 FROM automation_runs r JOIN automations a ON a.id=r.automation_id
+            WHERE r.task_id=%s AND (a.approved_at IS NULL OR a.status IN ('PAUSED','ARCHIVED'))''', (task,))).fetchone()
+        return revoked is None
+
+    async def finish(self, claimed, result=None, *, failed=False, not_applied=False, append_actions=None):
         async with self.pool.connection() as conn, conn.transaction():
             task = await (await conn.execute('''SELECT * FROM chore_tasks WHERE id=%s AND lease_token=%s
                 AND status='RUNNING' AND lease_until>now() FOR UPDATE''',
@@ -269,6 +295,23 @@ class TaskStore:
                     await self.queue(conn, task['id'], delay=2 ** step['attempts'])
                 await self.event(conn, task['id'], status)
             else:
+                if append_actions:
+                    # Continuations enter the same durable plan and approval gate as saved steps.
+                    following = await (await conn.execute('SELECT 1 FROM chore_steps WHERE task_id=%s AND position>%s',
+                        (task['id'], task['current_step']))).fetchone()
+                    if following:
+                        raise TaskError('Adaptive continuation must be the last saved step')
+                    from .app_catalogue import policy
+                    limit = (await policy(conn, task['source_app_id'])).max_plan_steps
+                    if task['current_step']+1+len(append_actions)>limit:
+                        raise TaskError('Adaptive continuation exceeded the step budget')
+                    for offset, action in enumerate(append_actions, start=1):
+                        if not await self.granted(conn, task['source_app_id'], action.tool):
+                            raise TaskError('Continuation tool authority revoked')
+                        await conn.execute('''INSERT INTO chore_steps(task_id,position,tool,tool_version,arguments,
+                            action_hash,summary,risk) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)''',
+                            (task['id'], task['current_step']+offset, action.tool, action.version,
+                             Jsonb(action.arguments), action.digest, action.summary, action.risk))
                 await conn.execute("""UPDATE chore_steps SET status='DONE',outcome_pending=false,result=%s
                     WHERE task_id=%s AND position=%s""",
                                    (Jsonb(result), task['id'], task['current_step']))

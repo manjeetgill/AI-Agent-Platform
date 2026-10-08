@@ -15,7 +15,7 @@ def capabilities():
         'AI_CUSTOM_AGENTS': enabled('AI_CUSTOM_AGENTS', default=True),
         'AI_MEMORY': enabled('AI_MEMORY', default=True),
         'AI_RAG': enabled('AI_RAG', default=False),
-        'AI_SCHEDULER': False,
+        'AI_SCHEDULER': enabled('AI_AUTOMATIONS'),
         'AI_WORKFLOWS': enabled('AI_WORKFLOWS', default=False),
         'AI_EXECUTION_REQUESTS': False,
     }

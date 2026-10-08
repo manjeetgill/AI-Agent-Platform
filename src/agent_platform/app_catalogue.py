@@ -19,6 +19,7 @@ class Policy(Strict):
     planning_calls_per_day: int = Field(default=500, ge=0, le=100000)
     user_planning_calls_per_day: int = Field(default=50, ge=0, le=10000)
     max_plan_steps: int = Field(default=10, ge=1, le=30)
+    automation_runs_per_day: int = Field(default=100, ge=0, le=10000)
 
 
 class Template(Strict):
@@ -53,10 +54,12 @@ async def configure(pool, registry, manifest):
     async with pool.connection() as conn, conn.transaction():
         if not await (await conn.execute('SELECT id FROM platform_apps WHERE id=%s FOR UPDATE', (manifest.app_id,))).fetchone():
             raise TaskError('Provision the application before configuring it')
-        await conn.execute('''INSERT INTO platform_app_policies(app_id,planning_calls_per_day,user_planning_calls_per_day,max_plan_steps)
-            VALUES(%s,%s,%s,%s) ON CONFLICT(app_id) DO UPDATE SET planning_calls_per_day=excluded.planning_calls_per_day,
-            user_planning_calls_per_day=excluded.user_planning_calls_per_day,max_plan_steps=excluded.max_plan_steps''',
-            (manifest.app_id, manifest.policy.planning_calls_per_day, manifest.policy.user_planning_calls_per_day, manifest.policy.max_plan_steps))
+        await conn.execute('''INSERT INTO platform_app_policies(app_id,planning_calls_per_day,user_planning_calls_per_day,max_plan_steps,automation_runs_per_day)
+            VALUES(%s,%s,%s,%s,%s) ON CONFLICT(app_id) DO UPDATE SET planning_calls_per_day=excluded.planning_calls_per_day,
+            user_planning_calls_per_day=excluded.user_planning_calls_per_day,max_plan_steps=excluded.max_plan_steps,
+            automation_runs_per_day=excluded.automation_runs_per_day''',
+            (manifest.app_id, manifest.policy.planning_calls_per_day, manifest.policy.user_planning_calls_per_day,
+             manifest.policy.max_plan_steps, manifest.policy.automation_runs_per_day))
         await conn.execute('DELETE FROM platform_tool_grants WHERE app_id=%s', (manifest.app_id,))
         for tool in manifest.tools:
             await conn.execute('INSERT INTO platform_tool_grants(app_id,tool) VALUES(%s,%s)', (manifest.app_id, tool))
@@ -84,6 +87,9 @@ async def main():
         install_research_tool(registry, pool)
         from .knowledge import KnowledgeAnswer
         registry.adapters['knowledge.answer'] = KnowledgeAnswer(pool)
+        if os.environ.get('AI_AUTOMATIONS') == '1':
+            from .adaptive_runtime import install
+            install(registry, pool)
         await configure(pool, registry, manifest)
     print(json.dumps({'app_id': str(manifest.app_id), 'templates': len(manifest.templates), 'configured': True}))
 

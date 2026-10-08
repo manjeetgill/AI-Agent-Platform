@@ -12,6 +12,15 @@ versioned templates without editing the engine. See [multi-app onboarding](docs/
 and the separate [shipping tool example](examples/shipping_plugin/pyproject.toml).
 Legacy NRAIAlgo research endpoints remain app-specific; use the generic task API for new apps.
 
+## Persistent orchestration
+
+`AI_AUTOMATIONS=1` enables versioned agent manifests, lifecycle controls, approved
+time/event schedules, bounded conditions, structured preferences, model usage records,
+an in-app inbox and signed callbacks. The existing PostgreSQL task worker owns
+dispatch and recovery. See [orchestration API](docs/ORCHESTRATION_API.md) and the
+[DealAgent requirements audit](docs/DEALAGENT_REQUIREMENTS.md). Public deployment
+still needs consumer authentication and deployment verification.
+
 ## Knowledge and RAG
 
 Apps can ingest private or app-wide text documents, search permitted passages and generate answers

@@ -93,6 +93,15 @@ class Gateway:
         self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model
 
     def model_for(self, task):
+        try:
+            routes = json.loads(os.environ.get('AI_MODEL_ROUTES', '{}'))
+            model = routes.get(task, {}).get(self.provider.name)
+            if model is not None:
+                if not isinstance(model, str) or not model.strip() or len(model)>200:
+                    raise ValueError('Invalid model route')
+                return model
+        except (ValueError, AttributeError, TypeError):
+            raise RunFailure('INVALID_MODEL_ROUTING') from None
         return self.reasoning_model if task == 'challenge' else self.fast_model
 
     async def report(self, task, instructions, evidence, validator, preferences=None):
@@ -133,6 +142,10 @@ class Gateway:
 
     async def structured(self, task, policy, data, schema, validator):
         model = self.model_for(task)
+        # Bound serialized context before sending it to any provider or fallback.
+        maximum = int(os.environ.get('AI_MODEL_MAX_CONTEXT_BYTES', '100000'))
+        if len(policy.encode()) + len(json.dumps(data, default=str).encode()) > maximum:
+            raise RunFailure('CONTEXT_BUDGET_EXCEEDED')
         if not enabled('AI_NVIDIA', default=True) or not model or not getattr(self.provider, 'key', None):
             raise RunFailure('MODEL_NOT_CONFIGURED')
         url, headers, payload = self.provider.request(model, policy, data)

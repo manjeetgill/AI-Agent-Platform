@@ -9,6 +9,15 @@ from agent_platform.runtime_errors import RunFailure
 MODEL = 'nvidia/nemotron-3-ultra-550b-a55b'
 
 
+def test_operator_model_routes_and_context_budget(monkeypatch):
+    monkeypatch.setenv('AI_MODEL_ROUTES', '{"classification":{"nvidia":"fast-test-model"}}')
+    gateway = Gateway(NVIDIAProvider('test-key'))
+    assert gateway.model_for('classification') == 'fast-test-model'
+    monkeypatch.setenv('AI_MODEL_MAX_CONTEXT_BYTES', '10')
+    with pytest.raises(RunFailure, match='CONTEXT_BUDGET_EXCEEDED'):
+        asyncio.run(gateway.suggest('This is longer than the permitted request context'))
+
+
 def test_ultra_request_uses_plain_json_without_reasoning_budget():
     provider = NVIDIAProvider('test-key')
     _, _, payload = provider.request(MODEL, 'Return JSON matching schema', {})

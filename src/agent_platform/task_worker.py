@@ -45,7 +45,8 @@ async def tick(store, registry):
             if result is not None and (not isinstance(result, dict)
                     or len(json.dumps(result, allow_nan=False).encode()) > 16000):
                 raise ValueError('Invalid adapter outcome')
-        await store.finish(claimed, result, not_applied=not_applied)
+        continuation = adapter.continuation(action, result) if result is not None and hasattr(adapter, 'continuation') else None
+        await store.finish(claimed, result, not_applied=not_applied, append_actions=continuation)
     except asyncio.CancelledError:
         await asyncio.shield(store.finish(claimed, failed=True))
         raise
@@ -66,8 +67,19 @@ async def serve(registry):
         install_research_tool(registry, pool)
         from .knowledge import KnowledgeAnswer
         registry.adapters['knowledge.answer'] = KnowledgeAnswer(pool)
+        from .flags import enabled
+        if enabled('AI_AUTOMATIONS'):
+            from .adaptive_runtime import install
+            install(registry, pool)
         store = TaskStore(pool)
         while True:
+            from .flags import enabled
+            if enabled('AI_AUTOMATIONS'):
+                from .automation import tick as automation_tick
+                try:
+                    await automation_tick(pool, registry)
+                except Exception:  # noqa: BLE001 -- don't log credential-bearing database errors
+                    logger.warning('Orchestration tick failed; durable state retained')
             if not await tick(store, registry):
                 await asyncio.sleep(1)
 
