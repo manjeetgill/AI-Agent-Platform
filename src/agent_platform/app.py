@@ -380,7 +380,9 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_whatsapp(app)
     from .business_workspaces import install_business_workspaces
     from .chakra_onboarding import install_chakra_onboarding
+    from .integration_status import install_integration_status
     install_business_workspaces(app)
+    install_integration_status(app)
     install_chakra_onboarding(app)
     from .meta_onboarding import install_onboarding
     from .meta_webhook import install_meta_webhook

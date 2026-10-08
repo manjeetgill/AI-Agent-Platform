@@ -85,6 +85,13 @@ def test_business_feature_credentials_require_parent_authority(monkeypatch):
         assert client.get('/v1/whatsapp/alerts/capabilities',headers=child).status_code==200
         assert client.get('/v1/calling/capabilities',headers=child).status_code==200
         assert client.get('/v1/telephony/capabilities',headers=child).status_code==200
+        readiness=client.get('/v1/integrations/readiness',headers=child)
+        assert readiness.status_code==200,readiness.text
+        assert readiness.json()['app_id']==workspace['app_id']
+        assert {'whatsapp_notifications','whatsapp_calling','telephone_voice'} <= set(
+            readiness.json()['features_granted'])
+        assert readiness.json()['components']['whatsapp_support']['total']==0
+        assert not readiness.json()['provider_checks_performed']
         for table in ('platform_service_keys','platform_external_users'):
             sql(f'DELETE FROM {table} WHERE app_id=%s',(workspace['app_id'],))
         sql('DELETE FROM platform_apps WHERE id=%s',(workspace['app_id'],))

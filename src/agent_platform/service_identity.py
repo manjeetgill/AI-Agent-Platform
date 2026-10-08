@@ -58,7 +58,7 @@ async def authenticate(pool, authorization, external_user, scope):
             AND k.expires_at>now()''', (key_id,))).fetchone()
         if not row or not hmac.compare_digest(row['secret_hash'], hashlib.sha256(secret.encode()).hexdigest()):
             raise invalid
-        if scope not in row['scopes']:
+        if scope is not None and scope not in row['scopes']:
             raise HTTPException(403, 'Service credential lacks the required scope')
         if not external_user or len(external_user) > 200 or any(ord(c) < 32 for c in external_user):
             raise HTTPException(422, 'X-External-User-ID is required (1–200 characters)')
@@ -67,7 +67,8 @@ async def authenticate(pool, authorization, external_user, scope):
         owner = await (await conn.execute('''SELECT owner_id FROM platform_external_users
             WHERE app_id=%s AND external_id=%s''', (row['app_id'], external_user))).fetchone()
         return {'tenant': row['tenant_id'], 'user': str(owner['owner_id']),
-                'principal': 'service:' + str(key_id), 'app_id': str(row['app_id'])}
+                'principal': 'service:' + str(key_id), 'app_id': str(row['app_id']),
+                'scopes': row['scopes']}
 
 
 async def main():

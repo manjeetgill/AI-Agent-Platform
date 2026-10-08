@@ -144,6 +144,8 @@ Consuming apps can bind an owned, verified sender and deliver provider-neutral e
 notifications to recipients who prove number ownership in WhatsApp. See the
 [multi-app notification contract](docs/WHATSAPP_APP_NOTIFICATIONS.md) and its
 [backend client](examples/whatsapp-notifications/client.py).
+They can render one isolated setup overview from the
+[integration readiness endpoint](docs/APP_INTEGRATION_READINESS.md).
 
 ## Calling agents
 
