@@ -9,15 +9,17 @@ change Sahayak booking replies.
 The app backend holds a scoped `alerts:send` service key. With its stable
 `X-External-User-ID`, it calls:
 
-1. `PUT /v1/whatsapp/alerts/subscription` with `recipient` and `consented:true`.
-   The recipient must have messaged the bound sender recently and must not have
-   opted out. This proves a session is open, not that the app user owns the
-   recipient number. Public multi-user rollout also needs a code or signed
-   link returned in that WhatsApp chat. `DELETE` disables the subscription and
-   cancels queued sends.
-2. `POST /v1/whatsapp/alerts/deliveries` with a stable `request_key`, exchange,
+1. `POST /v1/whatsapp/alerts/verifications` with `recipient`. The response
+   returns a one-time `VERIFY …` message. Show it once and ask the user to send
+   it from that number to `sender_number`. The platform stores only its hash.
+2. Poll `GET /v1/whatsapp/alerts/verifications/{id}` until its state is
+   `VERIFIED`, then call `PUT /v1/whatsapp/alerts/subscription` with `recipient`
+   and `consented:true`. The proof is single-use, expires after ten minutes and
+   is scoped to the app and external user. An unchanged active subscription is
+   idempotent. `DELETE` disables the subscription and cancels queued sends.
+3. `POST /v1/whatsapp/alerts/deliveries` with a stable `request_key`, exchange,
    symbol, timeframe, condition, target, observed price, and trigger time.
-3. `GET /v1/whatsapp/alerts/deliveries/{id}` for dispatch and provider receipt
+4. `GET /v1/whatsapp/alerts/deliveries/{id}` for dispatch and provider receipt
    states. `ACCEPTED` means provider acceptance; `delivery=delivered` or `read`
    comes from a signed WhatsApp webhook.
 

@@ -4,6 +4,10 @@ Only recipients who opted in and recently messaged that sender can receive pilot
 session text. A future approved-template path is required outside that window.
 """
 import asyncio
+import base64
+import hashlib
+import re
+import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
@@ -22,6 +26,10 @@ from .whatsapp_worker import send
 class Subscription(Strict):
     recipient: str = Field(pattern=r'^\+?[1-9]\d{7,14}$')
     consented: Literal[True]
+
+
+class VerificationRequest(Strict):
+    recipient: str = Field(pattern=r'^\+?[1-9]\d{7,14}$')
 
 
 class AlertDelivery(Strict):
@@ -59,6 +67,33 @@ async def recent_conversation(conn, channel_id, recipient):
         (channel_id, recipient))).fetchone()
 
 
+def verification_hash(code: str) -> str:
+    return hashlib.sha256(code.strip().upper().encode()).hexdigest()
+
+
+async def consume_verification(conn, channel_id, recipient: str, body: str) -> bool:
+    """Consume an inbound VERIFY command without exposing it to the business agent."""
+    command = body.strip().upper()
+    if not re.fullmatch(r'VERIFY [A-Z2-7]{10}', command):
+        return False
+    await conn.execute('''UPDATE whatsapp_alert_verifications SET state='EXPIRED'
+        WHERE channel_id=%s AND recipient=%s AND state='PENDING' AND expires_at<=now()''',
+        (channel_id, recipient))
+    matched = await (await conn.execute('''SELECT id,state FROM whatsapp_alert_verifications
+        WHERE channel_id=%s AND recipient=%s AND code_hash=%s
+        AND created_at>now()-interval '1 day' ORDER BY created_at DESC LIMIT 1''',
+        (channel_id, recipient, verification_hash(command)))).fetchone()
+    if matched:
+        await conn.execute('''UPDATE whatsapp_alert_verifications SET state='VERIFIED',verified_at=now()
+        WHERE channel_id=%s AND recipient=%s AND state='PENDING' AND expires_at>now()
+        AND code_hash=%s''', (channel_id, recipient, verification_hash(command)))
+        return True
+    # Hide a mistyped proof from the business agent while a challenge is active.
+    return bool(await (await conn.execute('''SELECT id FROM whatsapp_alert_verifications
+        WHERE channel_id=%s AND recipient=%s AND state='PENDING' AND expires_at>now()
+        LIMIT 1''', (channel_id, recipient))).fetchone())
+
+
 def install_alerts(app):
     router = APIRouter(prefix='/v1/whatsapp/alerts')
 
@@ -85,11 +120,62 @@ def install_alerts(app):
                 (claims['app_id'], claims['user']))).fetchone()
         return {**(row or {'active': False}), 'sender_number': route['sender_number']}
 
+    @router.post('/verifications', status_code=201)
+    async def create_verification(body: VerificationRequest, request: Request):
+        pool, claims, route = await context(request)
+        if not route['sender_number']:
+            raise HTTPException(503, 'Alert sender number is not configured for this app')
+        recipient = body.recipient.lstrip('+')
+        code = base64.b32encode(secrets.token_bytes(8)).decode().rstrip('=')[:10]
+        command = f'VERIFY {code}'
+        ident = uuid4()
+        async with pool.connection() as conn, conn.transaction():
+            await conn.execute('''UPDATE whatsapp_alert_verifications SET state='EXPIRED'
+                WHERE state='PENDING' AND expires_at<=now()''')
+            await conn.execute('''UPDATE whatsapp_alert_verifications SET state='CANCELLED'
+                WHERE app_id=%s AND owner_id=%s AND state='PENDING' ''',
+                (claims['app_id'], claims['user']))
+            row = await (await conn.execute('''INSERT INTO whatsapp_alert_verifications
+                (id,app_id,owner_id,channel_id,recipient,code_hash,expires_at)
+                VALUES(%s,%s,%s,%s,%s,%s,now()+interval '10 minutes')
+                RETURNING expires_at''', (ident, claims['app_id'], claims['user'], route['channel_id'],
+                                          recipient, verification_hash(command)))).fetchone()
+        return {'id': ident, 'state': 'PENDING', 'recipient': recipient,
+                'sender_number': route['sender_number'], 'message': command,
+                'instruction': f'Send this exact message to {route["sender_number"]} from the number being verified',
+                'expires_at': row['expires_at']}
+
+    @router.get('/verifications/{verification_id}')
+    async def verification_status(verification_id: UUID, request: Request):
+        pool, claims, _ = await context(request)
+        async with pool.connection() as conn, conn.transaction():
+            await conn.execute('''UPDATE whatsapp_alert_verifications SET state='EXPIRED'
+                WHERE id=%s AND app_id=%s AND owner_id=%s AND state='PENDING' AND expires_at<=now()''',
+                (verification_id, claims['app_id'], claims['user']))
+            row = await (await conn.execute('''SELECT id,recipient,state,expires_at,verified_at,consumed_at
+                FROM whatsapp_alert_verifications WHERE id=%s AND app_id=%s AND owner_id=%s''',
+                (verification_id, claims['app_id'], claims['user']))).fetchone()
+        if not row:
+            raise HTTPException(404, 'Verification not found')
+        return row
+
     @router.put('/subscription')
     async def subscribe(body: Subscription, request: Request):
         pool, claims, route = await context(request)
         recipient = body.recipient.lstrip('+')
         async with pool.connection() as conn, conn.transaction():
+            current = await (await conn.execute('''SELECT recipient FROM whatsapp_alert_subscriptions
+                WHERE app_id=%s AND owner_id=%s AND active FOR UPDATE''',
+                (claims['app_id'], claims['user']))).fetchone()
+            if route['require_recipient_verification'] and (not current or current['recipient'] != recipient):
+                verified = await (await conn.execute('''SELECT id FROM whatsapp_alert_verifications
+                    WHERE app_id=%s AND owner_id=%s AND channel_id=%s AND recipient=%s
+                    AND state='VERIFIED' AND expires_at>now() ORDER BY verified_at DESC
+                    FOR UPDATE LIMIT 1''', (claims['app_id'], claims['user'], route['channel_id'], recipient))).fetchone()
+                if not verified:
+                    raise HTTPException(409, 'Verify this WhatsApp number before enabling alerts')
+                await conn.execute('''UPDATE whatsapp_alert_verifications
+                    SET state='CONSUMED',consumed_at=now() WHERE id=%s''', (verified['id'],))
             if not await recent_conversation(conn, route['channel_id'], recipient):
                 raise HTTPException(409, 'Send a WhatsApp message to the connected sender first, then try again')
             await conn.execute('''INSERT INTO whatsapp_alert_subscriptions(app_id,owner_id,recipient,consented_at)

@@ -9,13 +9,13 @@ import os
 import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from pydantic import Field, model_validator
-from typing import Literal
 
 from . import knowledge
 from .service_identity import authenticate
@@ -167,6 +167,8 @@ async def ingest(pool, channel, payload):
                             (uuid4(), channel["id"], sender),
                         )
                     ).fetchone()
+                    from .whatsapp_alerts import consume_verification
+                    verification = await consume_verification(conn, channel['id'], sender, body)
                     clinic_control = channel.get('execution_mode') == 'SAHAYAK' and body.strip().lower() in {'human', 'agent', 'stop', 'unsubscribe'}
                     handoff = (
                         not body.strip()
@@ -174,7 +176,7 @@ async def ingest(pool, channel, payload):
                         or (not clinic_control and body.strip().lower() in {"human", "agent", "stop", "unsubscribe"})
                     )
                     state = (
-                        "HANDOFF"
+                        "CANCELLED" if verification else "HANDOFF"
                         if handoff or conversation["mode"] == "HUMAN" or not channel["enabled"]
                         else "PENDING"
                     )
@@ -187,6 +189,8 @@ async def ingest(pool, channel, payload):
                         )
                     ).fetchone()
                     if inserted:
+                        if verification:
+                            await audit(conn, channel['id'], conversation['id'], 'recipient:verified', 'provider')
                         if clinic_control:
                             # Let Sahayak persist consent/handoff, but cancel older queued automatic replies immediately.
                             await conn.execute("UPDATE whatsapp_messages SET status='CANCELLED' WHERE conversation_id=%s AND id<>%s AND NOT human_reply AND status IN ('PENDING','GENERATING','READY')", (conversation['id'], inserted['id']))
@@ -317,8 +321,9 @@ def install_whatsapp(app):
 
     @router.put('/v1/whatsapp/channels/{channel_id}/sahayak')
     async def configure_clinic(channel_id: UUID, body: ClinicBridge, request: Request):
-        from .sahayak_bridge import binding, context as bridge_context
         from .meta_crypto import seal, unseal
+        from .sahayak_bridge import binding
+        from .sahayak_bridge import context as bridge_context
         pool, claims = await context(request, 'channels:write')
         url = urlsplit(body.url)
         allowed = json.loads(os.environ.get('AI_SAHAYAK_ALLOWED_ORIGINS', '[]'))
