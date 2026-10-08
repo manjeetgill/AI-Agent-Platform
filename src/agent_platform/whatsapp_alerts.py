@@ -1,4 +1,4 @@
-"""App-scoped market alert delivery through an operator-approved WhatsApp sender.
+"""App-scoped event delivery through an owned or operator-approved WhatsApp sender.
 
 Only recipients who opted in and recently messaged that sender can receive pilot
 session text. A future approved-template path is required outside that window.
@@ -14,7 +14,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .channel_trials import reserve
 from .meta_worker import managed_config
@@ -30,6 +30,38 @@ class Subscription(Strict):
 
 class VerificationRequest(Strict):
     recipient: str = Field(pattern=r'^\+?[1-9]\d{7,14}$')
+
+
+class RouteConfiguration(Strict):
+    channel_id: UUID
+    daily_limit: int = Field(default=20, ge=1, le=1000)
+
+
+class NotificationDelivery(Strict):
+    request_key: str = Field(min_length=8, max_length=100)
+    category: str = Field(pattern=r'^[a-z][a-z0-9_.-]{0,49}$')
+    title: str = Field(min_length=1, max_length=80)
+    summary: str = Field(min_length=1, max_length=500)
+    reference: str | None = Field(default=None, min_length=1, max_length=100)
+    occurred_at: datetime
+    test_mode: bool = False
+
+    @field_validator('title', 'summary', 'reference')
+    @classmethod
+    def single_line(cls, value):
+        if value is None:
+            return None
+        cleaned = ' '.join(value.split())
+        if not cleaned:
+            raise ValueError('must contain visible text')
+        return cleaned
+
+    @field_validator('occurred_at')
+    @classmethod
+    def timezone_required(cls, value):
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError('timezone is required')
+        return value
 
 
 class AlertDelivery(Strict):
@@ -57,6 +89,18 @@ def message(alert: AlertDelivery) -> str:
             f'Observed: ₹{alert.observed}\n'
             f'Time: {moment:%d %b %Y, %I:%M %p} IST\n'
             'View the alert in MyAlgoDesk. No trade was placed.')
+
+
+def notification_message(app_name: str, notification: NotificationDelivery) -> str:
+    moment = notification.occurred_at.astimezone(timezone(timedelta(hours=5, minutes=30)))
+    name = ' '.join(app_name.split())[:80] or 'App'
+    label = name + (' TEST notification' if notification.test_mode else ' notification')
+    parts = [label, notification.title, notification.summary]
+    if notification.reference:
+        parts.append('Reference: ' + notification.reference)
+    parts.extend((f'Time: {moment:%d %b %Y, %I:%M %p} IST',
+                  'Open the app for details. This message cannot make a payment or complete a transaction.'))
+    return '\n'.join(parts)
 
 
 async def recent_conversation(conn, channel_id, recipient):
@@ -102,8 +146,9 @@ def install_alerts(app):
         claims = await authenticate(pool, request.headers.get('authorization', ''),
                                     request.headers.get('X-External-User-ID'), 'alerts:send')
         async with pool.connection() as conn:
-            route = await (await conn.execute('''SELECT r.*,c.phone_id,c.owner_id AS channel_owner
-                FROM whatsapp_alert_routes r JOIN whatsapp_channels c ON c.id=r.channel_id
+            route = await (await conn.execute('''SELECT r.*,c.phone_id,c.owner_id AS channel_owner,
+                a.name AS app_name FROM whatsapp_alert_routes r
+                JOIN whatsapp_channels c ON c.id=r.channel_id JOIN platform_apps a ON a.id=r.app_id
                 WHERE r.app_id=%s AND r.enabled AND c.enabled AND c.webhook_verified_at IS NOT NULL''',
                 (claims['app_id'],))).fetchone()
         if not route:
@@ -111,6 +156,83 @@ def install_alerts(app):
         if route['allowed_external_user'] and route['allowed_external_user'] != request.headers.get('X-External-User-ID'):
             raise HTTPException(403, 'WhatsApp alert pilot is not enabled for this user')
         return pool, claims, route
+
+    async def manage_context(request, scope):
+        pool = request.app.state.repository.pool
+        claims = await authenticate(pool, request.headers.get('authorization', ''),
+                                    request.headers.get('X-External-User-ID'), scope)
+        return pool, claims
+
+    @router.get('/capabilities')
+    async def alert_capabilities(request: Request):
+        await manage_context(request, 'alerts:send')
+        return {'recipient_verification': 'inbound_one_time_code', 'verification_ttl_seconds': 600,
+                'generic_notifications': True, 'market_alerts': True, 'approved_templates': False,
+                'requires_recent_conversation': True, 'payment_actions': False,
+                'sender_ownership': 'consuming_app_or_operator_approved_shared_route'}
+
+    @router.put('/route')
+    async def configure_route(body: RouteConfiguration, request: Request):
+        pool, claims = await manage_context(request, 'channels:write')
+        async with pool.connection() as conn, conn.transaction():
+            channel = await (await conn.execute('''SELECT id,display_number FROM whatsapp_channels
+                WHERE id=%s AND app_id=%s AND owner_id=%s AND enabled
+                AND webhook_verified_at IS NOT NULL FOR UPDATE''',
+                (body.channel_id, claims['app_id'], claims['user']))).fetchone()
+            if not channel:
+                raise HTTPException(409, 'Enable and verify your owned WhatsApp channel first')
+            if not channel['display_number']:
+                raise HTTPException(409, 'Send one test message so the signed webhook can confirm the sender number')
+            previous = await (await conn.execute('''SELECT channel_id FROM whatsapp_alert_routes
+                WHERE app_id=%s FOR UPDATE''', (claims['app_id'],))).fetchone()
+            if previous and previous['channel_id'] != channel['id']:
+                await conn.execute('''UPDATE whatsapp_alert_deliveries SET status='CANCELLED',
+                    error='Sender route changed',updated_at=now()
+                    WHERE app_id=%s AND status='QUEUED' ''', (claims['app_id'],))
+                await conn.execute('''UPDATE whatsapp_alert_subscriptions SET active=false
+                    WHERE app_id=%s''', (claims['app_id'],))
+                await conn.execute('''UPDATE whatsapp_alert_verifications SET state='CANCELLED'
+                    WHERE app_id=%s AND state IN ('PENDING','VERIFIED')''', (claims['app_id'],))
+            await conn.execute('''INSERT INTO whatsapp_alert_routes
+                (app_id,channel_id,sender_number,enabled,daily_limit,require_recipient_verification)
+                VALUES(%s,%s,%s,true,%s,true) ON CONFLICT(app_id) DO UPDATE SET
+                channel_id=EXCLUDED.channel_id,sender_number=EXCLUDED.sender_number,enabled=true,
+                daily_limit=EXCLUDED.daily_limit,require_recipient_verification=true,
+                allowed_external_user=NULL''',
+                (claims['app_id'], channel['id'], channel['display_number'], body.daily_limit))
+        return {'channel_id': channel['id'], 'sender_number': channel['display_number'],
+                'daily_limit': body.daily_limit, 'enabled': True, 'recipient_verification': True}
+
+    @router.get('/route')
+    async def route_status(request: Request):
+        pool, claims = await manage_context(request, 'channels:read')
+        async with pool.connection() as conn:
+            row = await (await conn.execute('''SELECT r.channel_id,r.sender_number,r.enabled,
+                r.daily_limit,r.require_recipient_verification FROM whatsapp_alert_routes r
+                JOIN whatsapp_channels c ON c.id=r.channel_id WHERE r.app_id=%s
+                AND c.app_id=%s AND c.owner_id=%s''',
+                (claims['app_id'], claims['app_id'], claims['user']))).fetchone()
+        if not row:
+            raise HTTPException(404, 'Owned notification route not found')
+        return row
+
+    @router.delete('/route', status_code=204)
+    async def disable_route(request: Request):
+        pool, claims = await manage_context(request, 'channels:write')
+        async with pool.connection() as conn, conn.transaction():
+            row = await (await conn.execute('''UPDATE whatsapp_alert_routes r SET enabled=false
+                FROM whatsapp_channels c WHERE r.app_id=%s AND c.id=r.channel_id
+                AND c.app_id=%s AND c.owner_id=%s RETURNING r.app_id''',
+                (claims['app_id'], claims['app_id'], claims['user']))).fetchone()
+            if not row:
+                raise HTTPException(404, 'Owned notification route not found')
+            await conn.execute('''UPDATE whatsapp_alert_deliveries SET status='CANCELLED',
+                error='Sender route disabled',updated_at=now()
+                WHERE app_id=%s AND status='QUEUED' ''', (claims['app_id'],))
+            await conn.execute('UPDATE whatsapp_alert_subscriptions SET active=false WHERE app_id=%s',
+                               (claims['app_id'],))
+            await conn.execute('''UPDATE whatsapp_alert_verifications SET state='CANCELLED'
+                WHERE app_id=%s AND state IN ('PENDING','VERIFIED')''', (claims['app_id'],))
 
     @router.get('/subscription')
     async def subscription(request: Request):
@@ -226,12 +348,47 @@ def install_alerts(app):
                  subscription['recipient'], content))
         return {'id': ident, 'status': 'QUEUED'}
 
+    @router.post('/notifications', status_code=202)
+    async def notify(body: NotificationDelivery, request: Request):
+        pool, claims, route = await context(request)
+        content = notification_message(route['app_name'], body)
+        async with pool.connection() as conn, conn.transaction():
+            await conn.execute('SELECT app_id FROM whatsapp_alert_routes WHERE app_id=%s FOR UPDATE',
+                               (claims['app_id'],))
+            prior = await (await conn.execute('''SELECT id,status,body FROM whatsapp_alert_deliveries
+                WHERE app_id=%s AND request_key=%s''',
+                (claims['app_id'], body.request_key))).fetchone()
+            if prior:
+                if prior['body'] != content:
+                    raise HTTPException(409, 'Idempotency key belongs to a different notification')
+                return {'id': prior['id'], 'status': prior['status']}
+            subscription = await (await conn.execute('''SELECT * FROM whatsapp_alert_subscriptions
+                WHERE app_id=%s AND owner_id=%s AND active FOR UPDATE''',
+                (claims['app_id'], claims['user']))).fetchone()
+            if not subscription:
+                raise HTTPException(409, 'Enable WhatsApp notifications first')
+            if not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
+                raise HTTPException(409, 'WhatsApp session expired; an approved template is required')
+            count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
+                WHERE app_id=%s AND created_at>now()-interval '24 hours' ''',
+                (claims['app_id'],))).fetchone()
+            if count['n'] >= route['daily_limit']:
+                raise HTTPException(429, 'Daily WhatsApp notification limit reached')
+            ident = uuid4()
+            await conn.execute('''INSERT INTO whatsapp_alert_deliveries
+                (id,app_id,owner_id,channel_id,request_key,recipient,body,status,kind,category)
+                VALUES(%s,%s,%s,%s,%s,%s,%s,'QUEUED','notification',%s)''',
+                (ident, claims['app_id'], claims['user'], route['channel_id'], body.request_key,
+                 subscription['recipient'], content, body.category))
+        return {'id': ident, 'status': 'QUEUED'}
+
     @router.get('/deliveries/{delivery_id}')
     async def status(delivery_id: UUID, request: Request):
         pool, claims, _ = await context(request)
         async with pool.connection() as conn:
-            row = await (await conn.execute('''SELECT id,status,delivery,error,created_at,updated_at
-                FROM whatsapp_alert_deliveries WHERE id=%s AND app_id=%s AND owner_id=%s''',
+            row = await (await conn.execute('''SELECT id,status,delivery,error,created_at,updated_at,
+                kind,category FROM whatsapp_alert_deliveries
+                WHERE id=%s AND app_id=%s AND owner_id=%s''',
                 (delivery_id, claims['app_id'], claims['user']))).fetchone()
         if not row:
             raise HTTPException(404, 'Delivery not found')

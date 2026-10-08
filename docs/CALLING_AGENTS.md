@@ -10,6 +10,11 @@ Each subscribing app uses its own backend service credential and customer/busine
 identity (`X-External-User-ID`). The business connects WhatsApp through existing
 onboarding, creates a calling agent, selects its authorized WhatsApp channel, checks
 readiness, then activates it. No provider tokens are exposed to the browser.
+The credential needs `calling:read` and `calling:write`; channel connection also
+needs `channels:read`. Text-support credentials do not receive calling access unless
+the parent workspace explicitly enables the `whatsapp_calling` feature bundle.
+After migration 036, rotate existing calling-app credentials to include these scopes;
+existing `channels:*` keys intentionally stop authorizing calling management.
 
 The local customer-flow preview is `http://127.0.0.1:4061/calling`. Its loopback-only
 proxy is for testing; customer apps must proxy the API with their own authenticated

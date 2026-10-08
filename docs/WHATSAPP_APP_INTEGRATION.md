@@ -7,18 +7,34 @@ Provision a parent service credential for the integrating app with `channels:rea
 on its backend. The app must authenticate its own user and derive
 `X-External-User-ID` from that session, never from a browser-supplied owner ID.
 
-Create each customer business with `POST /v1/whatsapp/businesses`:
+Create each customer business with `POST /v1/businesses`:
 `{"external_id":"your-stable-business-id","name":"Business name"}`.
 Repeated creates return the same workspace. A conflicting owner cannot claim it.
 Each business has a separate platform app: even app-shared FAQs stay inside that
 business. Parent scopes cannot be used to query the child's documents or inbox.
 
 Issue its backend credential with
-`POST /v1/whatsapp/businesses/{id}/credentials` and `{"days":30}`.
+`POST /v1/businesses/{id}/credentials`. Choose explicit feature bundles,
+for example `{"days":30,"features":["whatsapp_support","whatsapp_notifications"]}`.
 This returns the secret once; store it encrypted in your backend and use the
 returned `external_user_id`. Issuing a replacement revokes older business keys.
 The parent must hold every delegated scope. Never automatically retry a credential
 rotation after an uncertain response; reconcile or deliberately rotate again.
+
+Available bundles are `whatsapp_support`, `whatsapp_notifications`,
+`whatsapp_calling`, `internet_voice`, `telephone_voice`, and `memory`. The response
+returns the exact resulting scopes. Omitted features default to
+`whatsapp_support` for compatibility. Request only what that business purchased;
+adding a feature requires deliberate credential rotation by the parent backend.
+After an uncertain credential response, call
+`GET /v1/businesses/{id}/credentials`. It returns the active key ID,
+expiry, scopes and feature capabilities without the secret. If a new active key
+exists but its one-time secret was lost, rotate deliberately; never replay the
+original POST blindly.
+
+The earlier `/v1/whatsapp/businesses` path remains as a compatibility alias. New
+integrations should use `/v1/businesses` because the workspace can now subscribe to
+WhatsApp, voice, telephony and memory features.
 
 ## Default customer flow: direct Meta
 

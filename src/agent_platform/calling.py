@@ -166,7 +166,7 @@ def install_calling(app):
             pool,
             request.headers.get("authorization", ""),
             request.headers.get("X-External-User-ID"),
-            "channels:write" if write else "channels:read",
+            "calling:write" if write else "calling:read",
         )
         return pool, claims
 

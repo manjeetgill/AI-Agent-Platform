@@ -1,4 +1,5 @@
 """Durable Meta provisioning. Every replay reads remote state before mutation."""
+import re
 import secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -8,6 +9,11 @@ from fastapi import HTTPException
 
 from .meta_client import MetaClient, MetaError, config
 from .meta_crypto import aad, seal, unseal
+
+
+def display_number(phone):
+    value = re.sub(r'[^0-9]', '', str(phone.get('display_phone_number', '')))
+    return '+' + value if re.fullmatch(r'[1-9]\d{7,14}', value) else None
 
 
 async def update_session(pool, row, state, error=None):
@@ -101,7 +107,10 @@ async def _verify_connection(pool, client, row, token, *, provision=False):
         updated = await (await conn.execute("UPDATE meta_connections SET state='CONNECTED',error_code=NULL,display_number=%s,business_name=%s,token_expires_at=%s,registration_confirmed_at=now(),subscription_confirmed_at=now(),checked_at=now(),updated_at=now() WHERE id=%s AND state NOT IN ('DISCONNECTING','DISCONNECTED') AND token_cipher=%s RETURNING id", (phone.get('display_phone_number'), phone.get('verified_name'), expires, row['id'], row['token_cipher']))).fetchone()
         if not updated:
             raise MetaError('CANCELLED')
-        await conn.execute('UPDATE whatsapp_channels SET webhook_verified_at=now() WHERE phone_id=%s AND app_id=%s AND owner_id=%s AND EXISTS(SELECT 1 FROM meta_connections WHERE id=%s AND state=\'CONNECTED\')', (row['phone_id'],row['app_id'],row['owner_id'],row['id']))
+        await conn.execute('''UPDATE whatsapp_channels SET webhook_verified_at=now(),
+            display_number=COALESCE(%s,display_number) WHERE phone_id=%s AND app_id=%s AND owner_id=%s
+            AND EXISTS(SELECT 1 FROM meta_connections WHERE id=%s AND state='CONNECTED')''',
+            (display_number(phone),row['phone_id'],row['app_id'],row['owner_id'],row['id']))
 
 
 async def tick_onboarding(pool, client=None):
@@ -146,7 +155,11 @@ async def tick_onboarding(pool, client=None):
             linked = await (await conn.execute('SELECT * FROM meta_connections WHERE id=%s', (ident,))).fetchone()
             await conn.execute("UPDATE meta_signup_sessions SET connection_id=%s,state='PHONE_CONNECTING',updated_at=now() WHERE id=%s AND lease_id=%s", (ident,row['id'],lease))
             if not legacy:
-                await conn.execute('INSERT INTO whatsapp_channels(id,app_id,owner_id,phone_id,name,documents) VALUES(%s,%s,%s,%s,%s,%s)', (uuid4(),row['app_id'],row['owner_id'],row['phone_id'],phone.get('verified_name') or 'WhatsApp support',[]))
+                await conn.execute('''INSERT INTO whatsapp_channels
+                    (id,app_id,owner_id,phone_id,name,documents,display_number)
+                    VALUES(%s,%s,%s,%s,%s,%s,%s)''',
+                    (uuid4(),row['app_id'],row['owner_id'],row['phone_id'],
+                     phone.get('verified_name') or 'WhatsApp support',[],display_number(phone)))
         await verify_connection(pool, client, linked, token, provision=True)
         await update_session(pool, row, 'CONNECTED')
     except MetaError as exc:

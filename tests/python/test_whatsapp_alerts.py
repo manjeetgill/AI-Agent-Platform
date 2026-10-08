@@ -10,7 +10,20 @@ from test_whatsapp import setup
 
 from agent_platform.service_identity import provision
 from agent_platform.whatsapp import ingest
-from agent_platform.whatsapp_alerts import tick_alerts
+from agent_platform.whatsapp_alerts import NotificationDelivery, notification_message, tick_alerts
+
+
+def test_generic_notification_is_bounded_and_provider_neutral():
+    payload = NotificationDelivery.model_validate({
+        'request_key': 'event-12345678', 'category': 'booking.confirmed',
+        'title': ' Appointment\nconfirmed ', 'summary': 'Tomorrow\r\nat 10:30 AM',
+        'reference': ' APT-123 ', 'occurred_at': datetime(2026, 10, 8, 5, 0, tzinfo=UTC),
+        'test_mode': True,
+    })
+    rendered = notification_message(' Clinic\nApp ', payload)
+    assert rendered.startswith('Clinic App TEST notification\nAppointment confirmed')
+    assert 'Tomorrow at 10:30 AM' in rendered
+    assert 'This message cannot make a payment or complete a transaction.' in rendered
 
 
 def test_shared_sender_alert_is_scoped_and_sent_once(monkeypatch):
@@ -141,5 +154,63 @@ def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
             sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
             sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))
             sql('DELETE FROM platform_apps WHERE id=%s', (app_key['app_id'],))
+            sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_owned_sender_route_and_generic_notification(monkeypatch):
+    with environment(monkeypatch) as (client, _, owner_key, _):
+        _, channel, doc = setup(client, owner_key, monkeypatch)
+        tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
+
+        async def make_key():
+            async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                return await provision(pool, tenant=tenant, organisation='Fixture', app_name='Fixture',
+                                       app_id=owner_key['app_id'],
+                                       scopes=['channels:read', 'channels:write', 'alerts:send'])
+
+        key = asyncio.run(make_key())
+        headers = {'Authorization': 'Bearer ' + key['credential'], 'X-External-User-ID': 'operator'}
+        recipient = '919999000001'
+        path = '/v1/whatsapp/alerts'
+
+        async def inbound(body, ident):
+            async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                await ingest(pool, channel, {'entry': [{'changes': [{'value': {
+                    'metadata': {'phone_number_id': channel['phone_id'],
+                                 'display_phone_number': '+1 (555) 637-7356'},
+                    'messages': [{'id': ident, 'from': recipient,
+                                  'timestamp': str(int(datetime.now(UTC).timestamp())),
+                                  'type': 'text', 'text': {'body': body}}],
+                }}]}]})
+
+        try:
+            asyncio.run(inbound('hello', 'wamid.route-display'))
+            configured = client.put(path + '/route', headers=headers,
+                                    json={'channel_id': channel['id'], 'daily_limit': 3})
+            assert configured.status_code == 200, configured.text
+            assert configured.json()['sender_number'] == '+15556377356'
+            assert client.get(path + '/route', headers=headers).json()['daily_limit'] == 3
+            challenge = client.post(path + '/verifications', headers=headers,
+                                    json={'recipient': recipient}).json()
+            asyncio.run(inbound(challenge['message'], 'wamid.route-verify'))
+            assert client.put(path + '/subscription', headers=headers,
+                              json={'recipient': recipient, 'consented': True}).status_code == 200
+            payload = {'request_key': 'booking-confirmed-123', 'category': 'booking.confirmed',
+                       'title': 'Appointment confirmed',
+                       'summary': 'Your appointment is tomorrow at 10:30 AM.',
+                       'reference': 'APT-123', 'occurred_at': datetime.now(UTC).isoformat(),
+                       'test_mode': True}
+            created = client.post(path + '/notifications', headers=headers, json=payload)
+            assert created.status_code == 202, created.text
+            assert client.post(path + '/notifications', headers=headers, json=payload).json()['id'] == created.json()['id']
+            saved = sql('SELECT recipient,body,kind,category FROM whatsapp_alert_deliveries WHERE id=%s',
+                        (created.json()['id'],))[0]
+            assert saved['recipient'] == recipient
+            assert saved['kind'] == 'notification' and saved['category'] == 'booking.confirmed'
+            assert ('Appointment confirmed' in saved['body']
+                    and 'cannot make a payment' in saved['body'])
+            assert client.delete(path + '/route', headers=headers).status_code == 204
+        finally:
             sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
             sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))

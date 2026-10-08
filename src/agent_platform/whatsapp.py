@@ -110,8 +110,14 @@ async def ingest(pool, channel, payload):
         for entry in payload.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
-                if value.get("metadata", {}).get("phone_number_id") != channel["phone_id"]:
+                metadata = value.get("metadata", {})
+                if metadata.get("phone_number_id") != channel["phone_id"]:
                     continue
+                display = re.sub(r'[^0-9]', '', str(metadata.get('display_phone_number', '')))
+                if re.fullmatch(r'[1-9]\d{7,14}', display):
+                    await conn.execute('''UPDATE whatsapp_channels SET display_number=%s
+                        WHERE id=%s AND (display_number IS NULL OR display_number<>%s)''',
+                        ('+' + display, channel['id'], '+' + display))
                 for status in value.get("statuses", []):
                     if status.get("status") in {"sent", "delivered", "read", "failed"}:
                         await conn.execute(

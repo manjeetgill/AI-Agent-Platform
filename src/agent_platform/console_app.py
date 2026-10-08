@@ -41,6 +41,7 @@ def create_console(*, registry=None, app=None):
             credential = await provision(pool, tenant='local-console', organisation='Local operator', app_name='Console',
                 app_id=existing['id'] if existing else None, scopes=['agents:read', 'agents:write', 'agents:run',
                     'tasks:read', 'tasks:write', 'tasks:approve', 'channels:read', 'channels:write',
+                    'calling:read', 'calling:write',
                     'memory:read', 'memory:write', 'memory:review', 'knowledge:read', 'knowledge:write', 'knowledge:publish', 'telephony:read', 'telephony:write'])
             instance.state.console_credential = credential['credential']
             instance.state.console_app_id = credential['app_id']

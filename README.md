@@ -58,9 +58,13 @@ queue, exact-action approvals, pause/cancel fencing, and reconciliation of uncer
 Its task API is disabled by default. Chrome control, site adapters, the profile vault and the
 task UI are not implemented yet; all execution tests use synthetic adapters.
 
-This preserves the existing partial implementation. Scheduled triggers, notifications, broader trading RAG, production load tests and credentialed browser/provider verification remain unfinished. No live execution tools are present. This extraction does not declare production readiness.
+This preserves the existing partial implementation. Scheduled triggers, broader trading RAG,
+production load tests and credentialed browser/provider verification remain unfinished. Durable
+app event notifications are available through the WhatsApp integration, subject to sender and
+recipient verification. No live browser execution tools are present. This extraction does not
+declare production readiness.
 
-The GitHub repository has not been created or connected. This folder is ready to use as its independent source project.
+The independent source project is connected to its own GitHub repository.
 
 ## Multi-app roadmap
 
@@ -135,6 +139,11 @@ broker execution privileges or autonomously run sensitivity searches.
 Opt-in inbound text support with document-scoped RAG, durable replies, conversation
 history and human handover APIs. The local setup wizard and inbox are at
 `http://127.0.0.1:4061/whatsapp` (start `scripts/console.py`). See [setup and limitations](docs/WHATSAPP_SUPPORT.md).
+
+Consuming apps can bind an owned, verified sender and deliver provider-neutral event
+notifications to recipients who prove number ownership in WhatsApp. See the
+[multi-app notification contract](docs/WHATSAPP_APP_NOTIFICATIONS.md) and its
+[backend client](examples/whatsapp-notifications/client.py).
 
 ## Calling agents
 

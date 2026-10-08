@@ -34,3 +34,7 @@ For alerts outside that window, an approved alert template and its applicable
 pricing are required. A closed window is a visible failure, never a silent or
 non-compliant send. A consuming app can continue in-app alerts when this service
 is unavailable.
+
+Apps with their own connected sender can configure the route through
+`PUT /v1/whatsapp/alerts/route`; see [generic app notifications](WHATSAPP_APP_NOTIFICATIONS.md).
+Operator-approved shared senders continue to use a restricted administrative binding.

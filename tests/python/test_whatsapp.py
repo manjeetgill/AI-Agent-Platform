@@ -32,6 +32,8 @@ def setup(client, key, monkeypatch):
                 scopes=[
                     "channels:read",
                     "channels:write",
+                    "calling:read",
+                    "calling:write",
                     "knowledge:read",
                     "knowledge:write",
                     "knowledge:publish",
