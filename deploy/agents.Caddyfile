@@ -24,6 +24,13 @@ agents.myalgodesk.in, shayak.myalgodesk.in {
     handle @appagents {
         reverse_proxy agent-platform-api-1:4060
     }
+    @platformconnectors {
+        host agents.myalgodesk.in
+        path /v1/connectors /v1/connectors/* /v1/notifications/email /v1/notifications/email/*
+    }
+    handle @platformconnectors {
+        reverse_proxy agent-platform-api-1:4060
+    }
     @businesspages {
         host agents.myalgodesk.in
         path /about /privacy /data-deletion /app-icon.png

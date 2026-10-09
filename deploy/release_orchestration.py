@@ -15,6 +15,24 @@ from pathlib import Path
 SERVICES = ['api', 'worker', 'whatsapp-worker', 'meta-worker', 'voice-worker']
 
 
+def notification_connector_routes(current):
+    """Expose only scoped app APIs; retain the host's other proxy configuration."""
+    if '@platformconnectors' in current:
+        return current
+    marker = '    @businesspages {'
+    if current.count(marker) != 1:
+        raise RuntimeError('Unexpected proxy layout')
+    route = '''    @platformconnectors {
+        host agents.myalgodesk.in
+        path /v1/connectors /v1/connectors/* /v1/notifications/email /v1/notifications/email/*
+    }
+    handle @platformconnectors {
+        reverse_proxy agent-platform-api-1:4060
+    }
+'''
+    return current.replace(marker, route+marker)
+
+
 def capture(args):
     result = subprocess.run(args, capture_output=True, check=False)
     if result.returncode:
@@ -139,11 +157,15 @@ def main():
         reverse_proxy agent-platform-api-1:4060
     }
 '''
+            updated = current
             if '@orchestrationapps' not in current:
                 if current.count(marker) != 1:
                     raise RuntimeError('Unexpected proxy layout')
+                updated = current.replace(marker,route+marker)
+            updated = notification_connector_routes(updated)
+            if updated != current:
                 candidate = backup/'Caddyfile.candidate'
-                private(candidate,current.replace(marker,route+marker))
+                private(candidate,updated)
                 proxy_image=json.loads(capture(['docker','inspect','myalgodesk-proxy-1']))[0]['Config']['Image']
                 capture(['docker','run','--rm','--network','agent-platform-edge','-e','APP_DOMAIN=myalgodesk.in',
                          '-v',str(candidate)+':/etc/caddy/Caddyfile:ro',proxy_image,'caddy','validate','--config','/etc/caddy/Caddyfile'])
@@ -154,8 +176,13 @@ def main():
                       'https://agents.myalgodesk.in/v1/task-agents/tools':401,
                       'https://agents.myalgodesk.in/v1/orchestration/automations':401,
                       'https://agents.myalgodesk.in/v1/whatsapp/setup':401,
+                      'https://agents.myalgodesk.in/v1/connectors':401,
+                      'https://agents.myalgodesk.in/v1/integrations/capability-readiness':401,
                       'https://agents.myalgodesk.in/openapi.json':404,
                       'https://agents.myalgodesk.in/console':404,
+                      'https://agents.myalgodesk.in/monitor':404,
+                      'https://agents.myalgodesk.in/setup':404,
+                      'https://shayak.myalgodesk.in/v1/connectors':404,
                       'https://shayak.myalgodesk.in/v1/orchestration/automations':404}
             for _ in range(10):
                 observed={url:status(url) for url in expected}

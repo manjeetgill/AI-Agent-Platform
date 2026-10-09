@@ -1,0 +1,27 @@
+"""Release proxy additions must preserve the shared host and private workspace."""
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+spec = importlib.util.spec_from_file_location(
+    'release_orchestration', Path(__file__).resolve().parents[2] / 'deploy/release_orchestration.py')
+release = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(release)
+
+
+def test_release_routes_preserve_existing_hosts_and_are_idempotent():
+    before = 'myalgodesk.in {\n    respond 200\n}\n' \
+        'agents.myalgodesk.in, shayak.myalgodesk.in {\n    @businesspages {\n    }\n}\n'
+    after = release.notification_connector_routes(before)
+    assert after.startswith('myalgodesk.in {\n    respond 200\n}\n')
+    assert 'host agents.myalgodesk.in\n        path /v1/connectors' in after
+    assert '/v1/notifications/email/*' in after
+    assert '/console' not in after and '/monitor' not in after
+    assert release.notification_connector_routes(after) == after
+
+
+@pytest.mark.parametrize('source', ['', '    @businesspages {\n    @businesspages {'])
+def test_release_routes_reject_unrecognized_layout(source):
+    with pytest.raises(RuntimeError, match='Unexpected proxy layout'):
+        release.notification_connector_routes(source)
