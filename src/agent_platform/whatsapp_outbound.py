@@ -67,7 +67,14 @@ async def templates(config):
     waba = config.get('waba_id') or ''
     if not re.fullmatch(r'\d{5,30}', waba):
         raise HTTPException(503, 'Platform owner must complete WhatsApp business-account setup')
-    result = await graph(config, waba+'/message_templates')
+    if config.get('provider') == 'chakra':
+        from .chakra_client import ChakraError, list_templates
+        try:
+            result = {'data': await list_templates(config)}
+        except ChakraError:
+            raise HTTPException(503, 'WhatsApp templates unavailable. Check the provider connection.') from None
+    else:
+        result = await graph(config, waba+'/message_templates')
     available = []
     for item in result.get('data', []):
         parts = item.get('components', [])
@@ -101,7 +108,14 @@ def install_outbound(app):
     async def setup(channel_id: UUID, request: Request):
         pool, _, channel = await context(request, channel_id)
         config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
-        sender = await graph(config, channel['phone_id'])
+        if config.get('provider') == 'chakra':
+            from .chakra_client import ChakraError, phone_details
+            try:
+                sender = await phone_details(config)
+            except ChakraError:
+                raise HTTPException(503, 'WhatsApp number verification unavailable. Check the provider connection.') from None
+        else:
+            sender = await graph(config, channel['phone_id'])
         return {'sender': sender.get('display_phone_number', ''),
                 'name': sender.get('verified_name', ''), 'templates': await templates(config),
                 'webhook_verified': bool(channel['webhook_verified_at'])}
@@ -200,9 +214,13 @@ def install_outbound(app):
 
 
 async def send_template(config, phone, recipient, template):
-    value = await graph(config, phone+'/messages', method='POST', payload={
+    payload = {
         'messaging_product': 'whatsapp', 'to': recipient, 'type': 'template',
-        'template': {'name': template['name'], 'language': {'code': template['language']}}})
+        'template': {'name': template['name'], 'language': {'code': template['language']}}}
+    if config.get('provider') == 'chakra':
+        from .chakra_client import send_message
+        return await send_message(config, phone, payload)
+    value = await graph(config, phone+'/messages', method='POST', payload=payload)
     return value['messages'][0]['id']
 
 

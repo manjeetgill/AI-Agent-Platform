@@ -21,6 +21,87 @@ class ChakraError(Exception):
         super().__init__(code)
 
 
+def _template_connection(config):
+    try:
+        plugin = str(UUID(config['plugin_id']))
+        version, token, waba, phone = (config[k] for k in
+                                      ('graph_version', 'access_token', 'waba_id', 'phone_id'))
+        if not re.fullmatch(r'v\d+\.\d+', version):
+            raise ValueError()
+        if not all(re.fullmatch(r'\d{5,30}', value) for value in (waba, phone)):
+            raise ValueError()
+        if not isinstance(token, str) or not token or '\n' in token or '\r' in token:
+            raise ValueError()
+        return plugin, version, token, waba, phone
+    except (KeyError, ValueError, TypeError, AttributeError):
+        raise ChakraError('INVALID_CONNECTION') from None
+
+
+async def _read(client, url, token, *, params=None):
+    try:
+        response = await client.get(url, headers={'Authorization': 'Bearer '+token}, params=params)
+        if not 200 <= response.status_code < 300:
+            raise ChakraError('CATALOGUE_UNAVAILABLE')
+        value = response.json()
+        if not isinstance(value, dict) or value.get('_errors'):
+            raise ValueError()
+        value = value.get('_data', value)
+        if not isinstance(value, dict):
+            raise TypeError()
+        return value
+    except (httpx.HTTPError, ValueError, TypeError):
+        raise ChakraError('CATALOGUE_UNAVAILABLE') from None
+
+
+async def list_templates(config, *, transport=None):
+    """Read the bound WABA catalogue; never follow provider-supplied pagination URLs.
+
+    Contract: https://apidocs.chakrahq.com/api-17615391 (Meta pass-through shape).
+    """
+    _, version, token, waba, _ = _template_connection(config)
+    url = f'https://api.chakrahq.com/v1/ext/plugin/whatsapp/api/{version}/{waba}/message_templates'
+    result, seen = [], set()
+    params = {'limit': 100}
+    async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(12, connect=3),
+                                follow_redirects=False) as client:
+        for _ in range(5):
+            page = await _read(client, url, token, params=params)
+            items, paging = page.get('data'), page.get('paging', {})
+            if not isinstance(items, list) or not all(isinstance(t, dict) for t in items):
+                raise ChakraError('INVALID_TEMPLATE_CATALOGUE')
+            result.extend(items)
+            if not isinstance(paging, dict):
+                raise ChakraError('INVALID_TEMPLATE_CATALOGUE')
+            if not paging.get('next'):
+                return result
+            cursors = paging.get('cursors', {})
+            if not isinstance(cursors, dict):
+                raise ChakraError('INVALID_TEMPLATE_CATALOGUE')
+            after = cursors.get('after')
+            if not isinstance(after, str) or not 1 <= len(after) <= 2048 or after in seen:
+                raise ChakraError('INVALID_TEMPLATE_CATALOGUE')
+            seen.add(after)
+            params = {'limit': 100, 'after': after}
+    raise ChakraError('TEMPLATE_CATALOGUE_LIMIT')
+
+
+async def phone_details(config, *, transport=None):
+    """Only return metadata for the phone already bound to this clinic's plugin."""
+    plugin, _, token, _, phone = _template_connection(config)
+    url = f'https://api.chakrahq.com/v1/ext/plugin/whatsapp/{plugin}/config'
+    async with httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(12, connect=3),
+                                follow_redirects=False) as client:
+        data = await _read(client, url, token)
+    phones = data.get('whatsappPhoneNumbers', [])
+    if not isinstance(phones, list):
+        raise ChakraError('INVALID_CONNECTION')
+    row = next((p for p in phones if isinstance(p, dict) and p.get('id') == phone), None)
+    if not row:
+        raise ChakraError('WRONG_PHONE_NUMBER')
+    return {'display_phone_number': row.get('display_phone_number', ''),
+            'verified_name': row.get('verified_name', '')}
+
+
 def verify_event(raw, signature, secret, *, phone_id, waba_id):
     """Authenticate the raw pass-through body and enforce channel ownership."""
     if len(raw) > 256000:
