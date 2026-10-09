@@ -72,6 +72,15 @@ def main():
     if os.geteuid() != 0:
         raise SystemExit('Run as root on the existing pilot')
     stage = Path(__file__).resolve().parents[1]
+    import sys
+    sys.path.insert(0,str(stage/'scripts'))
+    from runtime_env import process_env
+    roles_path=Path(os.environ.get('AGENT_DATABASE_ROLES_FILE','/opt/agent-platform/secrets/database-roles.json'))
+    if not roles_path.is_file() or roles_path.is_symlink() or roles_path.stat().st_mode & 0o077:
+        raise SystemExit('Provision separate private database roles before release')
+    roles=json.loads(roles_path.read_text())
+    if set(roles)!={'agent_migrator','agent_api','agent_worker'}:
+        raise SystemExit('Invalid database role credential file')
     revision = (stage/'REVISION').read_text().strip()
     if len(revision) != 40 or any(c not in '0123456789abcdef' for c in revision):
         raise SystemExit('Staged revision is required')
@@ -120,7 +129,7 @@ def main():
         subprocess.run(['docker','build','--network=none','-f',str(build/'Dockerfile.voice'),'-t',voice_image,str(build)],check=True)
         capture(['docker','run','--rm','--network=none',voice_image,'python','-c',
                  'from agent_platform import calling_worker; import aiortc; print("voice imports valid")'])
-        env = dict(config['services']['api']['environment'])
+        env = process_env(config['services']['api']['environment'],roles['agent_migrator'])
         env['AI_AUTOMATIONS'] = '1'
         if any('\n' in k or '\n' in v for k,v in env.items()):
             raise RuntimeError('Multiline environment requires separate handling')
@@ -130,6 +139,7 @@ def main():
                  'python','-m','agent_platform.migrate'])
         for name in SERVICES:
             config['services'][name]['image'] = image
+            config['services'][name]['environment'] = process_env(config['services'][name]['environment'],roles['agent_api' if name=='api' else 'agent_worker'])
         config['services']['voice-worker']['image'] = voice_image
         for name in ['api','worker']:
             config['services'][name]['environment']['AI_AUTOMATIONS'] = '1'

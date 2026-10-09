@@ -11,6 +11,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 from . import knowledge
+from .db_scope import worker_connection
 from .meta_worker import managed_config
 from .whatsapp import audit
 
@@ -250,12 +251,15 @@ async def tick(pool, model=None, sender=send):
 
 async def serve():
     async with AsyncConnectionPool(
-        os.environ["AI_PLATFORM_DATABASE_URL"],
+        os.environ.get("AI_PLATFORM_WORKER_DATABASE_URL") or os.environ["AI_PLATFORM_DATABASE_URL"],
+        configure=worker_connection,
         min_size=1,
         max_size=4,
         kwargs={"row_factory": dict_row},
         open=False,
     ) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         while True:
             try:
                 await heartbeat(pool)

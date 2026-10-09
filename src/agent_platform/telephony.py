@@ -155,6 +155,8 @@ def install_telephony(app):
         value = request.headers.get("authorization", "")
         if not value.startswith("Bearer tgw_") or len(value) > 200:
             raise HTTPException(401, "Invalid gateway credential")
+        from .db_scope import connection_identity
+        await connection_identity(request.app.state.repository.pool, 'gateway', ident, conn)
         row = await (
             await conn.execute("SELECT * FROM telephony_connections WHERE id=%s FOR UPDATE", (ident,))
         ).fetchone()

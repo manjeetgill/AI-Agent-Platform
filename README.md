@@ -251,3 +251,40 @@ remaining hosting/Meta dependencies and verification limits.
 ## Capability setup checklist
 
 Open <http://127.0.0.1:4061/setup> for app-scoped configuration gaps and next steps across planning, messaging, voice, email, knowledge and connectors. The checklist is read-only; live verification is separate. See [setup and verification](docs/CAPABILITY_SETUP.md).
+
+
+## Security review and test database
+
+HTTP OpenAPI is disabled unless `AI_PLATFORM_ENV=development`. Programmatic
+`app.openapi()` remains available for SDK generation and contract tests.
+
+Install with `python -m pip install -e '.[dev]'`. With a configured local PostgreSQL
+cluster, run all tests in a newly created disposable database using:
+
+```sh
+python scripts/test_orchestration_local.py tests/python
+```
+
+The runner migrates and drops only its own test database. To reuse a private local
+config from another checkout set `AGENT_TEST_CONFIG=/absolute/path/to/config.json`.
+Alternatively supply a private `AGENT_TEST_ADMIN_URL` with CREATE DATABASE rights;
+never put real credentials in Git or shell history.
+
+CI provisions PostgreSQL 17, migrates it and tests both dev and dev,voice installs.
+`CI=true` without `AGENT_TEST_DATABASE_URL` fails before collection. Optional media
+tests skip when av/aiortc are absent from a development-only installation.
+
+See the [actual-code architecture brief](docs/AI_AGENT_PLATFORM_ARCHITECTURE.md) and
+[table inventory](docs/security/table-inventory.json) for built-versus-planned status.
+`GET /v1/orchestration/usage/models?days=30` exports owner-scoped recorded model
+usage, preserving unknown token/cost values. It does not invent billing rates or
+present an estimate with unspecified currency as a provider invoice.
+
+
+## Restricted-role rollout
+
+See [the security rollout guide](docs/security/ROLLOUT.md) before upgrading an existing installation.
+Migrations 050–054 require separate migration, API and worker roles. Run the mandatory
+restricted-role regression suite with `python scripts/test_restricted.py tests/python`
+and an operator-only `AGENT_TEST_ADMIN_URL` pointing to a disposable PostgreSQL cluster.
+Provider chains require explicit per-app budgets; no paid provider is activated by default.

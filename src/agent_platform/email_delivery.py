@@ -197,6 +197,8 @@ def install(app):
         except (ValueError,TypeError,KeyError,AttributeError,OverflowError):
             raise HTTPException(400,'Invalid webhook event') from None
         try:
+            from .db_scope import connection_identity
+            await connection_identity(request.app.state.repository.pool,'email',app_id)
             await receive(request.app.state.repository.pool,app_id,provider,events)
         except HTTPException:
             raise

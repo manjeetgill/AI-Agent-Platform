@@ -189,18 +189,13 @@ def test_database_rls_hides_other_owners_without_application_where_clause(setup)
     owners = sql('SELECT external_id,owner_id FROM platform_external_users WHERE app_id=%s', (key['app_id'],))
     first = next(r['owner_id'] for r in owners if r['external_id'] == 'fixture-user')
     second = next(r['owner_id'] for r in owners if r['external_id'] == 'other-user')
-    from psycopg.sql import SQL, Identifier
 
     from agent_platform.automation import scope
     async def verify():
         async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:  # noqa: SIM117
             async with pool.connection() as conn, conn.transaction():
-                role = Identifier('rls_test_' + uuid4().hex[:12])
-                await conn.execute(SQL('CREATE ROLE {} NOLOGIN NOSUPERUSER NOBYPASSRLS').format(role))
-                await conn.execute(SQL('GRANT SELECT,INSERT ON automation_preferences TO {}').format(role))
                 tenant = (await (await conn.execute('SELECT tenant_id FROM platform_apps WHERE id=%s', (key['app_id'],))).fetchone())['tenant_id']
                 try:
-                    await conn.execute(SQL('SET LOCAL ROLE {}').format(role))
                     await scope(conn, {'tenant': tenant, 'app_id': key['app_id'], 'user': str(first)})
                     assert len(await (await conn.execute('SELECT * FROM automation_preferences')).fetchall()) == 1
                     await scope(conn, {'tenant': tenant, 'app_id': key['app_id'], 'user': str(second)})
@@ -208,9 +203,7 @@ def test_database_rls_hides_other_owners_without_application_where_clause(setup)
                     await scope(conn, {'tenant': 'wrong-tenant', 'app_id': key['app_id'], 'user': str(first)})
                     assert await (await conn.execute('SELECT * FROM automation_preferences')).fetchall() == []
                 finally:
-                    await conn.execute('RESET ROLE')
-                    await conn.execute(SQL('DROP OWNED BY {}').format(role))
-                    await conn.execute(SQL('DROP ROLE {}').format(role))
+                    await scope(conn,worker=True)
     asyncio.run(verify())
 
 

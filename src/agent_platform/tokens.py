@@ -45,7 +45,7 @@ def verify(secret, token, *, issuer, audience, scope, now=None):
                 claims.get('scope') != scope or not claims.get('tenant') or not claims.get('user') or
                 not claims.get('jti') or type(claims.get('exp')) is not int or
                 type(claims.get('iat')) is not int or claims['iat'] > current + 5 or
-                claims['exp'] <= current or claims['exp'] - claims['iat'] > 60):
+                claims['exp'] <= current or not 0 < claims['exp'] - claims['iat'] <= 60):
             raise TokenError('Invalid claims')
         return claims
     except (ValueError, TypeError, KeyError, UnicodeDecodeError) as exc:

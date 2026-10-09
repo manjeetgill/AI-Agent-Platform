@@ -263,6 +263,8 @@ async def main():
     if not all(re.fullmatch(r'\d{5,30}',v) for v in (args.phone_id,args.waba_id)):
         raise ValueError('Invalid provider identifiers')
     async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'],kwargs={'row_factory':dict_row},open=False) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         await bind(pool,args.session_id,args.phone_id,args.waba_id)
     print('Customer binding saved; configure and verify the channel webhook before activation')
 

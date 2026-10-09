@@ -119,6 +119,8 @@ def install_onboarding(app):
             raise HTTPException(403, 'Connection origin rejected')
         secret = request.cookies.get('meta_signup', '')
         pool = request.app.state.repository.pool
+        from .db_scope import connection_identity
+        await connection_identity(pool, 'signup', session_id)
         async with pool.connection() as conn:
             row = await (await conn.execute('SELECT * FROM meta_signup_sessions WHERE id=%s', (session_id,))).fetchone()
         if not row or not hmac.compare_digest(row['secret_hash'], hashlib.sha256(secret.encode()).hexdigest()):
@@ -199,6 +201,8 @@ def install_onboarding(app):
         if not 32 <= len(ticket) <= 128:
             raise HTTPException(401, 'Connection link is invalid')
         pool = request.app.state.repository.pool
+        from .db_scope import connection_identity
+        await connection_identity(pool,'signup',session_id)
         async with pool.connection() as conn:
             row = await (await conn.execute('SELECT * FROM meta_signup_sessions WHERE id=%s AND expires_at>now()', (session_id,))).fetchone()
         if not row or not hmac.compare_digest(row['secret_hash'], hashlib.sha256(ticket.encode()).hexdigest()):

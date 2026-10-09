@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from local import CONFIG, ROOT, load, save
+from local import CONFIG, ROOT, load, role_urls, save
 
 sys.path.insert(0, str(ROOT / 'src'))
 from psycopg.rows import dict_row
@@ -30,7 +30,7 @@ async def main():
     values, consumer = load(), json.loads(path.read_text())
     if consumer.get('AI_PLATFORM_SIGNING_KEY') != values['AI_PLATFORM_SIGNING_KEY']:
         raise SystemExit('Consumer signing key does not match this platform')
-    async with AsyncConnectionPool(values['AI_PLATFORM_DATABASE_URL'], open=False, kwargs={'row_factory': dict_row}) as pool:
+    async with AsyncConnectionPool(role_urls()['agent_worker'], open=False, kwargs={'row_factory': dict_row}) as pool:
         credential = await provision(pool, tenant='nraialgo', organisation='NRAIAlgo',
             app_name='Research Lab', app_id=values.get('AI_PLATFORM_RESEARCH_APP_ID'),
             scopes=['agents:read', 'agents:write', 'agents:run', 'tasks:read', 'tasks:write'], days=90)

@@ -531,6 +531,8 @@ def install_whatsapp(app):
 
     async def webhook_channel(request, channel_id):
         pool = request.app.state.repository.pool
+        from .db_scope import connection_identity
+        await connection_identity(pool, "channel", channel_id)
         async with pool.connection() as conn:
             row = await (
                 await conn.execute("SELECT * FROM whatsapp_channels WHERE id=%s", (channel_id,))

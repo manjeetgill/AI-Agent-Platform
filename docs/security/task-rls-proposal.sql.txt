@@ -1,0 +1,27 @@
+-- REVIEW PROPOSAL ONLY. Not installed in the migration directory.
+-- Do not apply to a live database before connection-scope integration tests.
+CREATE FUNCTION agent_worker_authorized() RETURNS boolean LANGUAGE sql STABLE AS $$
+ SELECT current_setting('agent.worker',true)='on'
+ AND coalesce(pg_has_role(current_user,to_regrole('agent_runtime_worker'),'member'),false)
+$$;
+ALTER TABLE chore_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chore_tasks FORCE ROW LEVEL SECURITY;
+CREATE POLICY task_owner_scope ON chore_tasks USING (
+ agent_worker_authorized() OR
+ (tenant_id=current_setting('agent.tenant',true)
+  AND owner_id::text=current_setting('agent.owner',true)
+  AND coalesce(source_app_id::text,'')=coalesce(current_setting('agent.app',true),'')))
+ WITH CHECK (
+ agent_worker_authorized() OR
+ (tenant_id=current_setting('agent.tenant',true)
+  AND owner_id::text=current_setting('agent.owner',true)
+  AND coalesce(source_app_id::text,'')=coalesce(current_setting('agent.app',true),'')));
+DO $$ DECLARE name text; BEGIN
+ FOREACH name IN ARRAY ARRAY['chore_steps','chore_approvals','chore_jobs','chore_events'] LOOP
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY',name);
+  EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY',name);
+  EXECUTE format('CREATE POLICY task_parent_scope ON %I USING
+   (EXISTS(SELECT 1 FROM chore_tasks t WHERE t.id=task_id)) WITH CHECK
+   (EXISTS(SELECT 1 FROM chore_tasks t WHERE t.id=task_id))',name);
+ END LOOP;
+END $$;

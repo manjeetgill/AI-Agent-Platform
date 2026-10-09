@@ -1,0 +1,3006 @@
+{
+  "tables": [
+    {
+      "name": "agent_definitions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "agent_idea_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "agent_memory",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [
+        "agent_runs"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "agent_outcome_feedback",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "agent_planning_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "agent_runs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [
+        "agent_versions"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "agent_schema_migrations",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Immutable schema checksums; migration operator only."
+    },
+    {
+      "name": "agent_versions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "agent_definitions"
+      ],
+      "classification": "tenant",
+      "reason": "Inherited ownership through foreign-key parent agent_definitions."
+    },
+    {
+      "name": "agent_vision_reports",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "agent_workflow_runs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id"
+      ],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "app_planning_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "automation_deliveries",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "automation_events",
+        "automation_webhooks"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automation_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automation_notifications",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "automation_events",
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automation_preferences",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automation_runs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "automations",
+        "chore_tasks"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automation_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "automation_webhooks",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "automations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "task_agents"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "browser_commands",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "browser_devices",
+        "chore_tasks"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent browser_devices."
+    },
+    {
+      "name": "browser_devices",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "calling_agents",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "calling_audit",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "calling_agents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent calling_agents."
+    },
+    {
+      "name": "calling_calls",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "calling_agents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent calling_agents."
+    },
+    {
+      "name": "calling_turns",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "calling_calls"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent calling_calls."
+    },
+    {
+      "name": "chakra_customer_connections",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "chakra_signup_sessions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "channel_trial_policies",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "channel_trial_reservations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "channel_trial_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "chore_approvals",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "chore_tasks"
+      ],
+      "classification": "tenant",
+      "reason": "Inherited ownership through foreign-key parent chore_tasks."
+    },
+    {
+      "name": "chore_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "chore_tasks"
+      ],
+      "classification": "tenant",
+      "reason": "Inherited ownership through foreign-key parent chore_tasks."
+    },
+    {
+      "name": "chore_jobs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "chore_tasks"
+      ],
+      "classification": "tenant",
+      "reason": "Inherited ownership through foreign-key parent chore_tasks."
+    },
+    {
+      "name": "chore_steps",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "chore_tasks"
+      ],
+      "classification": "tenant",
+      "reason": "Inherited ownership through foreign-key parent chore_tasks."
+    },
+    {
+      "name": "chore_tasks",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id",
+        "source_app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "task_agents"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "connector_check_reports",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "chore_tasks",
+        "connector_check_state"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "connector_check_state",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "connector_check_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "delegation_replays",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "feed_connections",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "chore_tasks",
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "feed_request_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "knowledge_answers",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "knowledge_chunks",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "knowledge_documents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent knowledge_documents."
+    },
+    {
+      "name": "knowledge_documents",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "memory_evaluations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "memory_examples",
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "memory_examples",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_memories"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "memory_settings",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "memory_vectors",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "platform_memories"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent platform_memories."
+    },
+    {
+      "name": "meta_connection_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "meta_connections",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "meta_platform_webhook",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Operator Meta developer-app webhook configuration, not a customer app ID."
+    },
+    {
+      "name": "meta_signup_sessions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "meta_waba_owners",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "meta_webhook_receipts",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Global duplicate webhook digest and timestamp, no payload."
+    },
+    {
+      "name": "notification_email_attempts",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "notification_email_jobs"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "notification_email_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "notification_email_jobs",
+        "platform_apps"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "notification_email_jobs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "notification_email_suppressions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id"
+      ],
+      "parents": [
+        "notification_email_events",
+        "platform_apps"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_agent_templates",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_app_policies",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_apps",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id"
+      ],
+      "parents": [
+        "platform_organisations"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_business_workspaces",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "parent_app_id",
+        "owner_id",
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_external_users",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_memories",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "knowledge_answers",
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_memory_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_model_calls",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_model_policies",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_organisations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_service_choice_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_service_choices",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "platform_service_keys",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_tool_grants",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "platform_worker_heartbeats",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Global worker liveness and tool versions; no business rows."
+    },
+    {
+      "name": "provider_chain_attempts",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "provider_chain_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "retailer_browser_devices",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users",
+        "platform_service_keys"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "retailer_browser_jobs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "chore_tasks",
+        "retailer_browser_devices"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "sahayak_channel_bridges",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_channels."
+    },
+    {
+      "name": "task_agents",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "owner_id",
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "tenant",
+      "reason": "Direct tenant identity; owner/app filters also required where present."
+    },
+    {
+      "name": "task_checkpoints",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "chore_tasks",
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "task_handoff_snapshots",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "chore_tasks",
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "telephony_app_limits",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "telephony_audit",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_connections"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_connections."
+    },
+    {
+      "name": "telephony_call_authorizations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_sessions."
+    },
+    {
+      "name": "telephony_connections",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "web_voice_agents"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "telephony_model_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_sessions."
+    },
+    {
+      "name": "telephony_sessions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "telephony_connections"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "telephony_speech_usage",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_sessions."
+    },
+    {
+      "name": "telephony_tool_actions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_sessions."
+    },
+    {
+      "name": "telephony_tool_configs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_connections"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_connections."
+    },
+    {
+      "name": "telephony_turns",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "telephony_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent telephony_sessions."
+    },
+    {
+      "name": "web_voice_agents",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "web_voice_handoffs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "web_voice_agents",
+        "web_voice_sessions",
+        "whatsapp_conversations",
+        "whatsapp_messages"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "web_voice_sessions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "web_voice_agents",
+        "web_voice_handoffs"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "web_voice_turns",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "web_voice_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent web_voice_sessions."
+    },
+    {
+      "name": "whatsapp_alert_deliveries",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "whatsapp_alert_routes",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "whatsapp_alert_subscriptions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "whatsapp_alert_verifications",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "whatsapp_audit",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_channels."
+    },
+    {
+      "name": "whatsapp_call_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "calling_agents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent calling_agents."
+    },
+    {
+      "name": "whatsapp_call_requests",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "calling_agents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent calling_agents."
+    },
+    {
+      "name": "whatsapp_call_worker_health",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Global media runtime liveness."
+    },
+    {
+      "name": "whatsapp_channels",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "whatsapp_conversations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_channels."
+    },
+    {
+      "name": "whatsapp_dispatches",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_messages"
+      ],
+      "logical_reference_note": "message_id has no declared foreign key; ledger retention must be reviewed.",
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_messages."
+    },
+    {
+      "name": "whatsapp_messages",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_conversations"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_conversations."
+    },
+    {
+      "name": "whatsapp_outbound",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "whatsapp_channels"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent whatsapp_channels."
+    },
+    {
+      "name": "whatsapp_worker_health",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Global worker liveness."
+    }
+  ],
+  "connection_sites_to_audit": [
+    {
+      "file": "src/agent_platform/adaptive_runtime.py",
+      "line": 62
+    },
+    {
+      "file": "src/agent_platform/adaptive_runtime.py",
+      "line": 125
+    },
+    {
+      "file": "src/agent_platform/adaptive_runtime.py",
+      "line": 141
+    },
+    {
+      "file": "src/agent_platform/adaptive_runtime.py",
+      "line": 134
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 83
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 213
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 275
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 288
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 313
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 322
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 351
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 380
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 440
+    },
+    {
+      "file": "src/agent_platform/agent_memory.py",
+      "line": 460
+    },
+    {
+      "file": "src/agent_platform/app.py",
+      "line": 123
+    },
+    {
+      "file": "src/agent_platform/app_catalogue.py",
+      "line": 57
+    },
+    {
+      "file": "src/agent_platform/automation.py",
+      "line": 217
+    },
+    {
+      "file": "src/agent_platform/automation.py",
+      "line": 280
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 66
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 91
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 109
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 136
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 147
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 165
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 180
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 190
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 204
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 217
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 229
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 239
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 252
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 269
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 279
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 290
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 310
+    },
+    {
+      "file": "src/agent_platform/automation_api.py",
+      "line": 332
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 43
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 59
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 85
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 98
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 110
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 127
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 138
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 150
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 48
+    },
+    {
+      "file": "src/agent_platform/browser_runner.py",
+      "line": 156
+    },
+    {
+      "file": "src/agent_platform/business_workspaces.py",
+      "line": 65
+    },
+    {
+      "file": "src/agent_platform/business_workspaces.py",
+      "line": 89
+    },
+    {
+      "file": "src/agent_platform/business_workspaces.py",
+      "line": 108
+    },
+    {
+      "file": "src/agent_platform/business_workspaces.py",
+      "line": 126
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 70
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 107
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 205
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 229
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 241
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 280
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 295
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 302
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 318
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 324
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 344
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 355
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 368
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 379
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 404
+    },
+    {
+      "file": "src/agent_platform/calling.py",
+      "line": 418
+    },
+    {
+      "file": "src/agent_platform/calling_dialogue.py",
+      "line": 38
+    },
+    {
+      "file": "src/agent_platform/calling_dialogue.py",
+      "line": 116
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 21
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 98
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 199
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 207
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 255
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 265
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 84
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 242
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 118
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 271
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 281
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 138
+    },
+    {
+      "file": "src/agent_platform/calling_worker.py",
+      "line": 160
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 64
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 231
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 245
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 100
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 117
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 125
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 135
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 145
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 165
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 176
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 183
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 203
+    },
+    {
+      "file": "src/agent_platform/chakra_onboarding.py",
+      "line": 114
+    },
+    {
+      "file": "src/agent_platform/channel_trials.py",
+      "line": 39
+    },
+    {
+      "file": "src/agent_platform/connection_test.py",
+      "line": 55
+    },
+    {
+      "file": "src/agent_platform/connector_api.py",
+      "line": 33
+    },
+    {
+      "file": "src/agent_platform/connector_api.py",
+      "line": 57
+    },
+    {
+      "file": "src/agent_platform/connector_api.py",
+      "line": 71
+    },
+    {
+      "file": "src/agent_platform/connector_runtime.py",
+      "line": 53
+    },
+    {
+      "file": "src/agent_platform/connector_runtime.py",
+      "line": 132
+    },
+    {
+      "file": "src/agent_platform/connector_runtime.py",
+      "line": 112
+    },
+    {
+      "file": "src/agent_platform/console_app.py",
+      "line": 56
+    },
+    {
+      "file": "src/agent_platform/console_app.py",
+      "line": 65
+    },
+    {
+      "file": "src/agent_platform/console_app.py",
+      "line": 72
+    },
+    {
+      "file": "src/agent_platform/db_scope.py",
+      "line": 48
+    },
+    {
+      "file": "src/agent_platform/db_scope.py",
+      "line": 37
+    },
+    {
+      "file": "src/agent_platform/db_scope.py",
+      "line": 63
+    },
+    {
+      "file": "src/agent_platform/db_scope.py",
+      "line": 34
+    },
+    {
+      "file": "src/agent_platform/delegation.py",
+      "line": 87
+    },
+    {
+      "file": "src/agent_platform/delegation.py",
+      "line": 68
+    },
+    {
+      "file": "src/agent_platform/email_api.py",
+      "line": 71
+    },
+    {
+      "file": "src/agent_platform/email_api.py",
+      "line": 92
+    },
+    {
+      "file": "src/agent_platform/email_api.py",
+      "line": 103
+    },
+    {
+      "file": "src/agent_platform/email_delivery.py",
+      "line": 148
+    },
+    {
+      "file": "src/agent_platform/email_service.py",
+      "line": 35
+    },
+    {
+      "file": "src/agent_platform/email_service.py",
+      "line": 77
+    },
+    {
+      "file": "src/agent_platform/email_service.py",
+      "line": 122
+    },
+    {
+      "file": "src/agent_platform/event_webhooks.py",
+      "line": 43
+    },
+    {
+      "file": "src/agent_platform/event_webhooks.py",
+      "line": 63
+    },
+    {
+      "file": "src/agent_platform/event_webhooks.py",
+      "line": 97
+    },
+    {
+      "file": "src/agent_platform/external_jobs.py",
+      "line": 37
+    },
+    {
+      "file": "src/agent_platform/external_jobs.py",
+      "line": 58
+    },
+    {
+      "file": "src/agent_platform/external_jobs.py",
+      "line": 86
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 64
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 150
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 187
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 250
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 207
+    },
+    {
+      "file": "src/agent_platform/feed_api.py",
+      "line": 237
+    },
+    {
+      "file": "src/agent_platform/feed_runtime.py",
+      "line": 39
+    },
+    {
+      "file": "src/agent_platform/feed_runtime.py",
+      "line": 72
+    },
+    {
+      "file": "src/agent_platform/feed_runtime.py",
+      "line": 90
+    },
+    {
+      "file": "src/agent_platform/feed_runtime.py",
+      "line": 59
+    },
+    {
+      "file": "src/agent_platform/integration_status.py",
+      "line": 22
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 64
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 112
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 233
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 279
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 319
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 355
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 372
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 166
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 246
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 203
+    },
+    {
+      "file": "src/agent_platform/local_onboarding.py",
+      "line": 107
+    },
+    {
+      "file": "src/agent_platform/local_onboarding.py",
+      "line": 206
+    },
+    {
+      "file": "src/agent_platform/memory_embeddings.py",
+      "line": 74
+    },
+    {
+      "file": "src/agent_platform/memory_embeddings.py",
+      "line": 89
+    },
+    {
+      "file": "src/agent_platform/memory_embeddings.py",
+      "line": 117
+    },
+    {
+      "file": "src/agent_platform/memory_worker.py",
+      "line": 18
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 157
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 175
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 206
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 236
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 243
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 280
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 319
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 331
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 368
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 400
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 447
+    },
+    {
+      "file": "src/agent_platform/memory_workflow.py",
+      "line": 460
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 60
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 124
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 145
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 158
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 167
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 206
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 227
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 259
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 273
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 280
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 287
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 293
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 248
+    },
+    {
+      "file": "src/agent_platform/meta_onboarding.py",
+      "line": 251
+    },
+    {
+      "file": "src/agent_platform/meta_webhook.py",
+      "line": 26
+    },
+    {
+      "file": "src/agent_platform/meta_webhook.py",
+      "line": 58
+    },
+    {
+      "file": "src/agent_platform/meta_webhook.py",
+      "line": 86
+    },
+    {
+      "file": "src/agent_platform/meta_webhook.py",
+      "line": 78
+    },
+    {
+      "file": "src/agent_platform/meta_webhook.py",
+      "line": 67
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 20
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 31
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 38
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 49
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 106
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 121
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 180
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 205
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 70
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 136
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 224
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 168
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 213
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 219
+    },
+    {
+      "file": "src/agent_platform/meta_worker.py",
+      "line": 80
+    },
+    {
+      "file": "src/agent_platform/provider_chain.py",
+      "line": 42
+    },
+    {
+      "file": "src/agent_platform/provider_chain.py",
+      "line": 68
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 13
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 20
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 26
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 33
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 41
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 51
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 61
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 68
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 79
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 88
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 96
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 104
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 118
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 142
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 149
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 155
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 164
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 195
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 201
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 206
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 213
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 220
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 226
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 249
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 255
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 262
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 269
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 275
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 127
+    },
+    {
+      "file": "src/agent_platform/repository.py",
+      "line": 173
+    },
+    {
+      "file": "src/agent_platform/research_tool.py",
+      "line": 59
+    },
+    {
+      "file": "src/agent_platform/retailer_browser.py",
+      "line": 129
+    },
+    {
+      "file": "src/agent_platform/retailer_browser.py",
+      "line": 162
+    },
+    {
+      "file": "src/agent_platform/retailer_browser.py",
+      "line": 194
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 40
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 56
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 72
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 85
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 93
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 102
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 127
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 135
+    },
+    {
+      "file": "src/agent_platform/retailer_browser_api.py",
+      "line": 146
+    },
+    {
+      "file": "src/agent_platform/reviewed_evidence.py",
+      "line": 70
+    },
+    {
+      "file": "src/agent_platform/sahayak_bridge.py",
+      "line": 33
+    },
+    {
+      "file": "src/agent_platform/server_retailer.py",
+      "line": 68
+    },
+    {
+      "file": "src/agent_platform/server_retailer.py",
+      "line": 96
+    },
+    {
+      "file": "src/agent_platform/server_retailer.py",
+      "line": 85
+    },
+    {
+      "file": "src/agent_platform/service_identity.py",
+      "line": 70
+    },
+    {
+      "file": "src/agent_platform/service_identity.py",
+      "line": 29
+    },
+    {
+      "file": "src/agent_platform/service_identity.py",
+      "line": 60
+    },
+    {
+      "file": "src/agent_platform/service_identity.py",
+      "line": 115
+    },
+    {
+      "file": "src/agent_platform/service_identity.py",
+      "line": 123
+    },
+    {
+      "file": "src/agent_platform/service_options.py",
+      "line": 43
+    },
+    {
+      "file": "src/agent_platform/service_options.py",
+      "line": 59
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 55
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 61
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 129
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 152
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 167
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 187
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 203
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 102
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 117
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 212
+    },
+    {
+      "file": "src/agent_platform/task_agent_api.py",
+      "line": 87
+    },
+    {
+      "file": "src/agent_platform/task_readiness.py",
+      "line": 26
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 24
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 44
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 50
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 63
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 77
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 93
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 142
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 149
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 164
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 195
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 217
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 286
+    },
+    {
+      "file": "src/agent_platform/task_store.py",
+      "line": 308
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 85
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 190
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 235
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 251
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 276
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 296
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 315
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 332
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 344
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 351
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 414
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 428
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 443
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 519
+    },
+    {
+      "file": "src/agent_platform/telephony.py",
+      "line": 513
+    },
+    {
+      "file": "src/agent_platform/telephony_speech.py",
+      "line": 50
+    },
+    {
+      "file": "src/agent_platform/telephony_speech.py",
+      "line": 71
+    },
+    {
+      "file": "src/agent_platform/telephony_speech.py",
+      "line": 111
+    },
+    {
+      "file": "src/agent_platform/telephony_speech.py",
+      "line": 132
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 195
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 272
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 284
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 349
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 413
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 321
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 367
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 486
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 511
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 523
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 555
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 570
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 601
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 266
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 304
+    },
+    {
+      "file": "src/agent_platform/telephony_tools.py",
+      "line": 373
+    },
+    {
+      "file": "src/agent_platform/voice_handoffs.py",
+      "line": 53
+    },
+    {
+      "file": "src/agent_platform/voice_handoffs.py",
+      "line": 81
+    },
+    {
+      "file": "src/agent_platform/voice_handoffs.py",
+      "line": 118
+    },
+    {
+      "file": "src/agent_platform/voice_handoffs.py",
+      "line": 146
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 109
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 191
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 254
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 296
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 342
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 366
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 408
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 427
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 570
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 186
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 548
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 352
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 528
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 563
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 109
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 253
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 280
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 290
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 315
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 340
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 364
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 378
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 396
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 408
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 448
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 467
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 481
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 503
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 536
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 554
+    },
+    {
+      "file": "src/agent_platform/whatsapp.py",
+      "line": 583
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 403
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 149
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 178
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 210
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 223
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 241
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 255
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 274
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 289
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 314
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 325
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 357
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 390
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 429
+    },
+    {
+      "file": "src/agent_platform/whatsapp_alerts.py",
+      "line": 426
+    },
+    {
+      "file": "src/agent_platform/whatsapp_console.py",
+      "line": 83
+    },
+    {
+      "file": "src/agent_platform/whatsapp_console.py",
+      "line": 131
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 210
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 92
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 116
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 127
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 138
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 161
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 170
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 187
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 240
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 41
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 50
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 160
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 170
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 221
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 67
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 127
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 81
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 89
+    },
+    {
+      "file": "src/agent_platform/whatsapp_worker.py",
+      "line": 153
+    },
+    {
+      "file": "src/agent_platform/worker_readiness.py",
+      "line": 16
+    },
+    {
+      "file": "src/agent_platform/worker_readiness.py",
+      "line": 45
+    },
+    {
+      "file": "src/agent_platform/workflow_runtime.py",
+      "line": 85
+    }
+  ],
+  "summary": {
+    "tables": 109,
+    "without_rls": 5,
+    "unclassified": 0
+  },
+  "note": "Classification is an inventory, not proof of runtime isolation. Connection sites require scope review."
+}

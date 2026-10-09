@@ -91,7 +91,14 @@ def drive(registry, callback=None):
     async def work():
         async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
             install(registry, pool)
-            return await callback(pool) if callback else await tick(TaskStore(pool), registry)
+            previous = [(a,a.pool) for a in registry.adapters.values() if hasattr(a,'pool')]
+            for adapter,_ in previous:
+                adapter.pool=pool
+            try:
+                return await callback(pool) if callback else await tick(TaskStore(pool), registry)
+            finally:
+                for adapter,original in previous:
+                    adapter.pool=original
     return asyncio.run(work())
 
 
@@ -260,7 +267,6 @@ def test_rate_limit_retry_after_and_send_probe_rejection(monkeypatch):
 
 
 def test_connector_rls_hides_other_owner_and_tenant(monkeypatch):
-    from psycopg.sql import SQL, Identifier
 
     from agent_platform.automation import scope
     with setup(monkeypatch) as (client, headers, key, registry, _probe):
@@ -268,11 +274,7 @@ def test_connector_rls_hides_other_owner_and_tenant(monkeypatch):
         row = sql('SELECT tenant_id,owner_id FROM chore_tasks WHERE id=%s', (task,))[0]
         async def verify(pool):
             async with pool.connection() as conn, conn.transaction():
-                role = Identifier('connector_rls_'+uuid4().hex[:12])
-                await conn.execute(SQL('CREATE ROLE {} NOLOGIN NOSUPERUSER NOBYPASSRLS').format(role))
-                await conn.execute(SQL('GRANT SELECT ON connector_check_state,connector_check_reports TO {}').format(role))
                 try:
-                    await conn.execute(SQL('SET LOCAL ROLE {}').format(role))
                     own = {'tenant': row['tenant_id'], 'app_id': key['app_id'], 'user': str(row['owner_id'])}
                     await scope(conn, own)
                     assert len(await (await conn.execute('SELECT * FROM connector_check_reports')).fetchall()) == 1
@@ -281,9 +283,7 @@ def test_connector_rls_hides_other_owner_and_tenant(monkeypatch):
                         assert not await (await conn.execute('SELECT * FROM connector_check_reports')).fetchall()
                         assert not await (await conn.execute('SELECT * FROM connector_check_state')).fetchall()
                 finally:
-                    await conn.execute('RESET ROLE')
-                    await conn.execute(SQL('DROP OWNED BY {}').format(role))
-                    await conn.execute(SQL('DROP ROLE {}').format(role))
+                    await scope(conn,worker=True)
         drive(registry, verify)
 
 

@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 from pydantic import Field, model_validator
 
 from .app_catalogue import policy
+from .db_scope import scope
 from .task_agents import Blueprint, digest, validate
 from .task_store import TaskStore
 from .tasks import Strict, TaskError
@@ -101,12 +102,6 @@ class PreferenceInput(Strict):
     expected_version: int = Field(default=0, ge=0)
 
 
-async def scope(conn, claims=None, *, worker=False):
-    for key, value in {'agent.worker': 'on' if worker else 'off',
-                       'agent.tenant': (claims or {}).get('tenant', ''),
-                       'agent.app': (claims or {}).get('app_id', ''),
-                       'agent.owner': (claims or {}).get('user', '')}.items():
-        await conn.execute('SELECT set_config(%s,%s,true)', (key, str(value)))
 
 
 def bounded(value, maximum=8000):

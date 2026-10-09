@@ -82,7 +82,7 @@ def test_app_credentials_scopes_rotation_and_event_replay(monkeypatch):
         asyncio.run(invalidate(primary))
         assert client.get('/v1/tasks', headers=headers()).status_code == 401
         assert client.post(f'/v1/tasks/{task}/cancel', headers=headers(writer)).status_code == 200
-        spec = client.get('/openapi.json').json()
+        spec = client.app.openapi()
         assert '/v1/tasks/{task_id}/stream' in spec['paths']
 
 

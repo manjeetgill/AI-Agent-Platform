@@ -1,0 +1,33 @@
+name: Platform tests
+on: [push, pull_request]
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        extras: [dev, 'dev,voice']
+    services:
+      postgres:
+        image: postgres:17-bookworm
+        env:
+          POSTGRES_DB: agent_platform_test
+          POSTGRES_PASSWORD: ci-disposable-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d agent_platform_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      AGENT_TEST_ADMIN_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/agent_platform_test
+      AGENT_TEST_DATABASE_URL: postgresql://postgres:ci-disposable-only@127.0.0.1:5432/agent_platform_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -e '.[${{ matrix.extras }}]'
+      - run: ruff check src scripts tests/python
+      - run: python scripts/test_restricted.py tests/python
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test browser-extension/*.test.mjs tests/node/*.test.mjs tests/javascript/*.test.mjs

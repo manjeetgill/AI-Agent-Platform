@@ -181,7 +181,12 @@ async def managed_config(pool, phone, app, owner=None):
         row = await (await conn.execute('SELECT * FROM meta_connections WHERE phone_id=%s', (phone,))).fetchone()
     if not row:
         from .whatsapp import connection
-        return connection(phone, app)
+        try:
+            return connection(phone, app)
+        except HTTPException as exc:
+            if exc.status_code==503:
+                raise HTTPException(404,'Business connection not found') from None
+            raise
     if str(row['app_id']) != str(app) or (owner and str(row['owner_id']) != str(owner)):
         raise HTTPException(404, 'Business connection not found')
     now = datetime.now(UTC)
@@ -231,7 +236,11 @@ async def serve():
 
     from psycopg.rows import dict_row
     from psycopg_pool import AsyncConnectionPool
-    async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], min_size=1,max_size=4,open=False,kwargs={'row_factory':dict_row}) as pool:
+
+    from .db_scope import worker_connection
+    async with AsyncConnectionPool(os.environ.get('AI_PLATFORM_WORKER_DATABASE_URL') or os.environ['AI_PLATFORM_DATABASE_URL'], configure=worker_connection, min_size=1,max_size=4,open=False,kwargs={'row_factory':dict_row}) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         while True:
             try:
                 await tick_onboarding(pool)

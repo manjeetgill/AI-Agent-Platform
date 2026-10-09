@@ -1,3 +1,5 @@
+from worker_pool import WorkerPool
+
 """Durable research integration: ownership, version pins and no duplicate provider calls."""
 import asyncio
 from contextlib import contextmanager
@@ -82,7 +84,12 @@ def invoke(client, headers, agent):
 
 
 def work(client, registry):
-    return client.portal.call(tick, TaskStore(client.app.state.repository.pool), registry)
+    for adapter in registry.adapters.values():
+        if hasattr(adapter,'pool'):
+            adapter.pool=WorkerPool()
+            if hasattr(adapter,'repo'):
+                adapter.repo.pool=adapter.pool
+    return client.portal.call(tick, TaskStore(WorkerPool()), registry)
 
 
 def test_automatic_research_report_idempotency_and_owner(monkeypatch):
@@ -128,7 +135,12 @@ def test_crash_after_report_commit_recovers_without_another_model_call(monkeypat
         class LostFinish(TaskStore):
             async def finish(self, *args, **kwargs):
                 return False  # Simulated process loss after provider/report commit, before task commit.
-        client.portal.call(tick, LostFinish(client.app.state.repository.pool), registry)
+        for adapter in registry.adapters.values():
+            if hasattr(adapter,'pool'):
+                adapter.pool=WorkerPool()
+            if hasattr(adapter,'repo'):
+                adapter.repo.pool=adapter.pool
+        client.portal.call(tick, LostFinish(WorkerPool()), registry)
         assert runtime.calls == 1
         sql("UPDATE chore_tasks SET lease_until=now()-interval '1 second' WHERE id=%s", (task['id'],))
         work(client, registry)  # Recovery schedules a status check.

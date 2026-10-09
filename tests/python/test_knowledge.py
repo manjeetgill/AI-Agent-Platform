@@ -1,3 +1,5 @@
+from worker_pool import WorkerPool
+
 """Knowledge isolation, indexing, citations, lifecycle and durable agent integration."""
 
 import asyncio
@@ -171,11 +173,11 @@ def test_knowledge_tool_runs_through_worker(monkeypatch):
                 headers=task_headers,
                 json={"idempotency_key": uuid4().hex},
             )
-            registry = knowledge.KnowledgeAnswer(client.app.state.repository.pool)
+            registry = knowledge.KnowledgeAnswer(WorkerPool())
             from agent_platform.tasks import Registry
 
             client.portal.call(
-                tick, TaskStore(client.app.state.repository.pool), Registry({"knowledge.answer": registry})
+                tick, TaskStore(WorkerPool()), Registry({"knowledge.answer": registry})
             )
             task = client.get("/v1/tasks/" + run.json()["id"], headers=task_headers).json()
             assert task["status"] == "DONE" and task["steps"][0]["result"]["citations"]

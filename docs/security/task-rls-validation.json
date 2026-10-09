@@ -1,0 +1,50 @@
+{
+  "disposable_database": true,
+  "production_changed": false,
+  "checks": [
+    {
+      "role": "api",
+      "tenant": null,
+      "worker_flag": false,
+      "rows_per_table": 0,
+      "passed": true
+    },
+    {
+      "role": "api",
+      "tenant": "one",
+      "worker_flag": false,
+      "rows_per_table": 1,
+      "passed": true
+    },
+    {
+      "role": "api",
+      "tenant": "two",
+      "worker_flag": false,
+      "rows_per_table": 1,
+      "passed": true
+    },
+    {
+      "role": "api",
+      "tenant": null,
+      "worker_flag": true,
+      "rows_per_table": 0,
+      "passed": true
+    },
+    {
+      "role": "worker",
+      "tenant": null,
+      "worker_flag": false,
+      "rows_per_table": 0,
+      "passed": true
+    },
+    {
+      "role": "worker",
+      "tenant": null,
+      "worker_flag": true,
+      "rows_per_table": 2,
+      "passed": true
+    }
+  ],
+  "cross_tenant_write_rejected": true,
+  "temporary_database_and_roles_removed": true
+}

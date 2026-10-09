@@ -509,24 +509,27 @@ def install_web_voice(app):
 
         history = []  # Per-call bounded memory; never shared or persisted as raw transcript.
 
+        from .db_scope import bound_identity, identity
+        media_claims = dict(identity.get() or claims)
         async def respond(text):
-            reply = await dialogue(pool, agent, call, text, history)
-            if reply["action"] == "continue":
-                history.extend(
-                    [{"role": "user", "text": text[:1500]}, {"role": "assistant", "text": reply["text"]}]
-                )
-                del history[:-8]
-            return reply
+            with bound_identity(media_claims):
+                reply = await dialogue(pool, agent, call, text, history)
+                if reply["action"] == "continue":
+                    history.extend(
+                        [{"role": "user", "text": text[:1500]}, {"role": "assistant", "text": reply["text"]}]
+                    )
+                    del history[:-8]
+                return reply
 
         async def ended():
-            sessions.pop(str(call["id"]), None)
-            history.clear()
-            async with pool.connection() as conn:
-                await conn.execute(
-                    "UPDATE web_voice_sessions SET state='ENDED',ended_at=now() WHERE id=%s AND state IN ('STARTING','ACTIVE')",
-                    (call["id"],),
-                )
-
+            with bound_identity(media_claims):
+                sessions.pop(str(call["id"]), None)
+                history.clear()
+                async with pool.connection() as conn:
+                    await conn.execute(
+                        "UPDATE web_voice_sessions SET state='ENDED',ended_at=now() WHERE id=%s AND state IN ('STARTING','ACTIVE')",
+                        (call["id"],),
+                    )
         media = None
         try:
             greeting = agent["greeting"]

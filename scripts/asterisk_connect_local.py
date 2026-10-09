@@ -7,13 +7,12 @@ import os
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
-from local import load
+from local import load, role_urls
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -137,7 +136,7 @@ async def connect(name):
     )
     if not gemini:
         raise SystemExit("Existing local Gemini key is missing")
-    url = urlunsplit(urlsplit(values["AI_PLATFORM_DATABASE_URL"])._replace(path="/agent_console"))
+    url = role_urls(console=True)['agent_worker']
     async with AsyncConnectionPool(url, open=False, kwargs={"row_factory": dict_row}) as pool:
         async with pool.connection() as conn:
             rows = await (

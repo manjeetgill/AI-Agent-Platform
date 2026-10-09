@@ -46,6 +46,8 @@ async def migrate():
             await connection.execute(source.decode())
             await connection.execute('INSERT INTO agent_schema_migrations(name,sha256) VALUES(%s,%s)',
                                      (path.name, digest))
+        # Runtime checks can read the manifest; only the migrator can change it.
+        await connection.execute('REVOKE INSERT,UPDATE,DELETE ON agent_schema_migrations FROM agent_runtime_api,agent_runtime_worker')
 
 
 if __name__ == '__main__':

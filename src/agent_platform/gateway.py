@@ -82,9 +82,13 @@ class FallbackProvider(NVIDIAProvider):
 
 
 class Gateway:
-    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True):
+    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True, allow_chain=True, pool=None):
         if max_attempts not in {1, 2}:
             raise ValueError("Gateway supports one or two attempts")
+        self.allow_chain = allow_chain
+        self.pool = pool
+        self.chain_attempt = False
+        self.pinned_model = None
         self.allow_fallback = allow_fallback
         self.max_attempts = max_attempts
         self.provider = provider
@@ -93,6 +97,8 @@ class Gateway:
         self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model
 
     def model_for(self, task):
+        if self.pinned_model:
+            return self.pinned_model
         try:
             routes = json.loads(os.environ.get('AI_MODEL_ROUTES', '{}'))
             model = routes.get(task, {}).get(self.provider.name)
@@ -140,7 +146,10 @@ class Gateway:
                   'Return only JSON matching this schema: ' + json.dumps(StrategyPlan.model_json_schema()))
         return await self.structured('research', policy, {'request': request}, StrategyPlan, lambda value: value)
 
-    async def structured(self, task, policy, data, schema, validator):
+    async def structured(self, task, policy, data, schema, validator, *, claims=None):
+        if self.allow_chain and os.environ.get("AI_MODEL_PROVIDER_CHAIN"):
+            from .provider_chain import execute
+            return await execute(self, task, policy, data, schema, validator, claims)
         model = self.model_for(task)
         # Bound serialized context before sending it to any provider or fallback.
         maximum = int(os.environ.get('AI_MODEL_MAX_CONTEXT_BYTES', '100000'))
@@ -157,6 +166,8 @@ class Gateway:
             for attempt in range(self.max_attempts):
                 try:
                     response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code in {429, 503} and self.chain_attempt:
+                        raise RunFailure("PROVIDER_BACKPRESSURE")
                     if response.status_code in {429, 503} and self.allow_fallback:
                         name = os.environ.get('AI_PLATFORM_FALLBACK_PROVIDER', '').strip()
                         key = os.environ.get('AI_PLATFORM_FALLBACK_API_KEY', '').strip()

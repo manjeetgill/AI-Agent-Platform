@@ -303,6 +303,29 @@ def install_automation(app, registry):
                     'limits': (await policy(conn, claims['app_id'])).model_dump(),
                     'estimated_cost': None, 'cost_basis': 'Provider billing rates are not configured; unknown is not zero.'}
 
+    @router.get('/usage/models')
+    async def model_usage(request: Request, days: int = Query(30, ge=1, le=366),
+                          authorization: str | None = Header(default=None)):
+        pool, claims = await context(request, authorization, 'tasks:read')
+        async with pool.connection() as conn, conn.transaction():
+            await scope(conn, claims)
+            rows = await (await conn.execute('''SELECT (created_at AT TIME ZONE 'UTC')::date AS day,
+                provider,model,count(*) AS calls,
+                count(*) FILTER(WHERE status='FAILED') AS failed_calls,
+                sum(total_tokens) AS reported_tokens,
+                count(*) FILTER(WHERE total_tokens IS NULL) AS calls_with_unknown_usage,
+                sum(estimated_cost) AS recorded_estimated_cost,
+                count(*) FILTER(WHERE estimated_cost IS NULL) AS calls_with_unknown_cost,
+                sum(latency_ms) AS latency_ms FROM platform_model_calls
+                WHERE app_id=%s AND owner_id=%s AND created_at>=now()-%s*interval '1 day'
+                GROUP BY 1,provider,model ORDER BY 1 DESC,provider,model LIMIT 1001''',
+                (claims['app_id'], claims['user'], days))).fetchall()
+        return {'source':'platform_model_calls (migration 039)', 'days':days, 'timezone':'UTC',
+                'rows':rows[:1000], 'truncated':len(rows)>1000,
+                'cost_currency':None,
+                'cost_basis':'Stored estimates only. Currency is not recorded in this schema; these are not provider invoices. Missing usage or costs remain null.',
+                'coverage':'Instrumented planning and adaptive-runtime calls only; not all speech, email or provider account spending.'}
+
     @router.post('/notifications/{notification_id}/read')
     async def mark_read(notification_id: UUID, request: Request, authorization: str | None = Header(default=None)):
         pool, claims = await context(request, authorization, 'tasks:write')
