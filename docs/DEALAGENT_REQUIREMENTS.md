@@ -57,5 +57,7 @@ Verification commands:
 - DealAgent tool package: 5 adapter tests; TypeScript checking passed.
 - Local `/assistant` and `/monitoring` pages returned HTTP 200.
 
-No public deployment, GitHub push, paid subscription, purchase, or external message
-was performed for this integration. Credentials remain in private local configuration.
+During the 8 October local implementation, no public deployment, GitHub push, paid
+subscription, purchase, or external message was performed. The 9 October platform
+deployment and successful live adaptive runtime check are recorded in
+[AI_AGENT_DEPLOYMENT.md](AI_AGENT_DEPLOYMENT.md). DealAgent itself remains local.
