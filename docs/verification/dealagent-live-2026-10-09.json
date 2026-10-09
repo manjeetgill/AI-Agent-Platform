@@ -1,0 +1,335 @@
+{
+  "checked_on": "2026-10-09",
+  "transport": "http",
+  "scope": "One configured product per retailer; worker-executed; no browser interaction, purchase or queue submission.",
+  "limitations": [
+    "Robots-gate failures on this pass do not include the robots response status; the collector may fail closed if robots is unreachable.",
+    "No delivery location was supplied or confirmed.",
+    "These are point-in-time probes, not entire-catalogue certification."
+  ],
+  "checks": [
+    {
+      "retailer": "blinkit",
+      "task_id": "4ed0fb13-d670-46df-bb00-9b23c77d0b6d",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:20:10.546Z",
+          "source_url": "https://blinkit.com/prn/amul-butter-100-g/prid/159",
+          "http_status": null,
+          "http_requests": 1,
+          "parser_version": "1.0.0",
+          "product_requests": 0,
+          "location_confirmed": false
+        },
+        "source": "blinkit",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "990e9b2d-0a32-4d4f-8ed7-c42c4003ee59",
+        "checked_at": "2026-10-09T07:50:10.586597+05:30",
+        "reason_code": "robots_restricted",
+        "next_check_at": "2026-10-09T07:52:10.586597+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "croma",
+      "task_id": "8d0f5c0f-85b2-4b1b-bf72-15767e17f266",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:06.952Z",
+          "source_url": "https://www.croma.com/lenovo-ideapad-slim-3-15amn8-amd-ryzen-5-thin-light-16gb-512gb-ssd-windows-11-home-15-6-inch-full-hd-tn-display-ms-office-home-2024-arctic-grey-1-62-kg-/p/323285",
+          "http_status": 403,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false
+        },
+        "source": "croma",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "f17d5716-9cca-4495-8f3f-4200bc61e058",
+        "checked_at": "2026-10-09T07:52:06.962234+05:30",
+        "reason_code": "http_403",
+        "next_check_at": "2026-10-09T07:56:06.962234+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "reliancedigital",
+      "task_id": "fab6c968-bd01-4576-a3cd-ccca7356ba5a",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:09.226Z",
+          "source_url": "https://www.reliancedigital.in/product/asus-tuf-a15-fa506ncg-hn200ws-gaming-laptop-amd-ryzen-7-7445hs16-gb512-gb-ssd4-gb-nvidia-geforce-rtxwindows-11microsoft-office-home-2024full-hd-3962-cm-156-inch-graphite-black-mel0pj-9345133",
+          "http_status": 200,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false
+        },
+        "source": "reliancedigital",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 70990.0,
+            "issues": [],
+            "usable": true,
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://www.reliancedigital.in/product/asus-tuf-a15-fa506ncg-hn200ws-gaming-laptop-amd-ryzen-7-7445hs16-gb512-gb-ssd4-gb-nvidia-geforce-rtxwindows-11microsoft-office-home-2024full-hd-3962-cm-156-inch-graphite-black-mel0pj-9345133",
+            "observed_at": "2026-10-09T02:22:09.226Z",
+            "unknown_fees": true,
+            "observation_id": "6e10d35b917637beba861c861e8572e2972a03ec5b05c727cfd33d77bad4c040"
+          }
+        ],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "a1e816b9-94d7-4f77-b963-1012911b02d3",
+        "checked_at": "2026-10-09T07:52:09.307769+05:30",
+        "reason_code": "live_product_observed",
+        "next_check_at": "2026-10-09T07:53:09.307769+05:30",
+        "evidence_issues": [],
+        "needs_attention": false,
+        "usable_evidence": true,
+        "recovery_options": [],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "vijaysales",
+      "task_id": "3a0349ab-4a33-47a9-bbd8-de112f2737b0",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:10.711Z",
+          "source_url": "https://www.vijaysales.com/p/261302/hp-victus-gaming-laptop-intel-core-i7-16gb-ram-512gb-ssd-15-6-inch-39-62-cm-fhd-display-6gb-nvidia-geforce-rtx-4050-graphics-windows-11-ms-office-15-fa2104tx",
+          "http_status": null,
+          "http_requests": 1,
+          "parser_version": "1.0.0",
+          "product_requests": 0,
+          "location_confirmed": false
+        },
+        "source": "vijaysales",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "6d876580-6198-40f3-ae97-ecdc8b113209",
+        "checked_at": "2026-10-09T07:52:10.750101+05:30",
+        "reason_code": "robots_restricted",
+        "next_check_at": "2026-10-09T07:56:10.750101+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "jiomart",
+      "task_id": "4a55c019-719d-4714-9cce-4d3b1748d713",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:12.065Z",
+          "source_url": "https://www.jiomart.com/p/groceries/amul-pasteurised-butter-500-g/490001392",
+          "http_status": null,
+          "http_requests": 1,
+          "parser_version": "1.0.0",
+          "product_requests": 0,
+          "location_confirmed": false
+        },
+        "source": "jiomart",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "2cf055e8-6862-40a3-8ed0-17ddba18d7b5",
+        "checked_at": "2026-10-09T07:52:12.106033+05:30",
+        "reason_code": "robots_restricted",
+        "next_check_at": "2026-10-09T07:56:12.106033+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "zepto",
+      "task_id": "dcb90cdb-cc81-4cb8-bf61-c81282ff5423",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:13.499Z",
+          "source_url": "https://www.zeptonow.com/pn/amul-fresh-cream/pvid/490c9d61-d19e-462d-9022-6e8b5a0a03da/",
+          "http_status": 202,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false
+        },
+        "source": "zepto",
+        "status": "CONFIGURATION_REQUIRED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "0b5a9f8f-8dbb-45d3-bd8f-e68bc473df39",
+        "checked_at": "2026-10-09T07:52:13.540657+05:30",
+        "reason_code": "javascript_shell",
+        "next_check_at": "2026-10-09T07:56:13.540657+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "configure",
+            "profile": null,
+            "summary": "Complete the approved connector configuration before testing again.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "instamart",
+      "task_id": "c0e8df11-7767-4c5d-acf2-6f726f10d9c8",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:15.194Z",
+          "source_url": "https://www.swiggy.com/instamart/p/amul-pasteurised-butter-7MXKNLXAT3",
+          "http_status": 202,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false
+        },
+        "source": "instamart",
+        "status": "CONFIGURATION_REQUIRED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "ab638a16-c3b6-41f1-b6ea-fa9c28de965e",
+        "checked_at": "2026-10-09T07:52:15.206154+05:30",
+        "reason_code": "javascript_shell",
+        "next_check_at": "2026-10-09T07:56:15.206154+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "configure",
+            "profile": null,
+            "summary": "Complete the approved connector configuration before testing again.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "bigbasket",
+      "task_id": "85233370-6068-48ed-8b28-232d4aaafcfa",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:22:16.640Z",
+          "source_url": "https://www.bigbasket.com/pd/104860/amul-butter-pasteurised-100-g-carton/",
+          "http_status": 403,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false
+        },
+        "source": "bigbasket",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "b522a383-cf9a-4922-b562-a637c0d930cc",
+        "checked_at": "2026-10-09T07:52:16.650319+05:30",
+        "reason_code": "http_403",
+        "next_check_at": "2026-10-09T07:56:16.650319+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    }
+  ]
+}

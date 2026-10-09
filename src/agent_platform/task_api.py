@@ -60,9 +60,16 @@ def install_tasks(app, actor, registry):
 
     @router.get('')
     async def listing(request: Request, authorization: str | None = Header(default=None),
-                      limit: int = Query(default=50, ge=1, le=100), before: UUID | None = None):
+                      limit: int = Query(default=50, ge=1, le=100), before: UUID | None = None,
+                      status: Literal['DRAFT', 'READY', 'RUNNING', 'WAITING_APPROVAL', 'WAITING_USER',
+                                      'PAUSED', 'OUTCOME_UNKNOWN', 'DONE', 'FAILED', 'CANCELLED'] | None = None):
         store, tenant, user = await context(request, authorization)
-        return await perform(store.page(tenant, user, limit=limit, before=before))
+        return await perform(store.page(tenant, user, limit=limit, before=before, status=status))
+
+    @router.get('/summary')
+    async def summary(request: Request, authorization: str | None = Header(default=None)):
+        store, tenant, user = await context(request, authorization)
+        return await perform(store.summary(tenant, user))
 
     @router.get('/{task_id}')
     async def detail(task_id: UUID, request: Request, authorization: str | None = Header(default=None)):

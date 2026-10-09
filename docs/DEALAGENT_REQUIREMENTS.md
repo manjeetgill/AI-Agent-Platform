@@ -57,6 +57,13 @@ Verification commands:
 - DealAgent tool package: 5 adapter tests; TypeScript checking passed.
 - Local `/assistant` and `/monitoring` pages returned HTTP 200.
 
+**9 October local follow-up:** A fresh live-model/worker run completed as task
+`976a2e3a-eb79-4a78-ac14-3806b45f65bc`, but the now-expanded catalogue tool returned
+accessories and speakers for the Samsung TV query. This is a DealAgent search
+relevance failure; the older three-offer result does not establish current shopping
+acceptance. Local server execution, lifecycle controls, diagnostic results, and the
+remaining consumer work are detailed in [RETAILER_BROWSER_RUNNER.md](RETAILER_BROWSER_RUNNER.md#local-only-integration-handoff--2026-10-09).
+
 During the 8 October local implementation, no public deployment, GitHub push, paid
 subscription, purchase, or external message was performed. The 9 October platform
 deployment and successful live adaptive runtime check are recorded in

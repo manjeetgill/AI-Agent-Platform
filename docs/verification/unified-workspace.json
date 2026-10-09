@@ -1,0 +1,23 @@
+{
+  "home": "http://127.0.0.1:4061/",
+  "pages_checked": [
+    "/",
+    "/workspace",
+    "/whatsapp",
+    "/whatsapp/create",
+    "/whatsapp/send",
+    "/whatsapp/refresh-token",
+    "/calling",
+    "/voice",
+    "/telephony",
+    "/memory",
+    "/connectors",
+    "/monitor",
+    "/monitor/email",
+    "/monitor/onboard"
+  ],
+  "same_origin_email_read_verified": true,
+  "app_connections_verified": true,
+  "original_tasks_available": true,
+  "tests_passed": 17
+}

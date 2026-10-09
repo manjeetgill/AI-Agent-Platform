@@ -388,9 +388,10 @@ def install_knowledge(app):
                 )
         except TaskError as exc:
             raise HTTPException(409, str(exc)) from None
-        except Exception:  # noqa: BLE001 -- sanitize provider failures
+        except Exception as exc:  # noqa: BLE001 -- sanitize provider failures
+            from .planning_errors import explanation
             raise HTTPException(
-                503, "Knowledge answer unavailable; use the same request key to check its outcome"
+                503, explanation(exc) + " Knowledge answer not confirmed; this request is not automatically retried."
             ) from None
 
     app.include_router(router)

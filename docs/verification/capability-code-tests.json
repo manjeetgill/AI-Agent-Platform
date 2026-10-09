@@ -1,0 +1,23 @@
+{
+  "checked_at": "2026-10-09T07:51:27.295684+00:00",
+  "full_suite": {
+    "passed": 373,
+    "failed": 0,
+    "database": "disposable local PostgreSQL"
+  },
+  "latest_targeted_suite": {
+    "passed": 30,
+    "failed": 0
+  },
+  "latest_unit_checks": {
+    "passed": 5,
+    "failed": 0
+  },
+  "lint": "passed for new implementation files",
+  "browser_visual_review": "Blocked by Chrome ERR_BLOCKED_BY_CLIENT; HTTP routes and shared navigation verified instead",
+  "live_evidence": [
+    "capability-pilot.json",
+    "whatsapp-credential-check.json"
+  ],
+  "external_email_or_call_test_performed": false
+}

@@ -40,3 +40,45 @@ def test_model_configuration_and_blank_reasoning_fallback(monkeypatch):
     assert model_configuration()['configured'] is True
     assert 'secret-test-key' not in str(model_configuration())
     assert Gateway(NVIDIAProvider('secret-test-key')).model_for('challenge') == 'configured-fast'
+
+
+@pytest.mark.parametrize('failed', ['api', 'worker'])
+def test_local_launcher_stops_companion_and_reports_stale_health(tmp_path, monkeypatch, failed):
+    spec = importlib.util.spec_from_file_location('platform_local', Path(__file__).parents[2] / 'scripts/local.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'STATE', tmp_path)
+    children = []
+
+    class Child:
+        def __init__(self, args, **kwargs):
+            self.name = 'worker' if args[2] == 'agent_platform.task_worker' else 'api'
+            self.stopped = self.name == failed
+            children.append(self)
+
+        def poll(self):
+            return 1 if self.stopped else None
+
+        def terminate(self):
+            self.stopped = True
+
+        def wait(self, timeout=None):
+            assert self.stopped
+
+    monkeypatch.setattr(module.subprocess, 'Popen', Child)
+    with pytest.raises(SystemExit, match=f'Local {failed} exited'):
+        module.supervise({'AI_DURABLE_TASKS': '1'})
+    assert len(children) == 2 and all(child.stopped for child in children)
+    assert module.service_status() == {'api': False, 'worker': False}
+    module.save(tmp_path / 'services.json', {'updated_at': module.time.time() - 60,
+                                           'running': {'api': True, 'worker': True}})
+    assert module.service_status() == {'api': False, 'worker': False}
+
+
+def test_local_launcher_lock_prevents_second_worker(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location('platform_local', Path(__file__).parents[2] / 'scripts/local.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(module, 'STATE', tmp_path)
+    with module.lifecycle_lock(), pytest.raises(SystemExit, match='already running'), module.lifecycle_lock():
+        pytest.fail('Second launcher acquired lock')

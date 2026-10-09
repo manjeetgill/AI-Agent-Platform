@@ -1,0 +1,107 @@
+{
+  "scope": "local platform execution; no public deployment",
+  "api": "http://127.0.0.1:4060",
+  "app_id": "7742ab96-2a78-4709-a276-b6fd85aa914c",
+  "model_worker": {
+    "task_id": "976a2e3a-eb79-4a78-ac14-3806b45f65bc",
+    "status": "DONE",
+    "usage": {
+      "tokens": 11529,
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b"
+    },
+    "tool": "dealagent.catalog_search",
+    "version": "2",
+    "arguments": {
+      "limit": 10,
+      "query": "Samsung TV",
+      "max_price": 60000.0
+    },
+    "attempts": 1,
+    "returned_products": 10,
+    "evidence_fields_present": true,
+    "shopping_acceptance": "FAILED_PRODUCT_RELEVANCE",
+    "reason": "DealAgent catalogue returned remotes and speakers instead of televisions",
+    "examples": [
+      {
+        "url": "https://www.amazon.in/dp/B0C1BY7PM8",
+        "price": 135.0,
+        "title": "Universal Remote Control For Samsung TV 3D LCD LED, Smart TV Remote Control Replacement, Compatible With All Samsung TVs, Model AA59-00786A",
+        "history": [
+          {
+            "date": "2026-10-09",
+            "price": 135.0
+          }
+        ],
+        "retailer": "amazon",
+        "fees_known": false,
+        "observed_at": "2026-10-09T02:04:28.010Z",
+        "availability": "in_stock",
+        "delivery_fee": null
+      },
+      {
+        "url": "https://www.amazon.in/dp/B0HM3VSVBX",
+        "price": 999.0,
+        "title": "Wireless Bluetooth Speaker for Samsung Rex 80 S5222R Boost Bass DJ SoundDrum Portable Home Audio Line in TV Supported USB FM AUX TF Handsfree Calling Connectivity Waterproof TG113 - (SH.J)",
+        "history": [
+          {
+            "date": "2026-10-09",
+            "price": 999.0
+          }
+        ],
+        "retailer": "amazon",
+        "fees_known": false,
+        "observed_at": "2026-10-09T02:06:12.633Z",
+        "availability": "in_stock",
+        "delivery_fee": null
+      }
+    ],
+    "retained_after_service_restart": true
+  },
+  "server_browser": {
+    "task_id": "90e961b1-b9c3-4ad6-a18a-cb8441a66996",
+    "status": "DONE",
+    "result": {
+      "probe": {
+        "requests": 2,
+        "transport": "server_browser",
+        "http_status": 202,
+        "failed_requests": 1,
+        "blocked_resources": 1,
+        "request_limit_reached": false
+      },
+      "source": "zepto",
+      "status": "CONFIGURATION_REQUIRED",
+      "evidence": [],
+      "connector": "retailer.observe",
+      "execution": "EXECUTED",
+      "report_id": "0a7b41a3-87a7-4b73-bf83-67b6cb9a9ff1",
+      "checked_at": "2026-10-09T09:17:48.004290+05:30",
+      "reason_code": "browser_resource_policy",
+      "next_check_at": "2026-10-09T09:21:48.004290+05:30",
+      "evidence_issues": [],
+      "needs_attention": true,
+      "usable_evidence": false,
+      "recovery_options": [
+        {
+          "action": "configure",
+          "profile": null,
+          "summary": "Complete the approved connector configuration before testing again.",
+          "setup_path": null
+        }
+      ],
+      "verification_mode": "live_source"
+    }
+  },
+  "verification": {
+    "database_runtime_tests": 107,
+    "local_lifecycle_tests": 5,
+    "node_tests": 27
+  },
+  "consumer_actions": [
+    "Fix category and accessory matching",
+    "Connect progress/results UI",
+    "Explicit local LAN/session policy for phone testing",
+    "Provide supported adapters or authorized feeds"
+  ]
+}

@@ -26,8 +26,8 @@ async def main():
                    'PYTHONPATH': str(ROOT / 'src')}
             await asyncio.to_thread(subprocess.run, [sys.executable, '-m', 'agent_platform.migrate'], env=env, cwd=ROOT, check=True)
             result = await asyncio.to_thread(subprocess.run, [sys.executable, '-m', 'pytest', '-q',
-                'tests/python/test_automation.py', 'tests/python/test_adaptive_runtime.py', 'tests/python/test_task_agents.py',
-                'tests/python/test_durable_tasks.py', 'tests/python/test_app_catalogue.py'], env=env, cwd=ROOT, check=False)
+                *(sys.argv[1:] or ['tests/python/test_email_delivery.py', 'tests/python/test_email_notifications.py', 'tests/python/test_local_onboarding.py', 'tests/python/test_local_monitor.py', 'tests/python/test_task_readiness.py', 'tests/python/test_server_retailer.py', 'tests/python/test_retailer_browser.py', 'tests/python/test_reviewed_evidence.py', 'tests/python/test_dealagent_live.py', 'tests/python/test_feed_connections.py', 'tests/python/test_connector_checks.py', 'tests/python/test_external_workflows.py', 'tests/python/test_automation.py', 'tests/python/test_adaptive_runtime.py', 'tests/python/test_task_agents.py',
+                'tests/python/test_durable_tasks.py', 'tests/python/test_app_catalogue.py'])], env=env, cwd=ROOT, check=False)
             return result.returncode
         finally:
             await conn.execute(SQL('DROP DATABASE {} WITH (FORCE)').format(Identifier(name)))

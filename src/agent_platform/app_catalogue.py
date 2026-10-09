@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -16,6 +17,8 @@ from .tasks import Strict, TaskError
 
 
 class Policy(Strict):
+    feed_requests_per_hour: int = Field(default=60, ge=0, le=10000)
+    connector_checks_per_hour: int = Field(default=60, ge=0, le=10000)
     planning_calls_per_day: int = Field(default=500, ge=0, le=100000)
     user_planning_calls_per_day: int = Field(default=50, ge=0, le=10000)
     max_plan_steps: int = Field(default=10, ge=1, le=30)
@@ -41,7 +44,7 @@ async def policy(conn, app_id):
     return Policy(**{key: row[key] for key in Policy.model_fields}) if row else Policy()
 
 
-async def configure(pool, registry, manifest):
+async def configure(pool, registry, manifest, *, connection=None):
     """Atomic replacement of app grants/policy; immutable, versioned built-in definitions."""
     if len(set(manifest.tools)) != len(manifest.tools) or not set(manifest.tools) <= registry.adapters.keys():
         raise TaskError('Manifest tools must be unique installed adapters')
@@ -51,15 +54,15 @@ async def configure(pool, registry, manifest):
         if len(template.blueprint.steps) > manifest.policy.max_plan_steps:
             raise TaskError('Template exceeds app step limit')
         validate(template.blueprint, registry, set(manifest.tools))
-    async with pool.connection() as conn, conn.transaction():
+    async with (pool.connection() if connection is None else nullcontext(connection)) as conn, conn.transaction():
         if not await (await conn.execute('SELECT id FROM platform_apps WHERE id=%s FOR UPDATE', (manifest.app_id,))).fetchone():
             raise TaskError('Provision the application before configuring it')
-        await conn.execute('''INSERT INTO platform_app_policies(app_id,planning_calls_per_day,user_planning_calls_per_day,max_plan_steps,automation_runs_per_day)
-            VALUES(%s,%s,%s,%s,%s) ON CONFLICT(app_id) DO UPDATE SET planning_calls_per_day=excluded.planning_calls_per_day,
+        await conn.execute('''INSERT INTO platform_app_policies(app_id,planning_calls_per_day,user_planning_calls_per_day,max_plan_steps,automation_runs_per_day,connector_checks_per_hour,feed_requests_per_hour)
+            VALUES(%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(app_id) DO UPDATE SET planning_calls_per_day=excluded.planning_calls_per_day,
             user_planning_calls_per_day=excluded.user_planning_calls_per_day,max_plan_steps=excluded.max_plan_steps,
-            automation_runs_per_day=excluded.automation_runs_per_day''',
+            automation_runs_per_day=excluded.automation_runs_per_day,connector_checks_per_hour=excluded.connector_checks_per_hour,feed_requests_per_hour=excluded.feed_requests_per_hour''',
             (manifest.app_id, manifest.policy.planning_calls_per_day, manifest.policy.user_planning_calls_per_day,
-             manifest.policy.max_plan_steps, manifest.policy.automation_runs_per_day))
+             manifest.policy.max_plan_steps, manifest.policy.automation_runs_per_day, manifest.policy.connector_checks_per_hour, manifest.policy.feed_requests_per_hour))
         await conn.execute('DELETE FROM platform_tool_grants WHERE app_id=%s', (manifest.app_id,))
         for tool in manifest.tools:
             await conn.execute('INSERT INTO platform_tool_grants(app_id,tool) VALUES(%s,%s)', (manifest.app_id, tool))

@@ -1,5 +1,7 @@
 """Reviewed, durable template sends. No retry after a possibly accepted dispatch."""
 import asyncio
+import hashlib
+import hmac
 import re
 from datetime import UTC, datetime
 from typing import Literal
@@ -39,11 +41,22 @@ async def graph(config, resource, *, method='GET', payload=None):
     if not re.fullmatch(r'\d{5,30}(/message_templates|/messages)?', resource):
         raise HTTPException(422, 'Invalid WhatsApp resource')
     try:
+        params = {'limit': 100} if resource.endswith('/message_templates') else {}
+        if config.get('app_secret'):
+            params['appsecret_proof'] = hmac.new(config['app_secret'].encode(), config['access_token'].encode(), hashlib.sha256).hexdigest()
         async with httpx.AsyncClient(timeout=httpx.Timeout(12, connect=3)) as client:
             r = await client.request(method, f"https://graph.facebook.com/{config['graph_version']}/{resource}",
                 headers={'Authorization': 'Bearer '+config['access_token']}, json=payload,
-                params={'limit': 100} if resource.endswith('/message_templates') else None)
+                params=params)
         if r.status_code >= 400:
+            try:
+                code = r.json().get('error', {}).get('code')
+            except (ValueError, AttributeError):
+                code = None
+            if code == 190:
+                raise HTTPException(502, 'Meta access token is invalid or expired. Refresh this connection privately, then test it again.')
+            if r.status_code in {401, 403}:
+                raise HTTPException(502, 'Meta denied access. Check that this token is authorised for the connected business number.')
             raise HTTPException(502, 'Meta rejected the request. Check token, number permissions, template and verified recipient.')
         return r.json()
     except (httpx.HTTPError, ValueError):
@@ -92,6 +105,20 @@ def install_outbound(app):
         return {'sender': sender.get('display_phone_number', ''),
                 'name': sender.get('verified_name', ''), 'templates': await templates(config),
                 'webhook_verified': bool(channel['webhook_verified_at'])}
+
+    @router.post('/{channel_id}/connection-test')
+    async def check_connection(channel_id: UUID, request: Request):
+        pool, claims, channel = await context(request, channel_id)
+        config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
+        sender = await graph(config, channel['phone_id'])
+        if str(sender.get('id', '')) != channel['phone_id']:
+            raise HTTPException(502, 'Provider response did not identify the requested number; connection is unverified.')
+        async with pool.connection() as conn:
+            await audit(conn, channel_id, None, 'sender_credentials_checked', claims['principal'])
+        return {'credentials_checked': True, 'checked_at': datetime.now(UTC),
+                'webhook_verified': bool(channel['webhook_verified_at']),
+                'channel_enabled': channel['enabled'], 'message_sent': False,
+                'next_action': 'Verify the public webhook and test a real incoming message before relying on replies.'}
 
     @router.post('/{channel_id}/outbound', status_code=201)
     async def draft(channel_id: UUID, body: Draft, request: Request):

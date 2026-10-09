@@ -109,8 +109,9 @@ def install_task_agents(app, registry):
             return proposal
         except (TaskError, ValidationError, ValueError):
             raise HTTPException(422, 'Planner could not produce a valid plan for the permitted tools') from None
-        except (RunFailure, TimeoutError):
-            raise HTTPException(503, 'Planner unavailable; no agent was created') from None
+        except (RunFailure, TimeoutError) as exc:
+            from .planning_errors import explanation
+            raise HTTPException(503, explanation(exc) + ' No agent was created.') from None
         finally:
             from .automation import scope
             async with pool.connection() as conn, conn.transaction():

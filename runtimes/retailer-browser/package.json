@@ -1,0 +1,9 @@
+{
+  "name": "agent-platform-retailer-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional platform-owned Chromium runtime for public retailer observations",
+  "dependencies": {"playwright": "1.64.0"},
+  "engines": {"node": ">=22"}
+}

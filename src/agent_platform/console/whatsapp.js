@@ -33,6 +33,10 @@ function renderChannels() {
     for (const [ok,label] of checks) el('li',(ok?'✓ ':'○ ')+label,list);
     el('p','Webhook callback to enter in Meta:',box); el('code',(settings.public_url || 'https://YOUR-PUBLIC-PLATFORM-HOST')+'/webhooks/whatsapp/'+c.id,box);
     if (!settings.public_url) el('p','A public HTTPS deployment is still needed. Localhost cannot receive Meta webhooks. Set AI_PLATFORM_PUBLIC_URL on the server.',box,'muted');
+    action(box,'Check sender credentials (no message)',async()=>{
+      const result=await api('whatsapp/channels/'+c.id+'/connection-test','POST');
+      notice(result.credentials_checked?'Sender credentials checked. '+result.next_action:'Sender could not be verified.');
+    });
     const enable = action(box,c.enabled?'Pause automatic replies':'Activate automatic replies',async()=>{ await api('whatsapp/channels/'+c.id+'/activation','POST',{enabled:!c.enabled}); notice(c.enabled?'Automatic replies paused.':'Automatic replies activated for incoming customer messages.'); await loadSetup(); });
     if (!c.enabled) enable.disabled = !checks.every(([ok])=>ok);
     action(box,'Open inbox',async()=>{ $('inbox-channel').value=c.id; tab(true); await loadInbox(); });

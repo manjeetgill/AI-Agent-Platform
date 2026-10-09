@@ -1,6 +1,7 @@
 """Validated clinic choices rendered as native WhatsApp controls."""
 import re
 
+
 def interactive_reply(text, options):
     if options is None:
         return None

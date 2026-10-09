@@ -1,7 +1,8 @@
 """Platform-owned, bounded speech I/O for authorized telephone sessions.
 
 Gateways send PCM, receive WAV, and never receive model credentials. Reserve each
-speech turn before provider access. No raw input/output audio is persisted.
+speech turn before provider access. Local recognition uses private temporary
+audio deleted after each turn; no raw audio is kept in call records.
 """
 
 import asyncio

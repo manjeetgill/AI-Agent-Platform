@@ -142,7 +142,9 @@ def test_interactive_limits_and_long_text_fallback():
 
 @pytest.mark.parametrize('kind',['button_reply','list_reply'])
 def test_provider_taps_preserve_option_id_for_clinic_validation(monkeypatch,kind):
-    import hashlib,hmac,time
+    import hashlib
+    import hmac
+    import time
     with environment(monkeypatch) as (client,_,key,_):
         try:
             _,channel,_=setup(client,key,monkeypatch)

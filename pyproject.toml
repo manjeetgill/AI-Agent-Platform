@@ -24,7 +24,7 @@ dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-agent_platform = ["migrations/*.sql", "console/*.html", "console/*.js", "console/*.css", "public/*.html", "public/*.png"]
+agent_platform = ["migrations/*.sql", "console/*.html", "console/*.js", "console/*.mjs", "console/*.css", "public/*.html", "public/*.png", "probes/*.mjs"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

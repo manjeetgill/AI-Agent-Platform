@@ -1,0 +1,60 @@
+{
+  "checked_at": "2026-10-09T07:44:26.752444+00:00",
+  "checks": {
+    "setup": {
+      "planning": "CONFIGURATION_REQUIRED",
+      "whatsapp": "ACCESS_REQUIRED",
+      "whatsapp_calling": "ACCESS_REQUIRED",
+      "internet_voice": "CONFIGURATION_REQUIRED",
+      "telephone": "ACCESS_REQUIRED",
+      "email": "ACCESS_REQUIRED",
+      "email_tracking": "ACCESS_REQUIRED",
+      "knowledge": "CONFIGURATION_REQUIRED",
+      "feeds": "ACCESS_REQUIRED",
+      "schedules": "CONFIGURATION_REQUIRED",
+      "browser": "CONFIGURATION_REQUIRED"
+    },
+    "retrieval": {
+      "passed": true,
+      "document_id": "f5069da4-29ef-4b04-bb3e-ff52aded996e"
+    },
+    "planning": {
+      "passed": true,
+      "task_id": "d254d449-857b-4f0a-aa4f-6ba23c5da3f5",
+      "status": "DONE",
+      "usage": {
+        "tokens": 1684,
+        "provider": "nvidia",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b"
+      },
+      "results": [
+        {
+          "ranking": [
+            {
+              "name": "A",
+              "score": 8.0
+            },
+            {
+              "name": "B",
+              "score": 6.0
+            }
+          ],
+          "explanation": "Weighted average of the supplied scores, on a 0\u201310 scale. Equal scores are ties; names only determine display order. Results depend on your inputs and are not independently verified."
+        }
+      ]
+    },
+    "knowledge_answer": {
+      "passed": true,
+      "answer_id": "0af1c7b1-f480-48bf-8806-e6ffc52dc2d2",
+      "cited_fixture": true,
+      "expected_time_found": true,
+      "provider": "nvidia",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b"
+    }
+  },
+  "external_messages_sent": false,
+  "telephone_calls_placed": false,
+  "human_microphone_verified": false,
+  "app_id": "a64bf2d1-8e56-4836-96ab-b117e9b76606",
+  "synthetic_document_removed": true
+}

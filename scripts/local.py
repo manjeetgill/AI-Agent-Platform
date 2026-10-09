@@ -8,6 +8,8 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -103,6 +105,62 @@ def nvidia():
     print('Provider access will be verified by the first real agent run.')
 
 
+@contextmanager
+def lifecycle_lock():
+    """One local launcher; never kill processes belonging to another session."""
+    import fcntl
+    descriptor = os.open(STATE / 'services.lock', os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit('The local platform launcher is already running') from None
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def supervise(env):
+    """Stop the companion if either API or worker exits; leave saved tasks intact."""
+    children = {}
+    try:
+        children['api'] = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'agent_platform.app:app',
+            '--host', '127.0.0.1', '--port', '4060', '--no-access-log'], env=env, cwd=ROOT)
+        if env.get('AI_DURABLE_TASKS') == '1':
+            children['worker'] = subprocess.Popen([sys.executable, '-m', 'agent_platform.task_worker'],
+                                                 env=env, cwd=ROOT)
+        while True:
+            statuses = {name: child.poll() is None for name, child in children.items()}
+            save(STATE / 'services.json', {'updated_at': time.time(), 'running': statuses})
+            if not all(statuses.values()):
+                failed = next(name for name, running in statuses.items() if not running)
+                raise SystemExit(f'Local {failed} exited. Companion stopped; saved tasks remain. Restart with scripts/local.py start.')
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for child in children.values():
+            if child.poll() is None:
+                child.terminate()
+        for child in children.values():
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
+        save(STATE / 'services.json', {'updated_at': time.time(),
+                                     'running': {name: False for name in children}})
+
+
+def service_status():
+    try:
+        record = json.loads((STATE / 'services.json').read_text())
+        fresh = 0 <= time.time() - record['updated_at'] < 5
+        return {name: fresh and record['running'].get(name, False) for name in ('api', 'worker')}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {'api': False, 'worker': False}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['setup', 'start', 'status', 'nvidia', 'vision', 'stop-db'])
@@ -123,33 +181,26 @@ def main():
               values.get('AI_PLATFORM_NVIDIA_FAST_MODEL') else 'awaiting key and model ID'))
         try:
             with urlopen('http://127.0.0.1:4060/readiness', timeout=3) as response:
-                print('Platform: ' + json.load(response)['status'])
+                print('API/database: ' + json.load(response)['status'])
         except (URLError, TimeoutError):
-            print('Platform: stopped or not ready')
+            print('API/database: stopped or not ready')
+        print('Local supervisor: ' + ', '.join(name + (' running' if running else ' not confirmed')
+              for name, running in service_status().items()))
     elif args.command == 'stop-db':
         subprocess.run([pg('pg_ctl'), '-D', str(STATE / 'postgres'), '-m', 'fast', 'stop'], check=True)
     else:
-        database(values)
         # Local settings are explicit; do not inherit another app's provider key or model URL.
         env = {k: v for k, v in os.environ.items() if not k.startswith(('AI_', 'NVIDIA_'))}
         env.update(values)
         env['PYTHONPATH'] = str(ROOT / 'src')
-        subprocess.run([sys.executable, '-m', 'agent_platform.migrate'], env=env, cwd=ROOT, check=True)
-        print('Platform: http://127.0.0.1:4060. Ctrl-C stops the API; database and reports persist.', flush=True)
-        worker = subprocess.Popen([sys.executable, '-m', 'agent_platform.task_worker'], env=env, cwd=ROOT) if values.get('AI_DURABLE_TASKS') == '1' else None
-        try:
-            subprocess.run([sys.executable, '-m', 'uvicorn', 'agent_platform.app:app',
-                '--host', '127.0.0.1', '--port', '4060', '--no-access-log'], env=env, cwd=ROOT, check=True)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            if worker is not None:
-                worker.terminate()
-                try:
-                    worker.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    worker.kill()
-                    worker.wait()
+        with lifecycle_lock():
+            with socket.socket() as probe:
+                if probe.connect_ex(('127.0.0.1', 4060)) == 0:
+                    raise SystemExit('Port 4060 is occupied; stop its existing launcher first. Nothing changed.')
+            database(values)
+            subprocess.run([sys.executable, '-m', 'agent_platform.migrate'], env=env, cwd=ROOT, check=True)
+            print('Platform: http://127.0.0.1:4060. Ctrl-C stops API and worker; database and reports persist.', flush=True)
+            supervise(env)
 
 
 if __name__ == '__main__':

@@ -14,6 +14,27 @@ Legacy NRAIAlgo research endpoints remain app-specific; use the generic task API
 
 ## Persistent orchestration
 
+External tools can now return durable job acknowledgements and resume through
+bounded, read-only polling. `runtime.workflow` binds verified earlier results into
+version-pinned later actions, preserving exact SEND approvals. See
+[asynchronous jobs and workflows](docs/ASYNC_JOBS_AND_WORKFLOWS.md).
+
+Connector verification uses granted read-only adapters, persistent evidence reports,
+per-source cooldowns and app quotas through the same task worker and scheduler.
+See [connector checks](docs/CONNECTOR_CHECKS.md).
+
+[API/feed connections](docs/API_FEED_CONNECTIONS.md) add approved JSON feed profiles,
+encrypted API credentials, queued setup tests, bounded pagination/retries and a
+local setup screen at `/connectors`, including recovery instructions and bounded
+schedule review/activation. Approved alternative feeds are matched by application,
+tool and source. Reports distinguish unspecified, stored-observation and live-source
+verification; retailer live coverage still depends on the installed adapters.
+The optional [DealAgent live probe](docs/DEALAGENT_LIVE_CHECKS.md) has now checked
+the original eight remaining sources and recorded their actual access outcomes.
+[Reviewed browser evidence](docs/REVIEWED_BROWSER_EVIDENCE.md) provides a scoped
+manual fallback with immutable capture dates, location/variant warnings and
+explicit stored-observation provenance. It does not claim unattended collection.
+
 `AI_AUTOMATIONS=1` enables versioned agent manifests, lifecycle controls, approved
 time/event schedules, bounded conditions, structured preferences, model usage records,
 an in-app inbox and signed callbacks. The existing PostgreSQL task worker owns
@@ -39,6 +60,13 @@ python3 -m venv .venv
 ```
 
 Setup generates a private signing key and database password once. The launcher initializes its own PostgreSQL cluster on 55460, applies platform migrations and serves the API on 4060. It preserves reports and settings across restarts. Configuration is stored under ignored `.runtime/local/` with permissions 0600. It does not use the NRAIAlgo database.
+
+The optional [local task monitor](http://127.0.0.1:4060/monitor) shows tasks,
+results, readiness, recovery and usage for explicitly configured app connections.
+See [private monitor setup](docs/ORCHESTRATION_API.md#local-task-monitor).
+The [local app onboarding wizard](http://127.0.0.1:4060/monitor/onboard) creates
+scoped app connections with private credentials and a provider-free worker test;
+[enable and use onboarding](docs/ORCHESTRATION_API.md#local-application-onboarding-and-connection-tests).
 
 When ready to configure NVIDIA, use your own Terminal:
 
@@ -181,3 +209,45 @@ carrier route and a successful live test; outbound calls are not enabled by this
 ## Validated agent memory
 
 Provider-neutral memory now includes opt-in candidate capture, review, hybrid lexical/local semantic retrieval, task handoffs, outcome feedback, evaluation and consent-controlled dataset export. Open `/memory` in Agent Workspace. Apply migrations 030 and 031. See [Agent memory](docs/AGENT_MEMORY.md) and [backend app integration](examples/memory-integration/README.md). Actual model training is a separate reviewed operation; this workflow never starts a paid training job automatically.
+
+### Retailer checks for mobile and web apps
+
+See [Retailer browser runner](docs/RETAILER_BROWSER_RUNNER.md) for default server execution (`retailer.observe`), optional private Chrome pairing, worker recovery, and the remaining location/evidence limitations. End users do not need an extension for server checks. It is disabled unless `AI_RETAILER_BROWSER=1`; optional retailer access requires the user’s Chrome permission.
+
+### Shared transactional email
+
+The email phase adds an isolated application API, encrypted durable queue,
+versioned templates, explicit mock/Resend/Brevo/SMTP adapters and app/global usage caps.
+Start with mock mode; provider acceptance is never labelled inbox delivery.
+Authenticated Resend/Brevo callbacks track delivery separately and suppress
+permanent bounces, complaints and provider unsubscribe events within each app.
+See [email setup and API](docs/ORCHESTRATION_API.md#transactional-email-phase-1).
+Local read-only email activity is at `http://127.0.0.1:4060/monitor/email`.
+
+### Unified Agent Workspace
+
+Open `http://127.0.0.1:4061/` for the platform overview. Its shared navigation
+includes the agent builder, WhatsApp inbox/setup, WhatsApp calling, internet voice,
+telephone connections, memory/knowledge, API feeds, tasks/readiness, email and app
+connections. The original request editor and saved agents are at `/workspace`.
+
+The `/monitor` screens now open inside this workspace through a fixed loopback
+bridge to the operations API on port 4060. Both services must run for app monitoring
+and email. An operations outage shows an unavailable message while the other
+workspace screens remain accessible. This unifies navigation; it does not merge
+application identities, credentials or the console pilot database. Existing
+connections keep their scopes. No provider is activated by opening a capability.
+
+### Self-managed services
+
+The workspace's `/self-hosting` page shows offline speech and own-SMTP setup
+status, plus the existing direct Meta connection path. Apps keep the same API
+contracts. Offline speech uses operator-installed whisper.cpp and eSpeak NG;
+SMTP uses an operator-owned relay with TLS, durable queue limits and conservative
+handling of uncertain sends. No route is automatically switched or activated.
+See [self-hosted service setup](docs/SELF_HOSTED_SERVICES.md) for configuration,
+remaining hosting/Meta dependencies and verification limits.
+
+## Capability setup checklist
+
+Open <http://127.0.0.1:4061/setup> for app-scoped configuration gaps and next steps across planning, messaging, voice, email, knowledge and connectors. The checklist is read-only; live verification is separate. See [setup and verification](docs/CAPABILITY_SETUP.md).

@@ -18,7 +18,7 @@ def load_plugins(registry):
         if not isinstance(adapters, dict) or not adapters:
             raise TaskError('Tool plugin must return named adapters')
         for tool, adapter in adapters.items():
-            if not isinstance(tool, str) or not tool or len(tool) > 100 or tool in registry.adapters or tool in {'research.explain', 'browser.wikipedia_search', 'knowledge.answer', 'runtime.next'}:
+            if not isinstance(tool, str) or not tool or len(tool) > 100 or tool in registry.adapters or tool in {'research.explain', 'browser.wikipedia_search', 'knowledge.answer', 'runtime.next', 'runtime.workflow', 'runtime.connector_check', 'feed.read'}:
                 raise TaskError('Tool plugins cannot overwrite installed tools')
             if (not all(hasattr(adapter, field) for field in ('input_model', 'output_model', 'description', 'version', 'prepare', 'execute', 'reconcile'))
                     or adapter.risk not in {'READ', 'SEND', 'USER_ONLY'} or not 0 < adapter.timeout <= 30):

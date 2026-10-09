@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Setup checklist · Agent Workspace</title><link rel="stylesheet" href="/console/style.css"></head><body><main class="workspace-overview">
+<h1>Capability setup checklist</h1><p>See what is configured, what needs your input and what still needs a real test. Refreshing reads saved state; it does not send messages, place calls or use model credits.</p>
+<label>Application<select id="application"><option value="">Local operator workspace</option></select></label><button id="refresh">Refresh checklist</button>
+<p id="context">Setup links open the local operator screens. For a selected external app, configure it through its own scoped API or Connected apps; the links do not switch app identity.</p>
+<p id="status" role="status"></p><p id="error" role="alert" hidden></p><div id="checklist" class="capability-grid"></div>
+<p>Configuration does not certify end-to-end delivery. Provider authorization, number eligibility, domain verification and microphone permission are completed with the account owner. No credentials are displayed here.</p>
+</main><script src="/console/setup.js"></script></body></html>

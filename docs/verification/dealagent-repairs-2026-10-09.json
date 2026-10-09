@@ -1,0 +1,349 @@
+{
+  "automated_followups": [
+    {
+      "retailer": "vijaysales",
+      "task_id": "7616cdd6-fefb-46df-8f32-278f6e6d1d4a",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:36:45.353Z",
+          "source_url": "https://www.vijaysales.com/p/261302/hp-victus-gaming-laptop-intel-core-i7-16gb-ram-512gb-ssd-15-6-inch-39-62-cm-fhd-display-6gb-nvidia-geforce-rtx-4050-graphics-windows-11-ms-office-15-fa2104tx",
+          "http_status": 200,
+          "http_requests": 2,
+          "parser_version": "1.0.0",
+          "product_requests": 1,
+          "location_confirmed": false,
+          "robots_http_status": 200
+        },
+        "source": "vijaysales",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 150999.0,
+            "issues": [],
+            "usable": true,
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://www.vijaysales.com/p/261302/hp-victus-gaming-laptop-intel-core-i7-16gb-ram-512gb-ssd-15-6-inch-39-62-cm-fhd-display-6gb-nvidia-geforce-rtx-4050-graphics-windows-11-ms-office-15-fa2104tx",
+            "observed_at": "2026-10-09T02:36:45.353Z",
+            "unknown_fees": true,
+            "observation_id": "50d2e471d5b40c94ea7aac0c8495dcc496f0531b028067710366f37c61a1231d"
+          }
+        ],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "68515796-f62a-4d49-860e-18e588e1d532",
+        "checked_at": "2026-10-09T08:06:45.491614+05:30",
+        "reason_code": "live_product_observed",
+        "next_check_at": "2026-10-09T08:07:45.491614+05:30",
+        "evidence_issues": [],
+        "needs_attention": false,
+        "usable_evidence": true,
+        "recovery_options": [],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "zepto",
+      "task_id": "9aa2b515-a6b1-4cb8-b7e4-668f55f19304",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:40:08.562Z",
+          "source_url": "https://www.zepto.com/pn/amul-fresh-cream/pvid/490c9d61-d19e-462d-9022-6e8b5a0a03da",
+          "http_status": 202,
+          "http_requests": 2,
+          "parser_version": "1.0.1",
+          "product_requests": 1,
+          "location_confirmed": false,
+          "robots_http_status": 200
+        },
+        "source": "zepto",
+        "status": "CONFIGURATION_REQUIRED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "849daa04-f56c-448b-b22b-13da8440a4fb",
+        "checked_at": "2026-10-09T08:10:08.604155+05:30",
+        "reason_code": "javascript_shell",
+        "next_check_at": "2026-10-09T08:18:08.604155+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "configure",
+            "profile": null,
+            "summary": "Complete the approved connector configuration before testing again.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "instamart",
+      "task_id": "830844f4-39f5-4cea-aee2-f90087e12ac2",
+      "task_status": "DONE",
+      "result": {
+        "probe": {
+          "transport": "http",
+          "checked_at": "2026-10-09T02:40:10.681Z",
+          "source_url": "https://instamart.in/p/amul-pasteurised-butter-7MXKNLXAT3",
+          "http_status": 200,
+          "http_requests": 2,
+          "parser_version": "1.0.1",
+          "product_requests": 1,
+          "location_confirmed": false,
+          "robots_http_status": 200
+        },
+        "source": "instamart",
+        "status": "CONFIGURATION_REQUIRED",
+        "evidence": [],
+        "connector": "dealagent.live_probe",
+        "execution": "EXECUTED",
+        "report_id": "2b669d35-2095-4ad5-99b4-437fe6fdcaa3",
+        "checked_at": "2026-10-09T08:10:10.698451+05:30",
+        "reason_code": "location_required",
+        "next_check_at": "2026-10-09T08:18:10.698451+05:30",
+        "evidence_issues": [
+          "missing_observations"
+        ],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "configure",
+            "profile": null,
+            "summary": "Complete the approved connector configuration before testing again.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    }
+  ],
+  "reviewed_browser_tasks": [
+    {
+      "retailer": "croma",
+      "evidence_id": "3e86020ee30103aa71adfa8976a974679f54d0e66ad45bf74b43febdc816a2d8",
+      "task_id": "7f6053cc-2d33-48bc-879e-1df2c7d4abde",
+      "task_status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "3e86020ee30103aa71adfa8976a974679f54d0e66ad45bf74b43febdc816a2d8",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 67990.0,
+            "title": "Lenovo IdeaPad Slim 3 15AMN8",
+            "issues": [
+              "variant_conflict"
+            ],
+            "usable": false,
+            "variant": "16GB / 512GB SSD",
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://www.croma.com/lenovo-ideapad-slim-3-15amn8-amd-ryzen-5-thin-light-16gb-512gb-ssd-windows-11-home-15-6-inch-full-hd-tn-display-ms-office-home-2024-arctic-grey-1-62-kg-/p/323285",
+            "observed_at": "2026-10-09T02:39:22.754Z",
+            "unknown_fees": true,
+            "observation_id": "browser-20261009-croma",
+            "quality_issues": [
+              "variant_conflict"
+            ],
+            "location_required": false,
+            "location_confirmed": true
+          }
+        ],
+        "connector": "evidence.reviewed",
+        "execution": "EXECUTED",
+        "report_id": "a7251e30-5c95-4f3a-b48e-bc8cd8a792dc",
+        "checked_at": "2026-10-09T08:15:01.268823+05:30",
+        "reason_code": "operator_reviewed_browser_observation",
+        "next_check_at": "2026-10-09T08:16:01.268823+05:30",
+        "evidence_issues": [
+          "variant_conflict"
+        ],
+        "needs_attention": false,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "review_evidence",
+            "profile": null,
+            "summary": "Obtain a fresh authorized observation with the missing evidence fields. Unknown fees remain unknown.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "stored_observation"
+      }
+    },
+    {
+      "retailer": "jiomart",
+      "evidence_id": "665d269b4980944510e8c25de8d7b46b97355417b51e185e67a3a0498e85d4c0",
+      "task_id": "46887eb6-1f6c-40fe-ab82-a748d0505229",
+      "task_status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "665d269b4980944510e8c25de8d7b46b97355417b51e185e67a3a0498e85d4c0",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 62.0,
+            "title": "Amul Pasteurised Butter",
+            "issues": [
+              "variant_conflict"
+            ],
+            "usable": false,
+            "variant": "100 g",
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://www.jiomart.com/product/amul-pasteurised-butter-100-g-mffn7z-7537983",
+            "observed_at": "2026-10-09T02:40:20.541Z",
+            "unknown_fees": true,
+            "observation_id": "browser-20261009-jiomart",
+            "quality_issues": [
+              "variant_conflict"
+            ],
+            "location_required": true,
+            "location_confirmed": true
+          }
+        ],
+        "connector": "evidence.reviewed",
+        "execution": "EXECUTED",
+        "report_id": "02a81ba2-9c12-4690-aa70-b99853ae22eb",
+        "checked_at": "2026-10-09T08:15:02.309932+05:30",
+        "reason_code": "operator_reviewed_browser_observation",
+        "next_check_at": "2026-10-09T08:16:02.309932+05:30",
+        "evidence_issues": [
+          "variant_conflict"
+        ],
+        "needs_attention": false,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "review_evidence",
+            "profile": null,
+            "summary": "Obtain a fresh authorized observation with the missing evidence fields. Unknown fees remain unknown.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "stored_observation"
+      }
+    },
+    {
+      "retailer": "zepto",
+      "evidence_id": "dd85a7a759122f09f4eec9406caad395d43e56e6c2063f8e7caa5bb845cb16ab",
+      "task_id": "16b73c5d-8ff7-40a3-a509-56c17cb8feb7",
+      "task_status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "dd85a7a759122f09f4eec9406caad395d43e56e6c2063f8e7caa5bb845cb16ab",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 250.0,
+            "title": "Amul Fresh Cream",
+            "issues": [
+              "location_unconfirmed"
+            ],
+            "usable": false,
+            "variant": "1 L",
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://www.zepto.com/pn/amul-fresh-cream/pvid/490c9d61-d19e-462d-9022-6e8b5a0a03da",
+            "observed_at": "2026-10-09T02:40:20.541Z",
+            "unknown_fees": true,
+            "observation_id": "browser-20261009-zepto",
+            "quality_issues": [],
+            "location_required": true,
+            "location_confirmed": false
+          }
+        ],
+        "connector": "evidence.reviewed",
+        "execution": "EXECUTED",
+        "report_id": "ff94b1df-1160-41c2-9e66-8de2da21c408",
+        "checked_at": "2026-10-09T08:15:03.343788+05:30",
+        "reason_code": "operator_reviewed_browser_observation",
+        "next_check_at": "2026-10-09T08:16:03.343788+05:30",
+        "evidence_issues": [
+          "location_unconfirmed"
+        ],
+        "needs_attention": false,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "review_evidence",
+            "profile": null,
+            "summary": "Obtain a fresh authorized observation with the missing evidence fields. Unknown fees remain unknown.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "stored_observation"
+      }
+    },
+    {
+      "retailer": "instamart",
+      "evidence_id": "cf9e9180e076a027dfe8718b2cbe39e71cb121eff4d0b815fe760fa076f7cb5d",
+      "task_id": "8b4197f0-dd75-4753-b24a-d5e9e587ea89",
+      "task_status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "cf9e9180e076a027dfe8718b2cbe39e71cb121eff4d0b815fe760fa076f7cb5d",
+        "status": "WORKING",
+        "evidence": [
+          {
+            "price": 252.0,
+            "title": "Amul Pasteurised Butter",
+            "issues": [
+              "variant_conflict",
+              "location_unconfirmed"
+            ],
+            "usable": false,
+            "variant": "100 g x 4",
+            "currency": "INR",
+            "fees_known": false,
+            "source_url": "https://instamart.in/p/amul-pasteurised-butter-7MXKNLXAT3",
+            "observed_at": "2026-10-09T02:40:20.541Z",
+            "unknown_fees": true,
+            "observation_id": "browser-20261009-instamart",
+            "quality_issues": [
+              "variant_conflict"
+            ],
+            "location_required": true,
+            "location_confirmed": false
+          }
+        ],
+        "connector": "evidence.reviewed",
+        "execution": "EXECUTED",
+        "report_id": "3efd4c56-7e26-4585-8ff4-af79d96b4e8b",
+        "checked_at": "2026-10-09T08:15:04.381102+05:30",
+        "reason_code": "operator_reviewed_browser_observation",
+        "next_check_at": "2026-10-09T08:16:04.381102+05:30",
+        "evidence_issues": [
+          "location_unconfirmed",
+          "variant_conflict"
+        ],
+        "needs_attention": false,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "review_evidence",
+            "profile": null,
+            "summary": "Obtain a fresh authorized observation with the missing evidence fields. Unknown fees remain unknown.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "stored_observation"
+      }
+    }
+  ],
+  "not_unattended_feeds": true,
+  "blocked_without_price": [
+    "blinkit",
+    "bigbasket"
+  ]
+}

@@ -12,12 +12,16 @@ import httpx
 
 def speech_provider():
     provider = os.environ.get('AI_CALLING_SPEECH_PROVIDER', 'gemini')
-    if provider not in {'gemini', 'sarvam'}:
+    if provider not in {'gemini', 'sarvam', 'local'}:
         raise ValueError('Unsupported speech provider')
     return provider
 
 
 def speech_key():
+    if speech_provider() == 'local':
+        from .local_speech import assets
+        assets()
+        return None  # Readiness check only; no secret or external service is needed.
     if speech_provider() == 'sarvam':
         from .sarvam_speech import key as sarvam_key
         return sarvam_key()
@@ -49,6 +53,9 @@ async def generate(model, payload):
 
 
 async def transcribe(pcm):
+    if speech_provider() == 'local':
+        from .local_speech import transcribe as offline_transcribe
+        return await offline_transcribe(pcm)
     if speech_provider() == 'sarvam':
         from .sarvam_speech import transcribe as sarvam_transcribe
         return await sarvam_transcribe(pcm)
@@ -128,7 +135,7 @@ async def local_speak(text):
     """Optional CPU speech fallback. Text goes to stdin, never a shell or process arguments."""
     voice = "hi" if re.search(r"[\u0900-\u097f]", text) else "en-in"
     process = await asyncio.create_subprocess_exec(
-        "espeak-ng",
+        os.environ.get('AI_LOCAL_TTS_BINARY', 'espeak-ng'),
         "--stdout",
         "-v",
         voice,
@@ -153,6 +160,8 @@ async def local_speak(text):
 
 
 async def speak(text):
+    if speech_provider() == 'local':
+        return await local_speak(text)
     if speech_provider() == 'sarvam':
         from .sarvam_speech import speak as sarvam_speak
         return await sarvam_speak(text)

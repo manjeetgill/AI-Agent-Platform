@@ -415,7 +415,7 @@ def install_whatsapp(app):
                     try:
                         from .sahayak_bridge import probe
                         await probe(row, pool=pool)
-                    except Exception:
+                    except Exception:  # noqa: BLE001 -- fail closed without exposing bridge credentials or errors
                         raise HTTPException(409, 'Sahayak clinic bridge must be configured and reachable before activation') from None
                 health = await (
                     await conn.execute(

@@ -1,6 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let revision=0, before=null, answerId=null;
+let documentCursor=null;
 async function api(path,method='GET',body){const r=await fetch('/console/api/'+path,{method,headers:{'Content-Type':'application/json','X-Console-Intent':'user-action'},body:body?JSON.stringify(body):undefined});const v=r.status===204?null:await r.json();if(!r.ok)throw Error(typeof v.detail==='string'?v.detail:JSON.stringify(v.detail||v));return v;}
 function run(fn){return async e=>{e?.preventDefault();$('error').hidden=true;const button=e?.submitter||e?.target;if(button?.tagName==='BUTTON')button.disabled=true;try{await fn(e);}catch(err){$('error').textContent=err.message;$('error').hidden=false;}finally{if(button?.tagName==='BUTTON')button.disabled=false;}};}
 function el(tag,text){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;}
@@ -18,3 +19,29 @@ $('index').onclick=run(async()=>{const r=await api('memory/index','POST',{});$('
 $('refresh').onclick=run(()=>refresh());$('more').onclick=run(()=>refresh(false));run(()=>refresh())();
 
 $('feedback').onsubmit=run(async()=>{const f=$('feedback').elements;await api('memory/feedback','POST',{request_key:crypto.randomUUID(),target_type:'answer',target_id:answerId,outcome:f.outcome.value,evidence_ref:f.evidence_ref.value,note:f.note.value});$('status').textContent='Outcome recorded.';await refresh();});
+
+async function documents(reset=true) {
+  if (reset) {documentCursor=null; $('documents').replaceChildren();}
+  const data=await api('knowledge/documents?limit=25'+(documentCursor?'&after='+encodeURIComponent(documentCursor):''));
+  for (const doc of data.documents) {
+    const row=el('section'); row.append(el('h3',doc.title),el('p',`${doc.visibility} · version ${doc.version} · ${doc.source_label}`));
+    row.append(button('Delete document',async()=>{
+      if (!confirm('Delete this document? Previous answers citing it will no longer be reusable.')) return;
+      await api('knowledge/documents/'+doc.id,'DELETE'); await documents();
+    })); $('documents').append(row);
+  }
+  documentCursor=data.next_after; $('documents-more').hidden=!documentCursor;
+}
+$('document').onsubmit=run(async()=>{
+  const f=$('document').elements;
+  const result=await api('knowledge/documents','POST',{external_id:f.external_id.value,title:f.title.value,
+    source_label:f.source_label.value,text:f.text.value,visibility:f.visibility.value});
+  $('status').textContent='Document saved and indexed. Version '+result.version+'.'; await documents();
+});
+$('retrieve').onsubmit=run(async()=>{
+  const result=await api('knowledge/search','POST',{question:$('retrieve').elements.question.value});
+  $('passages').textContent=result.passages.length?JSON.stringify(result.passages,null,2):'No matching passages. Add relevant documents or revise the question.';
+});
+$('documents-refresh').onclick=run(()=>documents());
+$('documents-more').onclick=run(()=>documents(false));
+run(()=>documents())();

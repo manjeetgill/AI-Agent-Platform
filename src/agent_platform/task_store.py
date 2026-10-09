@@ -3,10 +3,11 @@ from uuid import uuid4
 
 from psycopg.types.json import Jsonb
 
+from .external_jobs import ExternalJobs
 from .tasks import TaskError
 
 
-class TaskStore:
+class TaskStore(ExternalJobs):
     def __init__(self, pool, principal=None, app_id=None):
         self.pool = pool
         self.principal = principal
@@ -19,18 +20,31 @@ class TaskStore:
         from .agent_memory import snapshot
         await snapshot(conn, task, name)
 
-    async def page(self, tenant, user, *, limit=50, before=None):
+    async def page(self, tenant, user, *, limit=50, before=None, status=None):
         async with self.pool.connection() as conn, conn.transaction():
             boundary = ''
             params = [tenant, user]
+            if status is not None:
+                boundary += ' AND status=%s'
+                params.append(status)
             if before is not None:
                 cursor = await self.owned(conn, tenant, user, before)
-                boundary = ' AND (created_at,id)<(%s,%s)'
+                boundary += ' AND (created_at,id)<(%s,%s)'
                 params.extend([cursor['created_at'], cursor['id']])
-            rows = await (await conn.execute('''SELECT id,request,status,current_step,revision,created_at,updated_at
-                FROM chore_tasks WHERE tenant_id=%s AND owner_id=%s''' + boundary +
+            rows = await (await conn.execute('''SELECT id,request,status,current_step,revision,created_at,updated_at,lease_until,
+                (SELECT count(*) FROM chore_steps s WHERE s.task_id=t.id) AS total_steps,
+                (SELECT tool FROM chore_steps s WHERE s.task_id=t.id AND s.position=t.current_step) AS current_tool,
+                (SELECT summary FROM chore_steps s WHERE s.task_id=t.id AND s.position=t.current_step) AS current_summary,
+                (SELECT available_at FROM chore_jobs j WHERE j.task_id=t.id) AS next_attempt_at
+                FROM chore_tasks t WHERE tenant_id=%s AND owner_id=%s''' + boundary +
                 ' ORDER BY created_at DESC,id DESC LIMIT %s', (*params, limit + 1))).fetchall()
             return {'tasks': rows[:limit], 'next_cursor': str(rows[limit-1]['id']) if len(rows) > limit else None}
+
+    async def summary(self, tenant, user):
+        async with self.pool.connection() as conn:
+            rows = await (await conn.execute('''SELECT status,count(*) AS count FROM chore_tasks
+                WHERE tenant_id=%s AND owner_id=%s GROUP BY status''', (tenant, user))).fetchall()
+            return {'counts': {row['status']: row['count'] for row in rows}}
 
     async def events(self, tenant, user, task, after=0, limit=100):
         async with self.pool.connection() as conn, conn.transaction():
@@ -109,6 +123,10 @@ class TaskStore:
                                         (task, position))).fetchone()
         status = 'DONE' if step is None else {'READ': 'READY', 'SEND': 'WAITING_APPROVAL',
                                              'USER_ONLY': 'WAITING_USER'}[step['risk']]
+        if step and step['external_job_state'] == 'RUNNING':
+            await conn.execute('UPDATE chore_tasks SET current_step=%s,lease_token=NULL,lease_until=NULL WHERE id=%s', (position, task))
+            await self.queue(conn, task, mode='POLL')
+            return
         if step and step['outcome_pending']:
             status = 'OUTCOME_UNKNOWN'
         elif status == 'WAITING_USER':
@@ -151,7 +169,10 @@ class TaskStore:
                                             (task, row['current_step']))).fetchone()
             if command in {'pause', 'cancel'}:
                 uncertain = bool(step and (step['outcome_pending'] or row['status'] == 'OUTCOME_UNKNOWN' or (
-                    row['status'] in {'RUNNING', 'WAITING_USER'} and step['risk'] != 'READ')))
+                    row['status'] in {'RUNNING', 'WAITING_USER'} and step['risk'] != 'READ' and not step['external_job_reference'])))
+                if command == 'cancel' and step and step['external_job_reference']:
+                    await conn.execute("UPDATE chore_steps SET external_job_state='DETACHED' WHERE task_id=%s AND position=%s", (task, row['current_step']))
+                    await self.event(conn, task, 'JOB_DETACHED', {'remote_cancellation': False})
                 status = 'OUTCOME_UNKNOWN' if uncertain else ('PAUSED' if command == 'pause' else 'CANCELLED')
                 await conn.execute('''UPDATE chore_tasks SET status=%s,stop_requested=%s,
                     lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=%s''',
@@ -172,10 +193,15 @@ class TaskStore:
 
     async def recover(self):
         async with self.pool.connection() as conn, conn.transaction():
-            rows = await (await conn.execute('''SELECT t.id,t.current_step,s.risk,s.attempts FROM chore_tasks t
+            rows = await (await conn.execute('''SELECT t.id,t.current_step,s.risk,s.attempts,s.external_job_state FROM chore_tasks t
                 JOIN chore_steps s ON s.task_id=t.id AND s.position=t.current_step
                 WHERE t.status='RUNNING' AND t.lease_until<now() FOR UPDATE OF t SKIP LOCKED''')).fetchall()
             for row in rows:
+                if row['external_job_state'] == 'RUNNING':
+                    await conn.execute('UPDATE chore_tasks SET lease_token=NULL,lease_until=NULL WHERE id=%s', (row['id'],))
+                    await self.queue(conn, row['id'], mode='POLL', delay=1)
+                    await self.event(conn, row['id'], 'JOB_POLL_LEASE_RECOVERED')
+                    continue
                 retry = row['risk'] == 'READ' and row['attempts'] < 3
                 status = 'READY' if retry else ('FAILED' if row['risk'] == 'READ' else 'OUTCOME_UNKNOWN')
                 await conn.execute('''UPDATE chore_tasks SET status=%s,lease_token=NULL,lease_until=NULL,
@@ -197,19 +223,22 @@ class TaskStore:
             step = await (await conn.execute('SELECT * FROM chore_steps WHERE task_id=%s AND position=%s',
                                             (task['id'], task['current_step']))).fetchone()
             await conn.execute('DELETE FROM chore_jobs WHERE task_id=%s', (task['id'],))
-            if task['mode'] == 'RUN' and not await self.automation_allowed(conn, task['id']):
+            if task['mode'] in {'RUN', 'POLL'} and not await self.automation_allowed(conn, task['id']):
                 await conn.execute("UPDATE chore_tasks SET status='CANCELLED',updated_at=now() WHERE id=%s", (task['id'],))
+                if step['external_job_reference']:
+                    await conn.execute("UPDATE chore_steps SET external_job_state='DETACHED' WHERE task_id=%s AND position=%s", (task['id'], task['current_step']))
+                    await self.event(conn, task['id'], 'JOB_DETACHED', {'remote_cancellation': False})
                 await conn.execute('DELETE FROM chore_approvals WHERE task_id=%s AND consumed_at IS NULL', (task['id'],))
                 await self.event(conn, task['id'], 'AUTOMATION_REVOKED')
                 return None
-            if task['mode'] == 'RUN' and task['source_agent_id']:
+            if task['mode'] in {'RUN', 'POLL'} and task['source_agent_id']:
                 active = await (await conn.execute("SELECT 1 FROM task_agents WHERE id=%s AND status='ACTIVE'",
                                                    (task['source_agent_id'],))).fetchone()
                 if not active:
                     await conn.execute("UPDATE chore_tasks SET status='PAUSED',updated_at=now() WHERE id=%s", (task['id'],))
                     await self.event(conn, task['id'], 'AGENT_NOT_ACTIVE')
                     return None
-            if task['mode'] == 'RUN' and task['source_app_id'] and not await self.granted(
+            if task['mode'] in {'RUN', 'POLL'} and task['source_app_id'] and not await self.granted(
                     conn, task['source_app_id'], step['tool']):
                 await conn.execute("UPDATE chore_tasks SET status='PAUSED',updated_at=now() WHERE id=%s", (task['id'],))
                 await conn.execute('DELETE FROM chore_approvals WHERE task_id=%s AND consumed_at IS NULL', (task['id'],))
@@ -230,12 +259,21 @@ class TaskStore:
                 if not approval:
                     await self.next(conn, task['id'], task['current_step'])
                     return None
+            if task['mode'] == 'POLL':
+                valid = await (await conn.execute('SELECT external_job_deadline>now() AS timely FROM chore_steps WHERE task_id=%s AND position=%s', (task['id'], task['current_step']))).fetchone()
+                if not step['external_job_reference'] or step['external_job_state'] != 'RUNNING':
+                    await self.job_unknown(conn, task['id'], task['current_step'], 'UNAVAILABLE')
+                    return None
+                if not valid['timely'] or step['external_job_polls'] >= 120:
+                    await self.job_unknown(conn, task['id'], task['current_step'], 'TIMED_OUT')
+                    return None
+                await conn.execute('UPDATE chore_steps SET external_job_polls=external_job_polls+1 WHERE task_id=%s AND position=%s', (task['id'], task['current_step']))
             token = uuid4()
             await conn.execute('''UPDATE chore_tasks SET status='RUNNING',lease_token=%s,
                 lease_until=now()+interval '45 seconds',updated_at=now() WHERE id=%s''', (token, task['id']))
             await conn.execute("""UPDATE chore_steps SET status='RUNNING',attempts=attempts+1,
-                outcome_pending=outcome_pending OR risk<>'READ' WHERE task_id=%s AND position=%s""",
-                               (task['id'], task['current_step']))
+                outcome_pending=outcome_pending OR (risk<>'READ' AND %s<>'POLL') WHERE task_id=%s AND position=%s""",
+                               (task['mode'], task['id'], task['current_step']))
             await self.event(conn, task['id'], 'DISPATCHED', {'position': task['current_step'],
                 'attempt_id': str(token), 'mode': task['mode'], 'action_hash': step['action_hash']})
             return {**task, 'lease_token': token, 'step': step}
@@ -312,7 +350,8 @@ class TaskStore:
                             action_hash,summary,risk) VALUES(%s,%s,%s,%s,%s,%s,%s,%s)''',
                             (task['id'], task['current_step']+offset, action.tool, action.version,
                              Jsonb(action.arguments), action.digest, action.summary, action.risk))
-                await conn.execute("""UPDATE chore_steps SET status='DONE',outcome_pending=false,result=%s
+                await conn.execute("""UPDATE chore_steps SET status='DONE',outcome_pending=false,result=%s,
+                    external_job_state=CASE WHEN external_job_reference IS NOT NULL THEN 'SUCCEEDED' ELSE external_job_state END
                     WHERE task_id=%s AND position=%s""",
                                    (Jsonb(result), task['id'], task['current_step']))
                 await self.event(conn, task['id'], 'STEP_VERIFIED', {'position': task['current_step']})

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import secrets
+from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -12,20 +13,20 @@ from fastapi import HTTPException
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
-SCOPES = {'memory:read', 'memory:write', 'memory:review', 'calling:read', 'calling:write',
+SCOPES = {'services:read', 'services:write', 'notifications:read', 'notifications:send', 'memory:read', 'memory:write', 'memory:review', 'calling:read', 'calling:write',
           'telephony:read', 'telephony:write', 'channels:read', 'channels:write',
           'tasks:read', 'tasks:write', 'tasks:approve', 'agents:read', 'agents:write',
           'agents:run', 'knowledge:read', 'knowledge:write', 'knowledge:publish', 'alerts:send'}
 
 
-async def provision(pool, *, tenant, organisation, app_name, scopes, days=30, app_id=None):
+async def provision(pool, *, tenant, organisation, app_name, scopes, days=30, app_id=None, connection=None):
     """Trusted operator entry point. Return a credential once; persist only its digest."""
     if not scopes or not set(scopes) <= SCOPES or not 1 <= days <= 90:
         raise ValueError('Select supported scopes and a lifetime of 1–90 days')
     if not tenant or not organisation or not app_name:
         raise ValueError('Organisation and application names are required')
     key_id, secret = uuid4(), secrets.token_urlsafe(32)
-    async with pool.connection() as conn, conn.transaction():
+    async with (pool.connection() if connection is None else nullcontext(connection)) as conn, conn.transaction():
         if app_id:
             app = await (await conn.execute('SELECT id FROM platform_apps WHERE id=%s AND tenant_id=%s',
                                            (app_id, tenant))).fetchone()

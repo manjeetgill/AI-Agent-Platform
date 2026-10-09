@@ -81,7 +81,7 @@ class NextAction:
                 return Outcome(done=True, explanation='The configured tool-call limit was reached. Review the recorded results.').model_dump()
             grants = {r['tool'] for r in await (await conn.execute('SELECT tool FROM platform_tool_grants WHERE app_id=%s',
                                                                  (task['source_app_id'],))).fetchall()}
-            tools = [t for t in catalog(self.registry, grants) if t['tool'] != 'runtime.next']
+            tools = [t for t in catalog(self.registry, grants) if not t['tool'].startswith('runtime.')]
             if not tools:
                 return Outcome(done=True, explanation='No domain tools are currently granted.').model_dump()
             # Failed attempts count toward the same app/user planning allowance.
@@ -157,5 +157,23 @@ class NextAction:
 
 def install(registry, pool, gateway=None):
     import os
+
+    from .workflow_runtime import install as install_workflow
+    install_workflow(registry, pool)
+    from .connector_runtime import install as install_connectors
+    install_connectors(registry, pool)
+    from .feed_runtime import install as install_feeds
+    install_feeds(registry, pool)
+    from .flags import enabled
+    if enabled('AI_RETAILER_BROWSER'):
+        from .retailer_browser import RetailerBrowser, ServerRetailerBrowser
+        registry.adapters['browser.retailer_observe'] = RetailerBrowser(pool)
+        registry.adapters['retailer.observe'] = ServerRetailerBrowser(pool)
+    if os.environ.get('AI_REVIEWED_EVIDENCE_ROOT'):
+        from .reviewed_evidence import ReviewedEvidence
+        registry.adapters['evidence.reviewed'] = ReviewedEvidence(pool, registry)
+    if os.environ.get('DEALAGENT_PROBE_ROOT'):
+        from .dealagent_live import DealAgentLiveProbe
+        registry.adapters['dealagent.live_probe'] = DealAgentLiveProbe(registry)
     registry.adapters['runtime.next'] = NextAction(pool, registry,
         gateway or Gateway(NVIDIAProvider(os.environ.get('NVIDIA_API_KEY', '')), max_attempts=1))

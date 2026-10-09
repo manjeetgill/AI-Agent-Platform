@@ -1,0 +1,53 @@
+{
+  "checked_at": "2026-10-09T04:57:15.139680+00:00",
+  "scope": "local monitor, existing DealAgent connection",
+  "backend_tests_passed": 45,
+  "ui_logic_tests_passed": 4,
+  "ruff": "passed",
+  "diff_check": "passed",
+  "http_checks": [
+    {
+      "path": "/monitor",
+      "status": 200
+    },
+    {
+      "path": "/monitor/assets/monitor.js",
+      "status": 200
+    },
+    {
+      "path": "/monitor/assets/monitor-model.mjs",
+      "status": 200
+    },
+    {
+      "path": "/monitor/assets/monitor.css",
+      "status": 200
+    },
+    {
+      "path": "/monitor/connections",
+      "status": 200
+    },
+    {
+      "path": "/monitor/api/dealagent/tasks?limit=1",
+      "status": 200
+    },
+    {
+      "path": "/monitor/api/dealagent/tasks/summary",
+      "status": 200
+    },
+    {
+      "path": "/monitor/api/dealagent/integrations/task-readiness",
+      "status": 200
+    },
+    {
+      "path": "/monitor/api/dealagent/connectors/reports?limit=2&order=desc",
+      "status": 200
+    },
+    {
+      "path": "/monitor/api/dealagent/orchestration/usage",
+      "status": 200
+    }
+  ],
+  "visual_verification": "blocked: Chrome ERR_BLOCKED_BY_CLIENT; not claimed as visually verified",
+  "new_provider_calls": 0,
+  "deployment": "local only"
+}

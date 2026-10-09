@@ -9,16 +9,17 @@ from fastapi.responses import FileResponse, Response
 
 from .app import create_app
 from .service_identity import provision
+from .workspace_shell import install_bridge, page
 
 ASSETS = Path(__file__).with_name('console')
-PATH = re.compile(r'(?:(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents|ask)|voice/(capabilities|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
+PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness)|orchestration/automations(?:/[a-zA-Z0-9-]+(?:/(?:approve|runs))?)?|connectors/feeds(?:/(?:profiles|[a-zA-Z0-9-]+)(?:/(?:credentials|test))?)?|(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents(?:/[a-f0-9-]{36})?|ask|search)|voice/(capabilities|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
 
 
 def local(request, *, mutation=False):
     if request.client.host not in {'127.0.0.1', '::1', 'testclient'} or request.url.hostname not in {'127.0.0.1', 'localhost', 'testserver'}:
         raise HTTPException(403, 'Console is available only on this computer')
     origin = request.headers.get('origin')
-    if origin and origin != str(request.base_url).rstrip('/'):
+    if (origin and origin != str(request.base_url).rstrip('/')) or request.headers.get('sec-fetch-site')=='cross-site':
         raise HTTPException(403, 'Cross-origin access denied')
     if mutation and request.headers.get('x-console-intent') != 'user-action':
         raise HTTPException(403, 'Use the console to request this action')
@@ -29,6 +30,8 @@ def create_console(*, registry=None, app=None):
     from .decision_tool import default_registry
     registry = registry if registry is not None else default_registry()
     application = app or create_app(task_registry=registry)
+    from .self_hosting import install as install_self_hosting
+    install_self_hosting(application, local)
     prior = application.router.lifespan_context
 
     @asynccontextmanager
@@ -46,7 +49,7 @@ def create_console(*, registry=None, app=None):
             instance.state.console_credential = credential['credential']
             instance.state.console_app_id = credential['app_id']
             async with pool.connection() as conn:
-                for tool in ('decision.compare', 'weather.forecast'):
+                for tool in ('decision.compare', 'weather.forecast', 'knowledge.answer', *(['feed.read'] if 'feed.read' in registry.adapters else [])):
                     await conn.execute('INSERT INTO platform_tool_grants(app_id,tool) VALUES(%s,%s) ON CONFLICT DO NOTHING',
                                        (credential['app_id'], tool))
             try:
@@ -59,26 +62,37 @@ def create_console(*, registry=None, app=None):
     @application.get('/')
     async def home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'index.html', headers={'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('dashboard.html', '/')
+
+    @application.get('/setup')
+    async def setup_home(request: Request):
+        local(request)
+        return page('setup.html', '/setup')
+
+    @application.get('/workspace')
+    async def builder(request: Request):
+        local(request)
+        return page('index.html', '/workspace')
+
+    @application.get('/connectors')
+    async def feed_home(request: Request):
+        local(request)
+        return page('feeds.html', request.url.path)
 
     @application.get('/memory')
     async def memory_home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'memory.html', headers={'Cache-Control':'no-store',
-            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('memory.html', request.url.path)
 
     @application.get('/whatsapp')
     async def whatsapp_home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'whatsapp.html', headers={'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('whatsapp.html', request.url.path)
 
     @application.get('/whatsapp/create')
     async def whatsapp_customer(request: Request):
         local(request)
-        return FileResponse(ASSETS/'whatsapp-customer.html', headers={'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('whatsapp-customer.html', request.url.path)
 
     from .whatsapp_console import install_connection_form
     install_connection_form(application, local)
@@ -86,31 +100,27 @@ def create_console(*, registry=None, app=None):
     @application.get('/voice')
     async def voice_home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'voice.html', headers={'Cache-Control':'no-store',
-            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; form-action 'self'"})
+        return page('voice.html', request.url.path)
 
     @application.get('/telephony')
     async def telephony_home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'telephony.html', headers={'Cache-Control':'no-store',
-            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('telephony.html', request.url.path)
 
     @application.get('/calling')
     async def calling_home(request: Request):
         local(request)
-        return FileResponse(ASSETS/'calling.html', headers={'Cache-Control':'no-store',
-            'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('calling.html', request.url.path)
 
     @application.get('/whatsapp/send')
     async def whatsapp_send(request: Request):
         local(request)
-        return FileResponse(ASSETS/'whatsapp-send.html', headers={'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"})
+        return page('whatsapp-send.html', request.url.path)
 
     @application.get('/console/{asset}')
     async def asset(asset: str, request: Request):
         local(request)
-        if asset not in {'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'telephony.js'}:
+        if asset not in {'setup.js', 'workspace.css', 'feeds.js', 'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'telephony.js'}:
             raise HTTPException(404)
         return FileResponse(ASSETS/asset)
 
@@ -128,5 +138,6 @@ def create_console(*, registry=None, app=None):
                          'X-External-User-ID': 'operator', 'Content-Type': 'application/json'}, content=payload)
         return Response(response.content, status_code=response.status_code, media_type='application/json',
                         headers={'Cache-Control': 'no-store'})
+    install_bridge(application, local)
     install_browser(application, registry)
     return application

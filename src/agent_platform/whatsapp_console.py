@@ -12,6 +12,7 @@ from pydantic import Field, SecretStr
 
 from .tasks import Strict
 from .whatsapp import connection_configs
+from .workspace_shell import page
 
 
 class ConnectionForm(Strict):
@@ -34,10 +35,7 @@ def install_connection_form(app, local):
     @app.get('/whatsapp/refresh-token')
     async def refresh_page(request: Request):
         local(request)
-        return FileResponse(Path(__file__).with_name('console')/'whatsapp-token.html', headers={
-            'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'",
-        })
+        return page('whatsapp-token.html', request.url.path)
 
     @app.get('/console/whatsapp-token.js')
     async def refresh_script(request: Request):

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Agent Workspace Browser Runner",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minimum_chrome_version": "120",
-  "description": "Prepare approved Wikipedia searches. Never submits forms or enters secrets.",
+  "description": "Prepare approved searches and read product evidence on explicitly allowed retailer sites. No purchases or secrets.",
   "permissions": [
     "storage",
     "scripting",
@@ -30,5 +30,12 @@
       ],
       "run_at": "document_start"
     }
+  ],
+  "optional_host_permissions": [
+    "http://127.0.0.1:4060/*",
+    "https://www.croma.com/*",
+    "https://www.jiomart.com/*",
+    "https://www.zepto.com/*",
+    "https://instamart.in/*"
   ]
 }

@@ -55,6 +55,7 @@ def install_integration_status(app):
                 FROM channel_trial_policies WHERE app_id=%s''', (app_id,))).fetchone()
         return {
             'app_id': app_id,
+            'task_readiness_url': '/v1/integrations/task-readiness',
             'features_granted': enabled_features(claims['scopes']),
             'scopes': claims['scopes'],
             'components': {

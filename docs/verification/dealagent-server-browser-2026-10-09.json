@@ -1,0 +1,71 @@
+{
+  "transport": "server_browser",
+  "requires_customer_browser": false,
+  "environment": "local platform API and worker",
+  "checks": [
+    {
+      "retailer": "croma",
+      "task_id": "1d2c3137-7bd0-41fe-98fa-741b2c02ab1e",
+      "status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "croma",
+        "status": "BLOCKED",
+        "evidence": [],
+        "connector": "retailer.observe",
+        "execution": "EXECUTED",
+        "report_id": "f9c1ee22-9d1d-4ac2-9a49-57bc540773f0",
+        "checked_at": "2026-10-09T08:56:28.265413+05:30",
+        "reason_code": "browser_blocked",
+        "next_check_at": "2026-10-09T08:58:28.265413+05:30",
+        "evidence_issues": [],
+        "needs_attention": true,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "contact_provider",
+            "profile": null,
+            "summary": "Ask the source owner for an authorized API or export feed. Automatic checks remain stopped until access is resolved.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    },
+    {
+      "retailer": "zepto",
+      "task_id": "6f5918ad-abd3-483f-9395-928e7e1e7646",
+      "status": "DONE",
+      "result": {
+        "probe": null,
+        "source": "zepto",
+        "status": "BROKEN",
+        "evidence": [],
+        "connector": "retailer.observe",
+        "execution": "EXECUTED",
+        "report_id": "c2c26ceb-b147-45ec-8bde-2aff27cc7934",
+        "checked_at": "2026-10-09T08:57:48.006282+05:30",
+        "reason_code": "browser_page_changed",
+        "next_check_at": "2026-10-09T08:59:48.006282+05:30",
+        "evidence_issues": [],
+        "needs_attention": false,
+        "usable_evidence": false,
+        "recovery_options": [
+          {
+            "action": "repair_adapter",
+            "profile": null,
+            "summary": "Review the adapter and its response mapping before retrying. Do not treat this result as price evidence.",
+            "setup_path": null
+          }
+        ],
+        "verification_mode": "live_source"
+      }
+    }
+  ],
+  "limitations": [
+    "Croma denied server access; automatic rechecks stopped.",
+    "Zepto did not expose parseable product evidence in the isolated server renderer.",
+    "No source price was accepted from these two checks.",
+    "Public deployment is not part of this verification."
+  ]
+}

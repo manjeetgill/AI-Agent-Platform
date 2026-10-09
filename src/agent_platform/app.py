@@ -386,6 +386,20 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     from .integration_status import install_integration_status
     install_business_workspaces(app)
     install_integration_status(app)
+    from .service_options import install as install_service_options
+    install_service_options(app)
+    from .task_readiness import install as install_task_readiness
+    install_task_readiness(app, registry)
+    from .capability_readiness import install as install_capability_readiness
+    install_capability_readiness(app)
+    from .local_monitor import install as install_local_monitor
+    install_local_monitor(app)
+    from .connection_test import install as install_connection_test
+    from .local_onboarding import install as install_local_onboarding
+    install_local_onboarding(app, registry)
+    install_connection_test(app)
+    from .email_api import install as install_email
+    install_email(app)
     install_chakra_onboarding(app)
     from .meta_onboarding import install_onboarding
     from .meta_webhook import install_meta_webhook
@@ -400,6 +414,12 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_task_agents(app, registry)
     from .automation_api import install_automation
     install_automation(app, registry)
+    from .connector_api import install_connectors
+    install_connectors(app, registry)
+    from .retailer_browser_api import install as install_retailer_browser
+    install_retailer_browser(app)
+    from .feed_api import install_feeds
+    install_feeds(app, registry)
     return app
 
 

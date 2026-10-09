@@ -46,14 +46,18 @@ def digest(value):
 
 def catalog(registry, grants):
     return [{'tool': name, 'version': adapter.version, 'risk': adapter.risk,
+             'asynchronous': callable(getattr(adapter, 'poll', None)),
+             'health_check': adapter.risk == 'READ' and callable(getattr(adapter, 'health_check', None)),
              'description': adapter.description, 'input_schema': adapter.input_model.model_json_schema(),
-             'output_schema': adapter.output_model.model_json_schema()}
+             'output_schema': adapter.output_model.model_json_schema(),
+             **({'execution_location':adapter.executor,'requires_customer_browser':adapter.executor=='paired_browser'}
+                if name in {'retailer.observe','browser.retailer_observe'} else {})}
             for name, adapter in registry.adapters.items() if name in grants
             and all(hasattr(adapter, key) for key in ('description', 'input_model', 'output_model'))]
 
 
 def validate(blueprint, registry, grants, arguments=None):
-    if any(step.tool == 'runtime.next' for step in blueprint.steps) and len(blueprint.steps) != 1:
+    if any(step.tool in {'runtime.next', 'runtime.workflow'} for step in blueprint.steps) and len(blueprint.steps) != 1:
         raise TaskError('Adaptive runtime must be the only initial step')
     if arguments is not None and len(arguments) != len(blueprint.steps):
         raise TaskError('Provide one complete argument object per step')
@@ -66,6 +70,10 @@ def validate(blueprint, registry, grants, arguments=None):
             arguments=step.arguments if arguments is None else arguments[i]))
         if action.version != step.version:
             raise TaskError('Tool version changed; review and save a new agent')
+        if action.tool == 'runtime.workflow' and any(node['tool'] not in available for node in action.arguments['steps']):
+            raise TaskError('Workflow requires a domain tool that is not granted')
+        if action.tool == 'runtime.connector_check' and action.arguments['tool'] not in available:
+            raise TaskError('Connector check requires a granted domain tool')
         actions.append(action)
     return actions
 

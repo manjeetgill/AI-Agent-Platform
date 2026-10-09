@@ -71,6 +71,7 @@ class DecisionComparison:
 
 
 def default_registry():
+    from .connection_test import TOOL, ConnectionTest
     from .tool_plugins import load_plugins
     from .weather_tool import WeatherForecast
-    return load_plugins(Registry({'decision.compare': DecisionComparison(), 'weather.forecast': WeatherForecast()}))
+    return load_plugins(Registry({'decision.compare': DecisionComparison(), 'weather.forecast': WeatherForecast(), TOOL: ConnectionTest()}))
