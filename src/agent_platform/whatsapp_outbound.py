@@ -36,8 +36,8 @@ class BatchApproval(Approval):
 async def graph(config, resource, *, method='GET', payload=None):
     if config.get('provider') == 'chakra':
         # Never send a Chakra credential to Meta. Template catalogue integration
-        # is a separate gate; inbound session replies use the Chakra worker adapter.
-        raise HTTPException(409, 'Chakra template catalogue is not configured; use an inbound test conversation')
+        # has its own transport; inbound session replies use the Chakra worker adapter.
+        raise HTTPException(409, 'Use the configured Chakra transport for this connection')
     if not re.fullmatch(r'\d{5,30}(/message_templates|/messages)?', resource):
         raise HTTPException(422, 'Invalid WhatsApp resource')
     try:
@@ -63,7 +63,7 @@ async def graph(config, resource, *, method='GET', payload=None):
         raise HTTPException(503, 'Meta connection unavailable. Sending outcomes must be checked before retrying.') from None
 
 
-async def templates(config):
+async def template_options(config):
     waba = config.get('waba_id') or ''
     if not re.fullmatch(r'\d{5,30}', waba):
         raise HTTPException(503, 'Platform owner must complete WhatsApp business-account setup')
@@ -79,14 +79,19 @@ async def templates(config):
     for item in result.get('data', []):
         parts = item.get('components', [])
         # Pilot supports approved text-only templates without substitution parameters or buttons.
-        if item.get('status') != 'APPROVED' or not parts or not any(p.get('type') == 'BODY' for p in parts):
+        if item.get('status') not in {'APPROVED', 'PENDING'} or not parts or not any(p.get('type') == 'BODY' for p in parts):
             continue
         if any(p.get('type') not in {'HEADER', 'BODY', 'FOOTER'} or not p.get('text')
                or '{{' in p['text'] or (p.get('type') == 'HEADER' and p.get('format') != 'TEXT') for p in parts):
             continue
         available.append({key: item[key] for key in ('id', 'name', 'language')} |
-                         {'text': '\n\n'.join(p['text'] for p in parts)})
+                         {'text': '\n\n'.join(p['text'] for p in parts), 'status': item['status']})
     return available
+
+
+async def templates(config):
+    return [{k: v for k, v in t.items() if k != 'status'}
+            for t in await template_options(config) if t['status'] == 'APPROVED']
 
 
 def install_outbound(app):
@@ -116,8 +121,11 @@ def install_outbound(app):
                 raise HTTPException(503, 'WhatsApp number verification unavailable. Check the provider connection.') from None
         else:
             sender = await graph(config, channel['phone_id'])
+        options = await template_options(config)
+        approved = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'APPROVED']
+        pending = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'PENDING']
         return {'sender': sender.get('display_phone_number', ''),
-                'name': sender.get('verified_name', ''), 'templates': await templates(config),
+                'name': sender.get('verified_name', ''), 'templates': approved, 'pending_templates': pending,
                 'webhook_verified': bool(channel['webhook_verified_at'])}
 
     @router.post('/{channel_id}/connection-test')

@@ -20,6 +20,8 @@ def test_only_approved_static_templates_are_offered_for_review(monkeypatch):
 
     monkeypatch.setattr(chakra_client, 'list_templates', catalogue)
     monkeypatch.setattr(whatsapp_outbound, 'graph', forbidden)
+    options = asyncio.run(whatsapp_outbound.template_options({'provider': 'chakra', 'waba_id': '12345678'}))
+    assert [(t['id'], t['status']) for t in options] == [('123456', 'APPROVED'), ('123457', 'PENDING')]
     assert asyncio.run(whatsapp_outbound.templates({'provider': 'chakra', 'waba_id': '12345678'})) == [
         {'id': '123456', 'name': 'feedback', 'language': 'en', 'text': 'Reply FEEDBACK.'}]
 
