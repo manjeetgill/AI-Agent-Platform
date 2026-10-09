@@ -98,3 +98,46 @@ def test_uncertain_send_and_optout_are_not_retried(monkeypatch):
         finally:
             sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
             sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_session_notice_requires_real_open_chat_and_rechecks_before_send(monkeypatch):
+    from test_whatsapp import inbound
+    with environment(monkeypatch) as (client, _, key, _):
+        headers, channel, doc = setup(client, key, monkeypatch)
+        base='/v1/whatsapp/channels/'+channel['id']
+        body={'recipient':'919999000001','text':'DEMO: Your appointment is delayed by 15 minutes.','idempotency_key':uuid4().hex}
+        sent=[]
+        async def sender(config, phone, recipient, template):
+            sent.append(template)
+            return 'wamid.session-test'
+        try:
+            assert client.post(base+'/session-outbound',headers=headers,json=body).status_code==409
+            assert inbound(client,channel).status_code==200
+            row=client.post(base+'/session-outbound',headers=headers,json=body)
+            assert row.status_code==201,row.text
+            draft=row.json()
+            assert client.post(base+'/session-outbound',headers=headers,json=body).json()['id']==draft['id']
+            assert client.post(base+'/session-outbound',headers=headers,json={**body,'text':'Different'}).status_code==409
+            assert client.post(base+'/session-outbound',headers={**headers,'X-External-User-ID':'other'},json=body).status_code==404
+            assert not asyncio.run(run_tick(sender))
+            approve=base+'/outbound/'+draft['id']+'/approve'
+            assert client.post(approve,headers=headers,json={'confirm':True,'recipient_consented':True}).status_code==200
+            sql("UPDATE whatsapp_messages SET received_at=now()-interval '25 hours' WHERE conversation_id IN (SELECT id FROM whatsapp_conversations WHERE channel_id=%s)",(channel['id'],))
+            assert asyncio.run(run_tick(sender))
+            assert not sent
+            assert client.get(base+'/outbound',headers=headers).json()[0]['status']=='FAILED'
+            assert inbound(client,channel).status_code==200
+            body['idempotency_key']=uuid4().hex
+            draft=client.post(base+'/session-outbound',headers=headers,json=body).json()
+            assert client.post(base+'/outbound/'+draft['id']+'/approve',headers=headers,json={'confirm':True,'recipient_consented':True}).status_code==200
+            assert asyncio.run(run_tick(sender))
+            assert sent[0]['kind']=='session'
+            assert sent[0]['text']==body['text']
+            assert not asyncio.run(run_tick(sender))
+            for condition in ["mode='HUMAN'", "mode='AUTO',opted_out=true"]:
+                sql('UPDATE whatsapp_conversations SET '+condition+' WHERE channel_id=%s',(channel['id'],))
+                body['idempotency_key']=uuid4().hex
+                assert client.post(base+'/session-outbound',headers=headers,json=body).status_code==409
+        finally:
+            sql('DELETE FROM whatsapp_channels WHERE id=%s',(channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s',(doc['id'],))
