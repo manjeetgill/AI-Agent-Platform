@@ -27,7 +27,7 @@ def inspect(name):
 
 
 def private(path, data):
-    with path.open('w', opener=lambda name, flags: os.open(name, flags, 0o600)) as stream:
+    with open(path, 'w', opener=lambda name, flags: os.open(name, flags, 0o600)) as stream:
         stream.write(data)
     path.chmod(0o600)
 
@@ -77,7 +77,7 @@ def main():
             service.pop('build', None)
         private(backup/'rollback.compose.json', json.dumps(config))
         dump = backup/'database.dump'
-        with dump.open('wb', opener=lambda name, flags: os.open(name, flags, 0o600)) as stream:
+        with open(dump, 'wb', opener=lambda name, flags: os.open(name, flags, 0o600)) as stream:
             subprocess.run(['docker','exec','agent-platform-db-1','pg_dump','-U','postgres','-d','agent_platform','-Fc'], stdout=stream, check=True)
         proxy = Path('/opt/agent-platform/proxy/Caddyfile')
         private(backup/'Caddyfile', proxy.read_text())
