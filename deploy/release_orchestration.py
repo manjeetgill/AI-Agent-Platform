@@ -82,9 +82,9 @@ def main():
         proxy = Path('/opt/agent-platform/proxy/Caddyfile')
         private(backup/'Caddyfile', proxy.read_text())
         build = stage/'release-build'
-        build.mkdir()
+        build.mkdir(exist_ok=True)
         import shutil
-        shutil.copytree(stage/'src/agent_platform', build/'agent_platform')
+        shutil.copytree(stage/'src/agent_platform', build/'agent_platform', dirs_exist_ok=True)
         for path in build.rglob('*'):
             path.chmod(0o755 if path.is_dir() else 0o644)
         image = 'agent-platform:release-'+revision[:12]
@@ -93,7 +93,15 @@ def main():
             'LABEL org.opencontainers.image.revision="'+revision+'"\n')
         subprocess.run(['docker','build','--network=none','-t',image,str(build)],check=True)
         capture(['docker','run','--rm','--network=none',image,'python','-c',
-                 'from agent_platform import app, automation, adaptive_runtime, calling_worker, whatsapp_worker; import aiortc; print("imports valid")'])
+                 'from agent_platform import app, automation, adaptive_runtime, calling_worker, whatsapp_worker; print("imports valid")'])
+        # Voice has native media dependencies in a separate existing image.
+        voice_image = image+'-voice'
+        (build/'Dockerfile.voice').write_text('FROM '+live['voice-worker']['Config']['Image']+'\n'
+            'COPY agent_platform/ /usr/local/lib/python3.14/site-packages/agent_platform/\n'
+            'LABEL org.opencontainers.image.revision="'+revision+'"\n')
+        subprocess.run(['docker','build','--network=none','-f',str(build/'Dockerfile.voice'),'-t',voice_image,str(build)],check=True)
+        capture(['docker','run','--rm','--network=none',voice_image,'python','-c',
+                 'from agent_platform import calling_worker; import aiortc; print("voice imports valid")'])
         env = dict(config['services']['api']['environment'])
         env['AI_AUTOMATIONS'] = '1'
         if any('\n' in k or '\n' in v for k,v in env.items()):
@@ -104,6 +112,7 @@ def main():
                  'python','-m','agent_platform.migrate'])
         for name in SERVICES:
             config['services'][name]['image'] = image
+        config['services']['voice-worker']['image'] = voice_image
         for name in ['api','worker']:
             config['services'][name]['environment']['AI_AUTOMATIONS'] = '1'
         for key,value in env.items():
