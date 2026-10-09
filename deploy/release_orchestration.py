@@ -62,7 +62,7 @@ def main():
         live = {name: inspect(name) for name in SERVICES}
         labels = live['api']['Config']['Labels']
         files = labels['com.docker.compose.project.config_files'].split(',')
-        compose = ['docker', 'compose', '-p', 'agent-platform']
+        compose = ['docker', 'compose', '--profile', '*', '-p', 'agent-platform']
         for filename in files:
             compose += ['-f', filename]
         config = json.loads(capture(compose+['config', '--format', 'json']))
