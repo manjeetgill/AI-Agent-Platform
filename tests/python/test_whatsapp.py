@@ -133,6 +133,31 @@ def clean(key):
     sql("DELETE FROM whatsapp_dispatches WHERE message_id NOT IN (SELECT id FROM whatsapp_messages)")
 
 
+def test_expired_unknown_reply_stays_quarantined_without_blocking_new_messages(monkeypatch):
+    with environment(monkeypatch) as (client, _, key, _):
+        try:
+            _, channel, _ = setup(client, key, monkeypatch)
+            inbound(client, channel, mid='unknown-'+uuid4().hex)
+            old = rows(channel)[0]['id']
+            sql("UPDATE whatsapp_messages SET status='UNKNOWN' WHERE id=%s", (old,))
+            inbound(client, channel, mid='new-'+uuid4().hex)
+            assert not work()  # A recent uncertain attempt still needs reconciliation.
+            sql("UPDATE whatsapp_messages SET received_at=now()-interval '25 hours' WHERE id=%s", (old,))
+            assert work()
+            sent = []
+
+            async def sender(*args):
+                sent.append(True)
+                return 'wamid.'+uuid4().hex
+
+            assert work(sender=sender)
+            assert len(sent) == 1
+            assert next(r for r in rows(channel) if r['id'] == old)['status'] == 'UNKNOWN'
+            assert not work(sender=sender)
+        finally:
+            clean(key)
+
+
 def test_inbound_dedup_answer_and_send(monkeypatch):
     with environment(monkeypatch) as (client, _, key, _):
         try:

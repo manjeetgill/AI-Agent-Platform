@@ -54,7 +54,8 @@ async def tick(pool, model=None, sender=send):
             await conn.execute("""SELECT m.*, c.channel_id FROM whatsapp_messages m
             JOIN whatsapp_conversations c ON c.id=m.conversation_id
             WHERE m.status='PENDING' AND NOT EXISTS (SELECT 1 FROM whatsapp_messages busy
-                WHERE busy.conversation_id=c.id AND busy.status IN ('GENERATING','READY','SENDING','UNKNOWN'))
+                WHERE busy.conversation_id=c.id AND (busy.status IN ('GENERATING','READY','SENDING')
+                  OR (busy.status='UNKNOWN' AND busy.received_at>now()-interval '23 hours 55 minutes')))
             ORDER BY m.received_at,m.id FOR UPDATE OF c,m SKIP LOCKED LIMIT 1""")
         ).fetchone()
         if job:
