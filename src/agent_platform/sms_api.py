@@ -7,8 +7,9 @@ from .automation import scope
 from .email_config import digest, keys
 from .flags import enabled
 from .service_identity import authenticate
-from .sms_config import SMSRequest, api_key, config, global_limits
+from .sms_config import SMSRequest, api_key, config, effective_limits, global_limits
 from .sms_service import PUBLIC, counts, enqueue
+from .sms_traccar import diagnostic
 from .task_api import credential_contract
 
 
@@ -60,14 +61,16 @@ def install(app):
         try:
             settings=config(claims['app_id']);api_key(settings);keys();digest({})
             return {'configured':True, 'provider':settings.provider, 'mock':settings.provider=='mock',
-                    'limits':settings.limits.model_dump(), 'global_limits':global_limits().model_dump(),
+                    'limits':effective_limits(settings), 'global_limits':effective_limits(settings, global_limits()),
+                    'testing_no_volume_caps':settings.testing_no_volume_caps,
                     'limit_unit':'SMS segments', 'max_segments':settings.max_segments,
                     'delivery_confirmation_supported':False, 'automatic_fallback':False,
                     'next_action':'Run a mock queue test.' if settings.provider=='mock' else
-                        'Confirm provider authorisation and credits, then request one recipient-approved receipt test.',
+                        ('Keep the Android phone online, check the saved connection and request one allowed test message.' if settings.provider=='traccar_local' else
+                         'Confirm provider authorisation and credits, then request one recipient-approved receipt test.'),
                     'delivery_meaning':'Provider acceptance is not handset delivery. Automated delivery receipts are not configured.'}
         except (ValueError,TypeError,AttributeError):
-            return {'configured':False,'next_action':'Operator: configure this app, SMSIndiaHub key, sender header, PE ID, approved templates and private encryption keys.'}
+            return {'configured':False,'next_action':'Operator: configure a mock, authorised provider or Android pilot route with templates and private encryption keys.'}
 
     @router.get('/usage')
     async def usage(request: Request):
@@ -79,7 +82,7 @@ def install(app):
             statuses=await (await conn.execute('''SELECT status,count(*) AS count FROM notification_sms_jobs
                 WHERE app_id=%s AND owner_id=%s GROUP BY status''',(claims['app_id'],claims['user']))).fetchall()
         try:
-            limits=config(claims['app_id']).limits.model_dump()
+            limits=effective_limits(config(claims['app_id']))
         except (ValueError,TypeError,AttributeError):
             limits=None
         return {'app_requests':requests, 'app_attempts':attempts, 'user_statuses':{r['status']:r['count'] for r in statuses},
@@ -95,6 +98,8 @@ def install(app):
                 WHERE app_id=%s AND owner_id=%s AND (%s::uuid IS NULL OR (created_at,id)<
                 (SELECT created_at,id FROM notification_sms_jobs WHERE id=%s AND app_id=%s AND owner_id=%s))
                 ORDER BY created_at DESC,id DESC LIMIT %s''',(claims['app_id'],claims['user'],before,before,claims['app_id'],claims['user'],limit+1))).fetchall()
+            for row in rows:
+                row['diagnostic']=diagnostic(row['failure_code'])
             return {'messages':rows[:limit],'next_cursor':str(rows[limit-1]['id']) if len(rows)>limit else None}
 
     @router.get('/{sms_id}')
@@ -109,6 +114,9 @@ def install(app):
             row['history']=await (await conn.execute('''SELECT attempt,provider,started_at,finished_at,outcome,failure_code,http_status,provider_id,provider_job_id,segments
                 FROM notification_sms_attempts WHERE job_id=%s AND app_id=%s AND owner_id=%s ORDER BY attempt''',
                 (sms_id,claims['app_id'],claims['user']))).fetchall()
+            row['diagnostic']=diagnostic(row['failure_code'])
+            for attempt in row['history']:
+                attempt['diagnostic']=diagnostic(attempt['failure_code'])
             return row
 
     app.include_router(router)

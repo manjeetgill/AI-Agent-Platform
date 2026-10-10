@@ -116,7 +116,7 @@ def checklist(sources):
     sms = data('sms')
     add('sms', 'SMS notifications', ['sms'], sms.get('configured', False),
         'Mock mode sends no SMS. Provider acceptance does not verify handset delivery.',
-        ['Configure private SMSIndiaHub credentials, an authorised sender and approved DLT templates.',
+        ['Configure an authorised SMS provider or a private Android SIM pilot with allowed test recipients.',
          'Set segment limits, then verify one approved test on the recipient phone.'], '/monitor/sms',
         mock=sms.get('mock', False), evidence={'provider':sms.get('provider'), 'limits':sms.get('limits')})
     docs = rows('knowledge', 'documents')

@@ -8,6 +8,7 @@ import httpx
 from .email_providers import Outcome as BaseOutcome
 from .email_providers import retry_after
 from .sms_config import api_key
+from .sms_traccar import TraccarLocal
 
 
 @dataclass(frozen=True)
@@ -64,4 +65,4 @@ class SMSIndiaHub:
         return Outcome('ACCEPTED', provider_id=message, provider_job_id=job, http_status=status)
 
 
-ADAPTERS = {'mock':Mock(), 'smsindiahub':SMSIndiaHub()}
+ADAPTERS = {'mock':Mock(), 'smsindiahub':SMSIndiaHub(), 'traccar_local':TraccarLocal()}

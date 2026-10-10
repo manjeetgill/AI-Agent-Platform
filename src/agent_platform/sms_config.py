@@ -1,10 +1,12 @@
 """Per-application SMS routes. Credentials remain in server environment variables."""
 import hashlib
+import ipaddress
 import json
 import os
 import re
 from string import Formatter
 from typing import Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
@@ -35,26 +37,50 @@ class Template(Strict):
 
 
 class Config(Strict):
-    provider: Literal['mock', 'smsindiahub'] = 'mock'
+    provider: Literal['mock', 'smsindiahub', 'traccar_local'] = 'mock'
     key_env: str | None = Field(default=None, pattern=r'^[A-Z][A-Z0-9_]{1,100}$')
+    gateway_url: str | None = None
+    allow_lan_http: bool = False
+    sim_slot: int = Field(default=1, ge=1, le=3)
+    test_recipients: list[str] = Field(default_factory=list, max_length=10)
     sender_id: str | None = Field(default=None, pattern=r'^[A-Za-z]{6}$')
     pe_id: str | None = Field(default=None, pattern=r'^[0-9]{1,30}$')
     templates: dict[str, Template] = Field(min_length=1, max_length=30)
     limits: Limits = Field(default_factory=lambda: Limits(daily=10, monthly=100, per_minute=5))
+    testing_no_volume_caps: bool = False
     max_segments: int = Field(default=1, ge=1, le=10)
 
     @model_validator(mode='after')
     def validate_route(self):
+        if self.testing_no_volume_caps and self.provider != 'traccar_local':
+            raise ValueError('Uncapped testing is available only for an allowlisted Traccar pilot')
         if any(not re.fullmatch(r'[a-z][a-z0-9_]{0,59}', k) for k in self.templates):
             raise ValueError('Invalid template name')
         if self.provider == 'smsindiahub' and (not self.key_env or not self.sender_id or not self.pe_id
                 or any(not t.approved or not t.template_id for t in self.templates.values())):
             raise ValueError('Live SMS requires an authorised sender, PE ID and approved DLT templates')
+        if self.provider == 'traccar_local':
+            validate_gateway_url(self.gateway_url, self.allow_lan_http)
+            if not self.key_env or not self.test_recipients or self.max_segments != 1:
+                raise ValueError('Android pilot requires credentials, test recipients and single-segment messages')
+            if any(not re.fullmatch(r'91[6-9][0-9]{9}', n) for n in self.test_recipients):
+                raise ValueError('Test recipients must use 91 country code')
         return self
 
     @property
     def fingerprint(self):
-        return hashlib.sha256(json.dumps(self.model_dump(exclude={'limits'}), sort_keys=True).encode()).hexdigest()
+        excluded = {'limits', 'testing_no_volume_caps'}
+        if self.provider != 'traccar_local':
+            # Preserve fingerprints for existing queued mock/provider messages.
+            excluded |= {'gateway_url','allow_lan_http','sim_slot','test_recipients'}
+        return hashlib.sha256(json.dumps(self.model_dump(exclude=excluded), sort_keys=True).encode()).hexdigest()
+
+
+def effective_limits(settings, limits=None):
+    result = (limits or settings.limits).model_dump()
+    if settings.testing_no_volume_caps:
+        result.update(daily=None, monthly=None)
+    return result
 
 
 def config(app_id):
@@ -68,6 +94,8 @@ def api_key(settings):
     key = os.environ.get(settings.key_env or '', '')
     if settings.provider == 'smsindiahub' and (not key.strip() or any(c in key for c in '\r\n')):
         raise ValueError('SMS provider credential is missing')
+    if settings.provider == 'traccar_local':
+        traccar_key(settings)
     return key
 
 
@@ -106,6 +134,8 @@ def encoding(text):
 
 
 def render(body, settings):
+    if settings.provider == 'traccar_local' and body.to not in settings.test_recipients:
+        raise ValueError('Recipient is not enabled for this Android pilot')
     template = settings.templates.get(body.template)
     if not template or set(body.variables) != template.variables:
         raise ValueError('Template variables do not match the configured template')
@@ -119,3 +149,29 @@ def render(body, settings):
         raise ValueError('SMS exceeds configured segment limit')
     return {'to':body.to, 'message':message, 'dcs':dcs, 'segments':segments,
             'template_id':template.template_id, 'sender_id':settings.sender_id, 'pe_id':settings.pe_id}
+
+
+def validate_gateway_url(value, allow_http=False):
+    """Operator-configured LAN IPv4 only: no DNS, redirects, metadata or public hosts."""
+    try:
+        url = urlsplit(value or '')
+        ip = ipaddress.IPv4Address(url.hostname or '')
+        networks = ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')
+        if not any(ip in ipaddress.ip_network(n) for n in networks):
+            raise ValueError()
+        if url.scheme not in {'http', 'https'} or (url.scheme == 'http' and not allow_http):
+            raise ValueError()
+        if url.username or url.password or url.query or url.fragment or url.path not in {'', '/'}:
+            raise ValueError()
+        if not url.port:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise ValueError('Use a fixed LAN IPv4 gateway URL and explicitly acknowledge HTTP for a trusted LAN') from None
+    return value.rstrip('/')
+
+
+def traccar_key(settings):
+    key = os.environ.get(settings.key_env or '', '')
+    if not key or len(key) > 512 or any(ord(c) < 33 or ord(c) > 126 for c in key):
+        raise ValueError('Private Traccar local API key is missing or invalid')
+    return key

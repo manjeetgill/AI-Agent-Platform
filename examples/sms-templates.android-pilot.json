@@ -1,0 +1,8 @@
+{
+  "system_notification": {
+    "text": "AI Agent Platform test message."
+  },
+  "otp": {
+    "text": "Your verification code is {code}. Do not share it."
+  }
+}

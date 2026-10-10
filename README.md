@@ -216,7 +216,7 @@ See [Retailer browser runner](docs/RETAILER_BROWSER_RUNNER.md) for default serve
 
 ### Shared transactional SMS
 
-SMSIndiaHub and explicit mock mode are available through `/v1/notifications/sms`.
+SMSIndiaHub, an optional Traccar Android SIM local pilot, and explicit mock mode are available through `/v1/notifications/sms`.
 The worker uses encrypted payloads, idempotent requests, bounded retries, forced
 app/user isolation and segment-based daily/monthly limits. Open
 <http://127.0.0.1:4061/monitor/sms> in Agent Workspace. Live sending needs private

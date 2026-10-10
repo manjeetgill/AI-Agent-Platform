@@ -20,8 +20,9 @@ async def counts(conn, table, date_column, app_id=None):
     return await (await conn.execute('SELECT * FROM agent_sms_counts(%s,%s)',(table,app_id))).fetchone()
 
 
-def exceeded(used, limits, *, minute=False, units=1):
-    return used['daily']+units>limits.daily or used['monthly']+units>limits.monthly or (minute and used['per_minute']+units>limits.per_minute)
+def exceeded(used, limits, *, minute=False, units=1, no_volume_caps=False):
+    volume = not no_volume_caps and (used['daily']+units>limits.daily or used['monthly']+units>limits.monthly)
+    return volume or (minute and used['per_minute']+units>limits.per_minute)
 
 
 async def enqueue(pool, claims, body):
@@ -42,7 +43,7 @@ async def enqueue(pool, claims, body):
             return prior
         api_key(settings)  # No missing-key fallback to mock or another provider.
         for app,limits in [(claims['app_id'],settings.limits),(None,global_limits())]:
-            if exceeded(await counts(conn,'notification_sms_jobs','created_at',app),limits,units=payload['segments']):
+            if exceeded(await counts(conn,'notification_sms_jobs','created_at',app),limits,units=payload['segments'],no_volume_caps=settings.testing_no_volume_caps):
                 raise HTTPException(429,'SMS segment request limit reached; no message queued')
         return await (await conn.execute(f'''INSERT INTO notification_sms_jobs
             (id,tenant_id,app_id,owner_id,request_key,payload_hash,payload_cipher,template,provider,config_hash,expires_at,segments)
@@ -84,7 +85,7 @@ async def claim(pool):
                 next_at=now()+interval '5 minutes',updated_at=now() WHERE id=%s""",(row['id'],))
             return False
         for app,budget in [(row['app_id'],settings.limits),(None,limits)]:
-            if exceeded(await counts(conn,'notification_sms_attempts','started_at',app),budget,minute=True,units=row['segments']):
+            if exceeded(await counts(conn,'notification_sms_attempts','started_at',app),budget,minute=True,units=row['segments'],no_volume_caps=settings.testing_no_volume_caps):
                 await conn.execute("""UPDATE notification_sms_jobs SET status='RETRY',failure_code='usage_limit_wait',
                     next_at=now()+interval '1 minute',updated_at=now() WHERE id=%s""",(row['id'],))
                 return False

@@ -17,8 +17,18 @@ SERVICES = ['api', 'worker', 'whatsapp-worker', 'meta-worker', 'voice-worker']
 
 def notification_connector_routes(current):
     """Expose only scoped app APIs; retain the host's other proxy configuration."""
+    old_paths = '        path /v1/connectors /v1/connectors/* /v1/notifications/email /v1/notifications/email/*'
+    new_paths = old_paths + ' /v1/notifications/sms /v1/notifications/sms/*'
     if '@platformconnectors' in current:
-        return current
+        expected = '    @platformconnectors {\n        host agents.myalgodesk.in\n'
+        if current.count(expected) != 1:
+            raise RuntimeError('Unexpected proxy layout')
+        if expected + new_paths + '\n    }' in current:
+            return current
+        block = expected + old_paths + '\n    }'
+        if block not in current:
+            raise RuntimeError('Unexpected proxy layout')
+        return current.replace(block, expected + new_paths + '\n    }', 1)
     marker = '    @businesspages {'
     if current.count(marker) != 1:
         raise RuntimeError('Unexpected proxy layout')
@@ -30,7 +40,7 @@ def notification_connector_routes(current):
         reverse_proxy agent-platform-api-1:4060
     }
 '''
-    return current.replace(marker, route+marker)
+    return current.replace(marker, route.replace(old_paths, new_paths)+marker)
 
 
 def capture(args):
@@ -187,6 +197,8 @@ def main():
                       'https://agents.myalgodesk.in/v1/orchestration/automations':401,
                       'https://agents.myalgodesk.in/v1/whatsapp/setup':401,
                       'https://agents.myalgodesk.in/v1/connectors':401,
+                      'https://agents.myalgodesk.in/v1/notifications/sms/configuration':
+                          401 if config['services']['api']['environment'].get('AI_SMS_NOTIFICATIONS','').lower() in {'1','true','yes','on'} else 503,
                       'https://agents.myalgodesk.in/v1/integrations/capability-readiness':401,
                       'https://agents.myalgodesk.in/openapi.json':404,
                       'https://agents.myalgodesk.in/console':404,

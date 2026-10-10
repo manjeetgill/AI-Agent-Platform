@@ -22,8 +22,9 @@ async function refresh() {
     line(el('configuration'), config.configured ? `Provider: ${config.provider}${config.mock ? ' — simulated, no external delivery' : ''}. Automatic fallback: disabled.` : config.next_action);
     line(el('configuration'), config.delivery_meaning || config.next_action);
     if (config.max_segments) line(el('configuration'), `Maximum ${config.max_segments} segment(s) per message.`);
+    if (config.testing_no_volume_caps) line(el('configuration'), 'Testing: daily and monthly caps disabled for this application. Per-minute pacing still applies.');
     for (const kind of ['limits','global_limits']) if (config[kind]) {
-      const q = config[kind]; line(el('configuration'), `${kind === 'limits' ? 'Application' : 'Platform'}: ${q.daily} segments/day, ${q.monthly} segments/month, ${q.per_minute} segments/minute.`);
+      const q = config[kind]; line(el('configuration'), `${kind === 'limits' ? 'Application' : 'Platform'}: ${q.daily ?? 'Unlimited'} segments/day, ${q.monthly ?? 'Unlimited'} segments/month, ${q.per_minute} segments/minute.`);
     }
     for (const [label, values] of [['Requests',usage.app_requests],['Attempts',usage.app_attempts]]) {
       line(el('usage'), `${label}: ${values.daily} today · ${values.monthly} this month · ${values.per_minute} in the last minute.`);
@@ -32,6 +33,7 @@ async function refresh() {
     if (!listing.messages.length) line(el('messages'), 'No SMS requests yet.');
     for (const sms of listing.messages) {
       line(el('messages'), `${sms.template} · ${sms.status} · delivery: UNCONFIRMED · ${sms.segments} segment(s) · ${sms.provider} · ${sms.attempts} attempt(s) · ${sms.created_at}`);
+      if (sms.diagnostic) line(el('messages'), sms.diagnostic);
       line(el('messages'), `ID: ${sms.id}${sms.failure_code ? ' · '+sms.failure_code : ''}${sms.provider_id ? ' · Provider ID: '+sms.provider_id : ''}`);
     }
     if (listing.next_cursor) line(el('messages'), 'Showing the latest 25. Older records are available through the paginated API.');
