@@ -29,6 +29,21 @@ class Approval(Strict):
     recipient_consented: Literal[True]
 
 
+class SessionDraft(Strict):
+    recipient: str = Field(pattern=r'^\+?[1-9]\d{7,14}$')
+    text: str = Field(min_length=1, max_length=1500)
+    idempotency_key: str = Field(min_length=8, max_length=100)
+
+
+async def session_available(conn, channel_id, recipient):
+    # Use verified provider ingress, never a caller-supplied timestamp.
+    return bool(await (await conn.execute("""SELECT c.id FROM whatsapp_conversations c
+        WHERE c.channel_id=%s AND c.customer=%s AND c.mode='AUTO' AND NOT c.opted_out
+        AND EXISTS(SELECT 1 FROM whatsapp_messages m WHERE m.conversation_id=c.id
+          AND m.received_at>now()-interval '23 hours 55 minutes' AND m.received_at<=now())""",
+        (channel_id, recipient))).fetchone())
+
+
 class BatchApproval(Approval):
     message_ids: list[UUID] = Field(min_length=1, max_length=50)
 
@@ -36,8 +51,8 @@ class BatchApproval(Approval):
 async def graph(config, resource, *, method='GET', payload=None):
     if config.get('provider') == 'chakra':
         # Never send a Chakra credential to Meta. Template catalogue integration
-        # is a separate gate; inbound session replies use the Chakra worker adapter.
-        raise HTTPException(409, 'Chakra template catalogue is not configured; use an inbound test conversation')
+        # has its own transport; inbound session replies use the Chakra worker adapter.
+        raise HTTPException(409, 'Use the configured Chakra transport for this connection')
     if not re.fullmatch(r'\d{5,30}(/message_templates|/messages)?', resource):
         raise HTTPException(422, 'Invalid WhatsApp resource')
     try:
@@ -63,23 +78,35 @@ async def graph(config, resource, *, method='GET', payload=None):
         raise HTTPException(503, 'Meta connection unavailable. Sending outcomes must be checked before retrying.') from None
 
 
-async def templates(config):
+async def template_options(config):
     waba = config.get('waba_id') or ''
     if not re.fullmatch(r'\d{5,30}', waba):
         raise HTTPException(503, 'Platform owner must complete WhatsApp business-account setup')
-    result = await graph(config, waba+'/message_templates')
+    if config.get('provider') == 'chakra':
+        from .chakra_client import ChakraError, list_templates
+        try:
+            result = {'data': await list_templates(config)}
+        except ChakraError:
+            raise HTTPException(503, 'WhatsApp templates unavailable. Check the provider connection.') from None
+    else:
+        result = await graph(config, waba+'/message_templates')
     available = []
     for item in result.get('data', []):
         parts = item.get('components', [])
         # Pilot supports approved text-only templates without substitution parameters or buttons.
-        if item.get('status') != 'APPROVED' or not parts or not any(p.get('type') == 'BODY' for p in parts):
+        if item.get('status') not in {'APPROVED', 'PENDING'} or not parts or not any(p.get('type') == 'BODY' for p in parts):
             continue
         if any(p.get('type') not in {'HEADER', 'BODY', 'FOOTER'} or not p.get('text')
                or '{{' in p['text'] or (p.get('type') == 'HEADER' and p.get('format') != 'TEXT') for p in parts):
             continue
         available.append({key: item[key] for key in ('id', 'name', 'language')} |
-                         {'text': '\n\n'.join(p['text'] for p in parts)})
+                         {'text': '\n\n'.join(p['text'] for p in parts), 'status': item['status']})
     return available
+
+
+async def templates(config):
+    return [{k: v for k, v in t.items() if k != 'status'}
+            for t in await template_options(config) if t['status'] == 'APPROVED']
 
 
 def install_outbound(app):
@@ -101,9 +128,19 @@ def install_outbound(app):
     async def setup(channel_id: UUID, request: Request):
         pool, _, channel = await context(request, channel_id)
         config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
-        sender = await graph(config, channel['phone_id'])
+        if config.get('provider') == 'chakra':
+            from .chakra_client import ChakraError, phone_details
+            try:
+                sender = await phone_details(config)
+            except ChakraError:
+                raise HTTPException(503, 'WhatsApp number verification unavailable. Check the provider connection.') from None
+        else:
+            sender = await graph(config, channel['phone_id'])
+        options = await template_options(config)
+        approved = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'APPROVED']
+        pending = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'PENDING']
         return {'sender': sender.get('display_phone_number', ''),
-                'name': sender.get('verified_name', ''), 'templates': await templates(config),
+                'name': sender.get('verified_name', ''), 'templates': approved, 'pending_templates': pending,
                 'webhook_verified': bool(channel['webhook_verified_at'])}
 
     @router.post('/{channel_id}/connection-test')
@@ -155,11 +192,36 @@ def install_outbound(app):
             await audit(conn, channel_id, None, 'outbound:prepared:'+str(row['id']), claims['principal'])
         return row
 
+    @router.post('/{channel_id}/session-outbound', status_code=201)
+    async def session_draft(channel_id: UUID, body: SessionDraft, request: Request):
+        pool, claims, channel = await context(request, channel_id)
+        recipient = body.recipient.lstrip('+')
+        content = {'id': 'session', 'kind': 'session', 'text': body.text}
+        async with pool.connection() as conn, conn.transaction():
+            await conn.execute('SELECT id FROM whatsapp_channels WHERE id=%s FOR UPDATE', (channel_id,))
+            prior = await (await conn.execute('SELECT * FROM whatsapp_outbound WHERE channel_id=%s AND request_key=%s',
+                (channel_id, body.idempotency_key))).fetchone()
+            if prior:
+                if prior['recipient'] != recipient or prior['template'] != content:
+                    raise HTTPException(409, 'Request key belongs to a different message')
+                return prior
+            if not channel['enabled'] or not channel['webhook_verified_at'] or not await session_available(conn, channel_id, recipient):
+                raise HTTPException(409, 'No active patient conversation. Ask the patient to message the clinic or use an approved template.')
+            if await (await conn.execute("SELECT id FROM whatsapp_outbound WHERE channel_id=%s AND recipient=%s AND status IN ('QUEUED','SENDING','UNKNOWN') LIMIT 1", (channel_id, recipient))).fetchone():
+                raise HTTPException(409, 'A previous send is pending or uncertain; check its outcome first')
+            count = await (await conn.execute("SELECT count(*) n FROM whatsapp_outbound WHERE channel_id=%s AND created_at>now()-interval '24 hours'", (channel_id,))).fetchone()
+            if count['n'] >= 100:
+                raise HTTPException(429, 'Pilot sending limit reached')
+            row = await (await conn.execute("INSERT INTO whatsapp_outbound(id,channel_id,request_key,recipient,template,status,expires_at) VALUES(%s,%s,%s,%s,%s,'DRAFT',now()+interval '1 hour') RETURNING *",
+                (uuid4(), channel_id, body.idempotency_key, recipient, Jsonb(content)))).fetchone()
+            await audit(conn, channel_id, None, 'session:prepared:'+str(row['id']), claims['principal'])
+        return row
+
     @router.get('/{channel_id}/outbound')
     async def history(channel_id: UUID, request: Request):
         pool, _, _ = await context(request, channel_id)
         async with pool.connection() as conn:
-            return await (await conn.execute('SELECT * FROM whatsapp_outbound WHERE channel_id=%s ORDER BY created_at DESC LIMIT 100', (channel_id,))).fetchall()
+            return await (await conn.execute('SELECT *,request_key AS idempotency_key FROM whatsapp_outbound WHERE channel_id=%s ORDER BY created_at DESC LIMIT 100', (channel_id,))).fetchall()
 
     @router.post('/{channel_id}/outbound/approve-batch')
     async def approve_batch(channel_id: UUID, body: BatchApproval, request: Request):
@@ -200,9 +262,16 @@ def install_outbound(app):
 
 
 async def send_template(config, phone, recipient, template):
-    value = await graph(config, phone+'/messages', method='POST', payload={
+    if template.get('kind') == 'session':
+        from .whatsapp_worker import send
+        return await send(config, phone, recipient, template['text'])
+    payload = {
         'messaging_product': 'whatsapp', 'to': recipient, 'type': 'template',
-        'template': {'name': template['name'], 'language': {'code': template['language']}}})
+        'template': {'name': template['name'], 'language': {'code': template['language']}}}
+    if config.get('provider') == 'chakra':
+        from .chakra_client import send_message
+        return await send_message(config, phone, payload)
+    value = await graph(config, phone+'/messages', method='POST', payload=payload)
     return value['messages'][0]['id']
 
 
@@ -225,10 +294,14 @@ async def tick_outbound(pool, sender=send_template, catalogue=templates):
             return True
         try:
             config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
-            async with asyncio.timeout(15):
-                current = await catalogue(config)
-            if job['template'] not in current:
-                raise ValueError('Template changed')
+            if job['template'].get('kind') == 'session':
+                if not channel['enabled'] or not await session_available(conn, channel['id'], job['recipient']):
+                    raise ValueError('Patient conversation closed')
+            else:
+                async with asyncio.timeout(15):
+                    current = await catalogue(config)
+                if job['template'] not in current:
+                    raise ValueError('Template changed')
         except Exception:  # noqa: BLE001 -- safe to fail before dispatch
             await conn.execute("UPDATE whatsapp_outbound SET status='FAILED',error='Template or connection unavailable; no message dispatched' WHERE id=%s", (job['id'],))
             return True
