@@ -11,6 +11,7 @@ from runtime_env import DATABASE_KEYS, process_env
 values = load()
 database(values)
 os.environ.update(values)
+os.environ['PYTHONPATH'] = str(ROOT / 'src')  # Child migrations must use this checkout too.
 os.environ.update(AI_DURABLE_TASKS='1', AI_TASK_AGENTS='1')
 os.environ.setdefault('AI_WEB_VOICE_ENABLED', '1')
 os.environ.setdefault('AI_WHATSAPP_CONNECTIONS_FILE', str(ROOT/'.runtime/local/whatsapp-connections.json'))

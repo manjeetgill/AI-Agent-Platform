@@ -19,7 +19,7 @@ async function refresh() {
       const list = node('ol', ''); for (const step of item.next_steps) list.append(node('li', step)); card.append(list);
       const details = node('details', ''); details.append(node('summary','Saved evidence'), node('pre',JSON.stringify(item.evidence,null,2))); card.append(details);
       const link = node('a','Open local capability screen →');
-      if (['/workspace','/whatsapp','/calling','/voice','/telephony','/monitor/email','/memory','/connectors'].includes(item.workspace_url)) link.href = item.workspace_url;
+      if (['/workspace','/whatsapp','/calling','/voice','/telephony','/monitor/email','/monitor/sms','/memory','/connectors'].includes(item.workspace_url)) link.href = item.workspace_url;
       card.append(link); el('checklist').append(card);
     }
     el('status').textContent = 'Checked ' + new Date(report.checked_at).toLocaleString() + '. ' + report.note;

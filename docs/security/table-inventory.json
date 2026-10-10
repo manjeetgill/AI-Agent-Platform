@@ -784,6 +784,37 @@
       "reason": "Direct tenant identity; owner/app filters also required where present."
     },
     {
+      "name": "notification_sms_attempts",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "notification_sms_jobs"
+      ],
+      "classification": "tenant",
+      "reason": "SMS notifications belong to one tenant, application and owner."
+    },
+    {
+      "name": "notification_sms_jobs",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "tenant_id",
+        "app_id",
+        "owner_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "platform_external_users"
+      ],
+      "classification": "tenant",
+      "reason": "SMS notifications belong to one tenant, application and owner."
+    },
+    {
       "name": "platform_agent_templates",
       "rls": true,
       "forced": true,
@@ -2998,7 +3029,7 @@
     }
   ],
   "summary": {
-    "tables": 109,
+    "tables": 111,
     "without_rls": 5,
     "unclassified": 0
   },

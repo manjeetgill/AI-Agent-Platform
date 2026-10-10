@@ -45,7 +45,7 @@ def test_schema_available_only_in_development(monkeypatch):
 
 def test_every_route_rejects_anonymous_and_invalid_credentials(monkeypatch):
     monkeypatch.setenv('AI_PLATFORM_ENV', 'production')
-    for flag in ('AI_AUTOMATIONS', 'AI_EMAIL_NOTIFICATIONS', 'AI_DURABLE_TASKS', 'AI_TASK_AGENTS',
+    for flag in ('AI_AUTOMATIONS', 'AI_EMAIL_NOTIFICATIONS', 'AI_SMS_NOTIFICATIONS', 'AI_DURABLE_TASKS', 'AI_TASK_AGENTS',
                  'AI_BROWSER_TASKS', 'AI_RAG', 'AI_MEMORY', 'AI_VISION', 'AI_WORKFLOWS',
                  'AI_WEB_VOICE_ENABLED', 'AI_WHATSAPP_CALLING_ENABLED', 'AI_RETAILER_BROWSER', 'AI_LOCAL_MONITOR'):
         monkeypatch.setenv(flag, '1')

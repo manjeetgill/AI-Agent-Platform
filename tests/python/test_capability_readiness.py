@@ -17,8 +17,8 @@ def test_passive_checks_use_fixed_gets_and_do_not_request_ungranted_sources():
         async with httpx.AsyncClient(base_url='http://internal', transport=httpx.MockTransport(response)) as c:
             return await collect(c, {'notifications:read'})
     report = checklist(asyncio.run(run()))
-    assert len(calls) == 1 and calls[0].url.path.endswith('/email/configuration')
-    assert len(report) == 11
+    assert {r.url.path for r in calls} == {'/v1/notifications/email/configuration','/v1/notifications/sms/configuration'}
+    assert len(report) == 12
     assert 'secret upstream response' not in str(report)
     assert all(not item['live_verified'] for item in report)
     assert {r['id']: r['status'] for r in report}['planning'] == 'ACCESS_REQUIRED'
@@ -49,7 +49,7 @@ def test_http_contract_is_scoped_and_does_not_invoke_planner(monkeypatch):
         assert response.status_code == 200, response.text
         report=response.json()
         assert report['app_id'] == key['app_id']
-        assert len(report['capabilities']) == 11 and not report['provider_checks_performed']
+        assert len(report['capabilities']) == 12 and not report['provider_checks_performed']
         assert planner.calls == 0
         assert {c['id']:c['status'] for c in report['capabilities']}['email'] == 'ACCESS_REQUIRED'
         assert key['credential'] not in response.text

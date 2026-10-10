@@ -1,0 +1,20 @@
+{
+  "otp": {
+    "text": "Your verification code is {code}. Do not share it."
+  },
+  "phone_verification": {
+    "text": "Verify your phone with code {code}."
+  },
+  "password_reset": {
+    "text": "Your password reset code is {code}."
+  },
+  "price_drop": {
+    "text": "Price alert: {product} is now {price}. {url}"
+  },
+  "system_notification": {
+    "text": "Account update: {message}"
+  },
+  "appointment": {
+    "text": "Your appointment with {doctor} is on {date} at {time}."
+  }
+}

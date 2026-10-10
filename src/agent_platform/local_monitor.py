@@ -15,7 +15,7 @@ from .service_identity import authenticate
 
 ASSETS = Path(__file__).with_name('console')
 CSP = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"
-READ = re.compile(r'(?:tasks(?:/summary|/[a-f0-9-]{36}(?:/events)?)?|integrations/(?:task-readiness|capability-readiness)|orchestration/usage|connectors(?:/reports)?|notifications/email(?:/usage|/configuration|/templates|/[a-f0-9-]{36})?)$')
+READ = re.compile(r'(?:tasks(?:/summary|/[a-f0-9-]{36}(?:/events)?)?|integrations/(?:task-readiness|capability-readiness)|orchestration/usage|connectors(?:/reports)?|notifications/(?:email|sms)(?:/usage|/configuration|/templates|/[a-f0-9-]{36})?)$')
 WRITE = re.compile(r'tasks/[a-f0-9-]{36}/(?:pause|resume|cancel|reconcile)$')
 
 
@@ -76,6 +76,11 @@ def install(app):
         local(request)
         return FileResponse(ASSETS / 'monitor.html', headers={'Cache-Control': 'no-store', 'Content-Security-Policy': CSP})
 
+    @app.get('/monitor/sms', include_in_schema=False)
+    async def sms_home(request: Request):
+        local(request)
+        return FileResponse(ASSETS / 'sms.html', headers={'Cache-Control': 'no-store', 'Content-Security-Policy': CSP})
+
     @app.get('/monitor/email', include_in_schema=False)
     async def email_home(request: Request):
         local(request)
@@ -84,7 +89,7 @@ def install(app):
     @app.get('/monitor/assets/{asset}', include_in_schema=False)
     async def asset(asset: str, request: Request):
         local(request)
-        if asset not in {'monitor.js', 'monitor-model.mjs', 'monitor.css', 'onboard.js', 'email.js'}:
+        if asset not in {'monitor.js', 'monitor-model.mjs', 'monitor.css', 'onboard.js', 'email.js', 'sms.js'}:
             raise HTTPException(404)
         return FileResponse(ASSETS / asset, headers={'Cache-Control': 'no-store'})
 

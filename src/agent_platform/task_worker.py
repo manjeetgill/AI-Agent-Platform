@@ -138,6 +138,12 @@ async def serve(registry):
                             await email_tick(pool)
                         except Exception:  # noqa: BLE001 -- no private notification content in logs
                             logger.warning('Email queue tick failed; durable state retained')
+                    if enabled('AI_SMS_NOTIFICATIONS'):
+                        from .sms_service import tick as sms_tick
+                        try:
+                            await sms_tick(pool)
+                        except Exception:  # noqa: BLE001 -- no private notification content in logs
+                            logger.warning('SMS queue tick failed; durable state retained')
                     if not await tick(store, registry):
                         await asyncio.sleep(1)
         finally:

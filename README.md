@@ -214,6 +214,15 @@ Provider-neutral memory now includes opt-in candidate capture, review, hybrid le
 
 See [Retailer browser runner](docs/RETAILER_BROWSER_RUNNER.md) for default server execution (`retailer.observe`), optional private Chrome pairing, worker recovery, and the remaining location/evidence limitations. End users do not need an extension for server checks. It is disabled unless `AI_RETAILER_BROWSER=1`; optional retailer access requires the user’s Chrome permission.
 
+### Shared transactional SMS
+
+SMSIndiaHub and explicit mock mode are available through `/v1/notifications/sms`.
+The worker uses encrypted payloads, idempotent requests, bounded retries, forced
+app/user isolation and segment-based daily/monthly limits. Open
+<http://127.0.0.1:4061/monitor/sms> in Agent Workspace. Live sending needs private
+provider credentials, an approved sender and DLT templates; acceptance does not
+confirm handset delivery. See [SMS setup and API](docs/SMS.md).
+
 ### Shared transactional email
 
 The email phase adds an isolated application API, encrypted durable queue,
@@ -228,7 +237,7 @@ Local read-only email activity is at `http://127.0.0.1:4060/monitor/email`.
 
 Open `http://127.0.0.1:4061/` for the platform overview. Its shared navigation
 includes the agent builder, WhatsApp inbox/setup, WhatsApp calling, internet voice,
-telephone connections, memory/knowledge, API feeds, tasks/readiness, email and app
+telephone connections, memory/knowledge, API feeds, tasks/readiness, email, SMS and app
 connections. The original request editor and saved agents are at `/workspace`.
 
 The `/monitor` screens now open inside this workspace through a fixed loopback

@@ -1,0 +1,38 @@
+{
+  "mode": "mock",
+  "live_sms_sent": false,
+  "task_worker_result": {
+    "id": "4e0983ac-6557-4407-b4fa-2d6436730bc3",
+    "template": "system_notification",
+    "template_version": 1,
+    "provider": "mock",
+    "status": "MOCK_SENT",
+    "attempts": 1,
+    "provider_id": "mock-4e0983ac-6557-4407-b4fa-2d6436730bc3",
+    "failure_code": null,
+    "next_at": "2026-10-10T08:53:21.006305+05:30",
+    "expires_at": "2026-10-10T08:57:47.819103+05:30",
+    "created_at": "2026-10-10T08:52:47.819103+05:30",
+    "updated_at": "2026-10-10T08:52:48.006305+05:30",
+    "segments": 1,
+    "provider_job_id": null,
+    "history": [
+      {
+        "attempt": 1,
+        "provider": "mock",
+        "started_at": "2026-10-10T08:52:47.981168+05:30",
+        "finished_at": "2026-10-10T08:52:48.006305+05:30",
+        "outcome": "MOCK_SENT",
+        "failure_code": null,
+        "http_status": null,
+        "provider_id": "mock-4e0983ac-6557-4407-b4fa-2d6436730bc3",
+        "provider_job_id": null,
+        "segments": 1
+      }
+    ]
+  },
+  "duplicate_request_reused": true,
+  "other_owner_rejected": true,
+  "unauthenticated_rejected": true,
+  "workspace_status": 200
+}

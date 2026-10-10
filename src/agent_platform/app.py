@@ -427,6 +427,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_connection_test(app)
     from .email_api import install as install_email
     install_email(app)
+    from .sms_api import install as install_sms
+    install_sms(app)
     install_chakra_onboarding(app)
     from .meta_onboarding import install_onboarding
     from .meta_webhook import install_meta_webhook
