@@ -197,8 +197,7 @@ def main():
                       'https://agents.myalgodesk.in/v1/orchestration/automations':401,
                       'https://agents.myalgodesk.in/v1/whatsapp/setup':401,
                       'https://agents.myalgodesk.in/v1/connectors':401,
-                      'https://agents.myalgodesk.in/v1/notifications/sms/configuration':
-                          401 if config['services']['api']['environment'].get('AI_SMS_NOTIFICATIONS',config['services']['api']['environment'].get('AI_SMS_NOTIFICATIONS_ENABLED','')).strip().lower() in {'1','true','yes'} else 503,
+                      'https://agents.myalgodesk.in/v1/notifications/sms/configuration':401,
                       'https://agents.myalgodesk.in/v1/integrations/capability-readiness':401,
                       'https://agents.myalgodesk.in/openapi.json':404,
                       'https://agents.myalgodesk.in/console':404,
