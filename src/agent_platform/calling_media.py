@@ -9,9 +9,8 @@ from contextlib import nullcontext
 from contextvars import ContextVar
 from uuid import uuid4
 
-import httpx
-
 from . import calling_audio, voice_config, voice_ice, voice_usage
+from .voice_failures import failure_code
 
 _stage = ContextVar('audio_turn_stage', default='audio_turn')
 
@@ -22,15 +21,6 @@ class StageFailure(Exception):
         super().__init__(code)
 
 
-def failure_code(error):
-    if isinstance(error, StageFailure):
-        return error.code
-    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
-        return 'TIMEOUT'
-    if isinstance(error, httpx.HTTPStatusError):
-        status = error.response.status_code
-        return 'PROVIDER_AUTH' if status in {401, 403} else 'PROVIDER_QUOTA' if status == 429 else 'PROVIDER_ERROR'
-    return 'FAILED'
 
 
 def available():

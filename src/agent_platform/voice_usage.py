@@ -12,6 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from . import voice_config
+from .voice_failures import VoiceUsageError
 
 active = ContextVar('voice_usage_meter', default=None)
 UNITS = {'asr': 'audio_seconds', 'tts': 'characters', 'reasoning': 'tokens'}
@@ -57,7 +58,7 @@ async def reserve(stage, maximum):
         else:
             card = await (await conn.execute('SELECT * FROM voice_rate_cards WHERE provider=%s AND model=%s AND stage=%s AND expires_at>now()', (provider, model, stage))).fetchone()
             if not card or not limits or card['currency'] != limits['currency']:
-                raise ValueError('Configure current voice rates and application spending limits before paid calls')
+                raise VoiceUsageError('RATE_CONFIGURATION_REQUIRED', 'Configure current voice rates and application spending limits before paid calls')
             rate, currency, reference = card['per_unit'], card['currency'], card['reference']
         hold = maximum * rate
         if hold:
@@ -66,7 +67,7 @@ async def reserve(stage, maximum):
                 coalesce(sum(coalesce(r.actual_amount,l.amount,l.reserved_amount)),0) AS monthly
                 FROM voice_usage_ledger l LEFT JOIN voice_reconciliations r ON r.ledger_id=l.id WHERE l.app_id=%s AND l.created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'""", (call['app_id'],))).fetchone()
             if used['daily']+hold > limits['daily'] or used['monthly']+hold > limits['monthly']:
-                raise ValueError('Voice spending allowance reached')
+                raise VoiceUsageError('SPENDING_LIMIT', 'Voice spending allowance reached')
         await conn.execute('''INSERT INTO voice_usage_ledger(id,session_id,app_id,stage,provider,model,unit,state,reserved_units,currency,rate,reserved_amount,rate_reference)
             VALUES(%s,%s,%s,%s,%s,%s,%s,'RESERVED',%s,%s,%s,%s,%s)''',
             (ident, session, call['app_id'], stage, provider, model, UNITS[stage], maximum, currency, rate, hold, reference))

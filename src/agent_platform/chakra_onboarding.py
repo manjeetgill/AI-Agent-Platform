@@ -18,6 +18,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 from pydantic import Field
 
+from .chakra_recovery import view as signup_view
 from .meta_crypto import keyring, seal, unseal
 from .service_identity import authenticate
 from .tasks import Strict
@@ -99,6 +100,9 @@ def install_chakra_onboarding(app):
         ident=uuid4()
         async with pool.connection() as conn,conn.transaction():
             await conn.execute('SELECT id FROM platform_apps WHERE id=%s FOR UPDATE',(claims['app_id'],))
+            pending = await (await conn.execute("SELECT id FROM chakra_signup_sessions WHERE app_id=%s AND owner_id=%s AND state<>'CONNECTED' ORDER BY created_at DESC LIMIT 1", (claims['app_id'],claims['user']))).fetchone()
+            if pending:
+                raise HTTPException(409, {'message':'Continue the saved signup or request operator recovery before starting another.', 'session_id':str(pending['id'])})
             count=await(await conn.execute("SELECT count(*) AS n FROM chakra_signup_sessions WHERE app_id=%s AND created_at>now()-interval '1 hour'",(claims['app_id'],))).fetchone()
             if count['n']>=10:
                 raise HTTPException(429,'Too many connection attempts')
@@ -123,10 +127,10 @@ def install_chakra_onboarding(app):
     async def status(session_id: UUID,request: Request):
         pool,claims=await auth(request,'channels:read')
         async with pool.connection() as conn:
-            row=await(await conn.execute('SELECT id,state,expires_at FROM chakra_signup_sessions WHERE id=%s AND app_id=%s AND owner_id=%s',(session_id,claims['app_id'],claims['user']))).fetchone()
+            row=await(await conn.execute('SELECT * FROM chakra_signup_sessions WHERE id=%s AND app_id=%s AND owner_id=%s',(session_id,claims['app_id'],claims['user']))).fetchone()
         if not row:
             raise HTTPException(404,'Signup not found')
-        return row
+        return signup_view(row)
 
     @router.post('/onboarding/{session_id}/resume')
     async def resume(session_id: UUID, request: Request, response: Response):
@@ -137,6 +141,42 @@ def install_chakra_onboarding(app):
         if not row or not row['token_cipher']:
             raise HTTPException(409, 'Saved authorization cannot resume; operator reconciliation required')
         return {'id': row['id'], 'connect_token': unseal(row['token_cipher'], context(row))}
+
+    @router.post('/onboarding/{session_id}/renew')
+    async def renew(session_id: UUID, request: Request, response: Response):
+        response.headers['Cache-Control'] = 'no-store'
+        pool, claims = await auth(request)
+        cfg, _ = settings()
+        keyring()
+        async with pool.connection() as conn, conn.transaction():
+            row = await (await conn.execute('SELECT * FROM chakra_signup_sessions WHERE id=%s AND app_id=%s AND owner_id=%s FOR UPDATE',
+                (session_id, claims['app_id'], claims['user']))).fetchone()
+            if not row:
+                raise HTTPException(404, 'Signup not found')
+            state = signup_view(row)
+            if state['next_action'] == 'resume':
+                return {'id': row['id'], 'connect_token': unseal(row['token_cipher'], context(row)), 'expires_at':row['expires_at']}
+            if state['next_action'] != 'renew':
+                raise HTTPException(409, state['message'])
+            review = row['recovery_review']
+            # Commit the one-use fence before network dispatch. A crash or timeout
+            # requires a fresh provider review, never an automatic second POST.
+            await conn.execute("UPDATE chakra_signup_sessions SET state='CREATING',token_cipher=NULL,recovery_consumed_at=now(),expires_at=now()+interval '55 minutes' WHERE id=%s", (session_id,))
+        body = ({'pluginId':review['plugin_id']} if review['plugin_id'] else
+                {'clientReferenceId':str(session_id),'newPluginName':'Business '+str(session_id)})
+        try:
+            result = await provider('POST','whatsapp-partner/create-connect-token',cfg['PARTNER_TOKEN'],body)
+            token = result.get('connectToken')
+            if not isinstance(token,str) or not 20 < len(token) < 16000:
+                raise HTTPException(502, 'Invalid Chakra signup response')
+            cipher = seal(token, context(row))
+        except Exception:
+            async with pool.connection() as conn:
+                await conn.execute("UPDATE chakra_signup_sessions SET state='CHECK_REQUIRED' WHERE id=%s", (session_id,))
+            raise
+        async with pool.connection() as conn:
+            saved = await (await conn.execute("UPDATE chakra_signup_sessions SET state='CONNECTING',token_cipher=%s,expires_at=now()+interval '55 minutes' WHERE id=%s RETURNING expires_at", (cipher, session_id))).fetchone()
+        return {'id':session_id,'connect_token':token,'expires_at':saved['expires_at']}
 
     @router.post('/onboarding/{session_id}/channel')
     async def ensure_channel(session_id: UUID, request: Request, body: ChannelSetup | None = None):
@@ -164,8 +204,9 @@ def install_chakra_onboarding(app):
         pool,claims=await auth(request)
         async with pool.connection() as conn:
             row=await(await conn.execute("""UPDATE chakra_signup_sessions SET candidate_plugin_id=%s,state='OWNERSHIP_CHECK_REQUIRED'
-                WHERE id=%s AND app_id=%s AND owner_id=%s AND state='CONNECTING' AND expires_at>now() RETURNING id,state""",
-                (body.plugin_id,session_id,claims['app_id'],claims['user']))).fetchone()
+                WHERE id=%s AND app_id=%s AND owner_id=%s AND state='CONNECTING' AND expires_at>now()
+                AND (recovery_review->>'plugin_id' IS NULL OR recovery_review->>'plugin_id'=%s) RETURNING id,state""",
+                (body.plugin_id,session_id,claims['app_id'],claims['user'],str(body.plugin_id)))).fetchone()
         if not row:
             raise HTTPException(409,'Signup expired or already submitted; read its saved status')
         return {**row,'message':'Authorization received. The platform operator must verify the customer-to-plugin binding.'}

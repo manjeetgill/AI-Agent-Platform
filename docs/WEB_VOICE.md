@@ -65,7 +65,7 @@ const widget = mountVoiceWidget(document.getElementById('voice'), {
 // await widget.destroy();
 ```
 
-Copy `src/agent_platform/console/voice-widget.js` into your frontend bundle. The proxy maps `voice/...` to `/v1/voice/...`. Allow only the selected app agent and current user's sessions. Keep management/document creation on separate administrator endpoints.
+Copy `src/agent_platform/console/voice-widget.js` and its sibling `voice-errors.js` into your frontend bundle. The proxy maps `voice/...` to `/v1/voice/...`. Allow only the selected app agent and current user's sessions. Keep management/document creation on separate administrator endpoints.
 
 ### API
 
@@ -204,3 +204,13 @@ blocked result. Keep all service keys on your authenticated backend.
 For the local SIP calling server, echo test, and FAQ audio bridge, see
 [ASTERISK.md](ASTERISK.md). It runs separately from browser voice. A carrier
 connection is still required for ordinary mobile-number calls.
+
+
+### Voice failure diagnostics
+
+Session status includes `last_failure` with allowlisted `stage` and `outcome`
+only. No upstream exception, transcript or credential is included. Quota,
+credentials, missing rates, spending limits, timeouts and invalid model output
+have distinct codes. The widget retains the reason when a call ends; call history
+also shows a plain-language explanation. These are diagnostics, not permission
+to repeat an uncertain business action or increase an approved budget.

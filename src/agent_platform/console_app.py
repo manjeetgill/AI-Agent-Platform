@@ -135,7 +135,7 @@ def create_console(*, registry=None, app=None):
     @application.get('/console/{asset}')
     async def asset(asset: str, request: Request):
         local(request)
-        if asset not in {'setup.js', 'workspace.css', 'feeds.js', 'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'telephony.js'}:
+        if asset not in {'setup.js', 'workspace.css', 'feeds.js', 'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'voice-errors.js', 'telephony.js'}:
             raise HTTPException(404)
         return FileResponse(ASSETS/asset)
 

@@ -250,11 +250,8 @@ async def dialogue(pool, agent, call, text, history=None, on_claim=None):
         if isinstance(exc, asyncio.CancelledError):
             raise
         # Never persist the exception message: it can contain private tool inputs.
-        from .runtime_errors import RunFailure
-        code = exc.code if isinstance(exc, RunFailure) and exc.code in {
-            'MODEL_TIMEOUT', 'MODEL_UNAVAILABLE', 'INVALID_MODEL_OUTPUT', 'PROVIDER_BACKPRESSURE',
-            'MODEL_NOT_CONFIGURED', 'CONTEXT_BUDGET_EXCEEDED',
-        } else 'TIMEOUT' if isinstance(exc, TimeoutError) else 'FAILED'
+        from .voice_failures import failure_code
+        code = failure_code(exc)
         await voice_events.record(pool, call['id'], 'turn_failed', {
             'stage': 'business_action' if external_dispatch else 'reasoning', 'outcome': code,
         })
@@ -751,10 +748,14 @@ def install_web_voice(app):
 
     async def status_for(pool, claims, ident):
         row = await session_row(pool, ident, claims)
+        from .voice_failures import public_failure
+        async with pool.connection() as conn:
+            failure = await (await conn.execute("SELECT details FROM web_voice_events WHERE session_id=%s AND kind='turn_failed' ORDER BY sequence DESC LIMIT 1", (ident,))).fetchone()
         media = sessions.get(str(ident))
         return {
             "id": ident,
             "state": row["state"],
+            "last_failure": public_failure(failure['details']) if failure else None,
             "turns": row["turns"],
             "expires_at": row["expires_at"],
             "audio_connected": bool(media and media.pc.connectionState == "connected") if not row["media_remote"] else bool(row["state"] == "ACTIVE" and row["media_connected"] and row["media_heartbeat"] and time.time()-row["media_heartbeat"].timestamp()<10),

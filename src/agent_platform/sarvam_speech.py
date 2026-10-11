@@ -15,7 +15,9 @@ MODELS = {'asr': 'saaras:v3', 'tts': 'bulbul:v3'}
 
 
 class SarvamSpeechError(ValueError):
-    pass
+    def __init__(self, message, code='FAILED'):
+        self.code = code
+        super().__init__(message)
 
 
 def key():
@@ -39,8 +41,9 @@ async def request(path, **kwargs):
                 if len(raw) > 4_000_000:
                     raise ValueError('Response too large')
             return json.loads(raw)
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        raise SarvamSpeechError('Sarvam speech unavailable; no automatic retry') from None
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+        from .voice_failures import failure_code
+        raise SarvamSpeechError('Sarvam speech unavailable; no automatic retry', failure_code(error)) from None
 
 
 async def transcribe(pcm):

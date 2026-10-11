@@ -184,3 +184,38 @@ rupee budgets or account-wide provider limits. Previews and web voice have their
 existing limits, not this telephone admission quota. Provider rental, subscriptions,
 external dashboard use, calls carried before platform rejection and app-side model
 usage require provider/account controls. Do not call this a monetary spend cap.
+
+### Expired or uncertain Chakra signup recovery
+
+Migration 067 adds a one-use recovery review and audit history to saved signup
+sessions. Status now includes `authorization_expired`, `next_action` and a safe
+message. Actions are `resume`, `operator_review`, `renew`, `ownership_review` or
+`connected`. Starting another signup for the same business owner while one is
+unresolved returns 409 with that saved session ID.
+
+1. Inspect the actual Chakra account or obtain a provider support response. Match
+   the plugin to the saved client reference/business; never guess a plugin ID or
+   declare that no connection exists while Chakra is unavailable.
+2. In the private worker environment run `scripts/recover_chakra_signup.py SESSION
+   --reference REVIEW_REFERENCE --verified-plugin PLUGIN_UUID`. Only after
+   confirming there is no provider connection may you instead pass
+   `--verified-no-connection`. References must not contain credentials or personal
+   data. The restricted worker database login is required.
+3. The owning app requests `POST /v1/whatsapp/chakra/onboarding/{id}/renew` after
+   status reports `renew`. It retains the same app, owner and session ID; an
+   existing reviewed plugin is pinned in both the token request and completion.
+4. The review is consumed before dispatch. Timeout/crash/invalid response requires
+   another provider check after the 55-minute attempt window. No automatic retry
+   or duplicate provider creation. A repeated successful renewal returns the
+   same saved token while valid. Responses containing tokens use `no-store`.
+5. The owner completes Meta authorization; ordinary ownership verification,
+   webhook and activation gates still apply. Renewal never proves authorization.
+
+The updated `connect-chakra.js` offers explicit continuation/recovery buttons and
+keeps only a per-business session ID in session storage. Proxy GET status and POST
+resume/renew/complete through the consuming app backend. Use a unique storage key
+and clear it at logout. The example is available for apps to adopt; existing app
+frontends are not automatically replaced.
+
+Provider contract checked October 11, 2026:
+[Chakra connect-token API](https://apidocs.chakrahq.com/api-28220708).

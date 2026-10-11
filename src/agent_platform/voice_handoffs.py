@@ -165,7 +165,7 @@ def install(app, start, status, end):
 
     @app.get("/voice/assets/{name}")
     async def asset(name: str):
-        if name not in {"voice-call.js", "voice-widget.js", "style.css"}:
+        if name not in {"voice-call.js", "voice-widget.js", "voice-errors.js", "style.css"}:
             raise HTTPException(404)
         return FileResponse(ASSETS / name, headers=HEADERS)
 

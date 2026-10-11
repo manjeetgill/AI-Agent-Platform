@@ -1,3 +1,4 @@
+import {voiceFailureMessage} from './voice-errors.js';
 import {mountVoiceWidget} from './voice-widget.js';
 const $ = id => document.getElementById(id);
 async function api(path, method = 'GET', body) {
@@ -166,7 +167,7 @@ async function showEvents() {
   const id = $('call-history').value;
   if (!id) return;
   const result = await api('voice/sessions/' + id + '/events');
-  $('call-events').textContent = result.events.map(e => `${e.sequence}. ${e.kind} ${e.content || JSON.stringify(e.details)}`).join('\n') + '\nEstimated cost: unknown';
+  $('call-events').textContent = result.events.map(e => `${e.sequence}. ${e.kind} ${e.kind === 'turn_failed' ? voiceFailureMessage(e.details) : (e.content || JSON.stringify(e.details))}`).join('\n') + '\nEstimated cost: unknown';
 }
 $('refresh-calls').onclick = () => refreshCalls().catch(e => {$('call-events').textContent = e.message;});
 $('call-history').onchange = () => showEvents().catch(e => {$('call-events').textContent = e.message;});

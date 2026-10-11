@@ -227,6 +227,10 @@ class Gateway:
                         'Use qualitative wording without spelled-out numbers either (including one, two, five, twenty, thirty, half, twice). Omit numeric rule definitions and thresholds from prose. Put numerical facts only in numeric_claims, copying exact original label, numeric value and unit; or leave that list empty.'})
                 except httpx.TimeoutException as exc:
                     raise RunFailure('MODEL_TIMEOUT') from exc
+                except httpx.HTTPStatusError as exc:
+                    status = exc.response.status_code
+                    code = 'PROVIDER_BACKPRESSURE' if status == 429 else 'PROVIDER_AUTH' if status in {401, 403} else 'MODEL_UNAVAILABLE'
+                    raise RunFailure(code) from exc
                 except httpx.HTTPError as exc:
                     raise RunFailure('MODEL_UNAVAILABLE') from exc
         finally:
