@@ -80,7 +80,7 @@ For maintenance: send signed drain, poll signed status until active_sessions is 
 
 ## Production reconciliation
 
-The selected original checkout was based on `9d59fa7`; production runs `1392440`, with security/SMS migrations through 057. With owner approval, the production baseline is being merged into this folder. Voice migrations now follow it as 058–064. The old isolated database with voice migrations 050–054 is preserved, never rewritten or used with the new manifest. A fresh local database verifies the combined migration history. Do not apply the new lineage to the preserved old pilot database.
+The selected original checkout was based on `9d59fa7`; the previous production release was `1392440`, with security/SMS migrations through 057. With owner approval, that baseline was merged into this folder and deployed as `81509f023a512e4e8cfa7701e93aa3260d51b3cb` on 2026-10-11. Voice migrations now follow it as 058–064. The old isolated database with voice migrations 050–054 is preserved, never rewritten or used with the new manifest. A fresh local database verifies the combined migration history. Do not apply the new lineage to the preserved old pilot database.
 
 ## Verification
 
@@ -94,3 +94,26 @@ Run with the isolated voice services:
 ```
 
 Synthetic tests do not verify a person's microphone, mobile networks, real business writes, carrier calls or production sustained capacity.
+
+## Public deployment verification — 2026-10-11
+
+The deployed API and independently supervised media container passed health and
+signed readiness checks. Media listens on a private Unix socket; its internal
+HTTP paths are not publicly routed. Unauthenticated public voice requests return
+401. Two temporary application credentials could create/list their own synthetic
+agents; access to the other application's agent readiness returned 404. Those
+credentials were revoked after verification. Existing MyAlgoDesk login remained
+HTTP 200, and its API/execution/web services remained healthy.
+
+`scripts/verify_voice_relay.py` passed a separate network transport test from the
+Mac to a temporary peer inside the deployed media container: relay-only ICE, 20
+received silent RTP audio frames and a data-channel round trip. Each peer uses a
+distinct short-lived TURN identity, matching production's allocation isolation.
+No microphone, model provider or telephone service was used. See
+[transport evidence](verification/voice-public-relay.json). This proves transport,
+not the complete public speech/agent path.
+
+Remaining acceptance gates: human microphone confirmation, approved/capped public
+speech-provider usage, real business tools from two applications, controlled
+specialist handoffs, billing reconciliation and sustained load testing. Telephone
+activation additionally requires an authorized customer carrier connection.

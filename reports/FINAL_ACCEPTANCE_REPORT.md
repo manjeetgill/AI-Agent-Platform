@@ -229,3 +229,26 @@ were placed, no paid API request was made, and no production rollout is claimed.
   remain pending. No provider request or carrier call was made in these tests.
 
 Private Unix-socket verification: **PASS** for signed readiness, status, drain and new-call rejection while draining; no audio/provider request. [Evidence](../docs/verification/voice-media-socket.json).
+
+## Public release update — 2026-10-11
+
+Supersedes the earlier preflight-only public deployment status above:
+
+- Reconciled production release **81509f023a512e4e8cfa7701e93aa3260d51b3cb** deployed.
+  Separate API/media containers healthy; signed media readiness passed. Production
+  security/SMS baseline and independently deployed integration workers preserved.
+- Public voice endpoints require authentication (401 without credentials). Internal
+  media paths, console and OpenAPI remain unavailable publicly (404).
+- Two temporary application identities passed authenticated create/list and
+  cross-application denial checks over HTTPS; credentials revoked afterward.
+- [Public TURN transport](../docs/verification/voice-public-relay.json): **PASS**,
+  20 silent audio frames plus data-channel round trip with relay-only candidates.
+  Initial verifier shared one TURN identity across both peers and exhausted its
+  two-allocation quota; corrected to separate identities as used by production.
+- Main app login remained HTTP 200 and its runtime services remained healthy.
+- No paid provider request, human microphone verification, real business write,
+  telephone call, invoice reconciliation or sustained production soak is claimed.
+
+The first media-extraction/deployment milestone is implemented. Public end-to-end
+speech acceptance and the remaining business-tool/handoff/billing milestones are
+still open. A successful network probe is not a public-customer readiness claim.
