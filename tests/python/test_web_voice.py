@@ -10,6 +10,12 @@ from test_task_agents import database, environment, sql
 from agent_platform import web_voice
 
 
+def test_reasoning_deadline_preserves_room_for_speech():
+    assert web_voice.reasoning_timeout({'config':{'turn_timeout_seconds':45}}) == 35
+    assert web_voice.reasoning_timeout({'config':{'turn_timeout_seconds':5}}) == 1
+    assert web_voice.reasoning_timeout({'config':{'turn_timeout_seconds':60}}) == 35
+
+
 class Media:
     def __init__(self, respond, greeting, ended):
         self.respond, self.ended = respond, ended

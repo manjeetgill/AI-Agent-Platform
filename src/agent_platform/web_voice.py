@@ -55,6 +55,12 @@ class Offer(Strict):
     caller_phone: str | None = Field(default=None, pattern=r"^\+[1-9]\d{7,14}$")
 
 
+def reasoning_timeout(agent):
+    """Reserve time for speech within the pinned, bounded whole-turn deadline."""
+    config = voice_config.VoiceConfig.model_validate(agent.get('config') or voice_config.defaults().model_dump())
+    return max(1, min(35, config.turn_timeout_seconds - 10))
+
+
 def ready():
     if os.environ.get("AI_WEB_VOICE_ENABLED") != "1":
         return False
@@ -226,7 +232,7 @@ async def dialogue(pool, agent, call, text, history=None, on_claim=None):
                     "web-voice:" + str(event),
                     history or [],
                 ),
-                timeout=20,
+                timeout=reasoning_timeout(agent),
             )
 
         if (
@@ -243,6 +249,15 @@ async def dialogue(pool, agent, call, text, history=None, on_claim=None):
             await conn.execute("UPDATE web_voice_turns SET state=%s WHERE id=%s", (state, event))
         if isinstance(exc, asyncio.CancelledError):
             raise
+        # Never persist the exception message: it can contain private tool inputs.
+        from .runtime_errors import RunFailure
+        code = exc.code if isinstance(exc, RunFailure) and exc.code in {
+            'MODEL_TIMEOUT', 'MODEL_UNAVAILABLE', 'INVALID_MODEL_OUTPUT', 'PROVIDER_BACKPRESSURE',
+            'MODEL_NOT_CONFIGURED', 'CONTEXT_BUDGET_EXCEEDED',
+        } else 'TIMEOUT' if isinstance(exc, TimeoutError) else 'FAILED'
+        await voice_events.record(pool, call['id'], 'turn_failed', {
+            'stage': 'business_action' if external_dispatch else 'reasoning', 'outcome': code,
+        })
         return fallback
     async with pool.connection() as conn:
         await conn.execute(
@@ -415,7 +430,7 @@ def install_web_voice(app):
                     "voice-preview:" + str(ident) + ":" + body.request_key,
                     [m.model_dump() for m in body.history],
                 ),
-                timeout=20,
+                timeout=reasoning_timeout(agent),
             )
         except Exception as exc:  # noqa: BLE001 -- keep provider errors and credentials private
             code = getattr(exc, "code", "")

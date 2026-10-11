@@ -1,0 +1,28 @@
+{
+  "status": "FAIL",
+  "concurrent_sessions": 2,
+  "waves": 2,
+  "duration_seconds": 87.66,
+  "overload_rejected": true,
+  "synthetic_audio": true,
+  "human_microphone_verified": false,
+  "scale_limit": "Only the configured two-call pilot tested; no higher capacity claim.",
+  "runs": [
+    {
+      "status": "PASS",
+      "session_id": "012984a1-680e-407f-8f8d-b7c4ff674718",
+      "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
+      "agent_id": "2249c59a-5f98-4e23-9ed5-8a8219da5a74",
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "public_https": true,
+      "relay_only_client": true,
+      "cross_app_read_denied": true,
+      "duration_seconds": 85.28
+    },
+    {
+      "status": "FAIL",
+      "error_type": "AssertionError"
+    }
+  ]
+}
