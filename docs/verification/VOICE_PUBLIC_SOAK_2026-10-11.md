@@ -17,6 +17,12 @@ status or transport cause of an earlier generic `MODEL_UNAVAILABLE` event.
 Ruff and diff checks passed. Tests cover matching reservations to dispatched
 requests, preserving unknown holds, single attempts, and secret-free diagnostics.
 
+The diagnostics release `e838029263a6479f0d5acac6854fd10759d53693` was
+subsequently deployed with API, workers and media together. Public smoke checks
+passed: MyAlgoDesk login 200, scoped APIs 401 without credentials, and private
+surfaces 404. See `voice-public-soak-release.json`. No additional paid call was
+made after that deployment.
+
 ## Public test: incomplete, not a capacity pass
 
 The requested run was six waves of two simultaneous synthetic callers, 105
