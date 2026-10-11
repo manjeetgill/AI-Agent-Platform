@@ -72,6 +72,8 @@ async def main():
     }
     (ROOT / "docs/verification/voice-public-capacity.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result))
+    return result
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    raise SystemExit(0 if asyncio.run(main())["status"] == "PASS" else 1)
