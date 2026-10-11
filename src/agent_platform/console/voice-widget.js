@@ -1,7 +1,8 @@
 /** Embed in a first-party app page. api() must use that app's authenticated backend proxy. */
-export function mountVoiceWidget(root, {api, agentId, iceServers = [], beforeStart, consentText = 'I agree to microphone audio being processed by the AI speech service for this call.'}) {
+export function mountVoiceWidget(root, {api, agentId, callerPhone, iceServers = [], beforeStart, consentText = 'I agree to microphone audio being processed by the AI speech service for this call.'}) {
   root.replaceChildren();
   const notice=document.createElement('p'); notice.textContent='Speak with an AI assistant. Calls last up to two minutes. This platform does not record audio; audio is processed by the configured speech service.';
+  if(callerPhone)notice.textContent+=' The business also receives the contact number you supplied for this call; it is not identity verification.';
   const label=document.createElement('label'), consent=document.createElement('input'); consent.type='checkbox'; label.append(consent, document.createTextNode(consentText));
   const start=document.createElement('button'), stop=document.createElement('button'), status=document.createElement('p'), audio=document.createElement('audio');
   start.textContent='Talk to AI'; stop.textContent='End call'; stop.disabled=true; status.setAttribute('role','status'); audio.autoplay=true; audio.controls=true;
@@ -34,7 +35,7 @@ export function mountVoiceWidget(root, {api, agentId, iceServers = [], beforeSta
       await new Promise((resolve,reject)=>{if(connection.iceGatheringState==='complete'){resolve();return;}const timeout=setTimeout(()=>reject(new Error('Network setup timed out')),12000);connection.addEventListener('icegatheringstatechange',()=>{if(connection.iceGatheringState==='complete'){clearTimeout(timeout);resolve();}});});
       if(current!==epoch)return;
       status.textContent='Connecting to your AI assistant…';
-      const result=await api(`voice/agents/${id}/sessions`,'POST',{sdp:connection.localDescription.sdp,request_key:crypto.randomUUID(),audio_consent:true,transcript_consent:transcriptConsent.checked});
+      const result=await api(`voice/agents/${id}/sessions`,'POST',{sdp:connection.localDescription.sdp,request_key:crypto.randomUUID(),audio_consent:true,...(callerPhone?{caller_phone:typeof callerPhone==='function'?callerPhone():callerPhone}:{}),transcript_consent:transcriptConsent.checked});
       if(current!==epoch){await api(`voice/sessions/${result.id}/end`,'POST',{});return;}
       session=result.id;after=0;captions.textContent='';await connection.setRemoteDescription({type:'answer',sdp:result.sdp});
       timer=setTimeout(()=>end('Two-minute session limit reached'),120000);

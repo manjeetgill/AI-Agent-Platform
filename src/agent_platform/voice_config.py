@@ -4,14 +4,33 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Literal
+from uuid import UUID
 
-from pydantic import Field
+from pydantic import Field, field_serializer, model_validator
 
 from .gateway import FallbackProvider, Gateway, NVIDIAProvider
 from .tasks import Strict
 
 
+class Specialist(Strict):
+    name: str = Field(min_length=1, max_length=40, pattern=r'^[a-z][a-z0-9 ]*$')
+    agent_id: UUID
+
+    @field_serializer('agent_id')
+    def serialize_agent(self, value: UUID) -> str:
+        return str(value)
+
+
 class VoiceConfig(Strict):
+    specialists: list[Specialist] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode='after')
+    def distinct_specialists(self) -> "VoiceConfig":
+        names=[s.name for s in self.specialists]
+        if len(set(names)) != len(names) or 'main assistant' in names:
+            raise ValueError('Use unique specialist names; main assistant is reserved')
+        return self
+
     asr: Literal['gemini', 'sarvam', 'local'] = 'gemini'
     tts: Literal['gemini', 'sarvam', 'local'] = 'gemini'
     reasoning: Literal['gemini', 'nvidia', 'openrouter', 'together', 'local'] = 'gemini'

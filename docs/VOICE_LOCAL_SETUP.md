@@ -247,10 +247,11 @@ Units are audio seconds, synthesis characters and total reasoning tokens. Use
 a conservative token rate covering both input/output rates and provider minimum
 billing/rounding. No real provider prices are supplied by this implementation.
 
-The dashboard displays estimates and uncertain holds separately. It does not
-charge customers, reconcile provider invoices, convert currency, or meter carrier
-charges. Historical uncertain holds require operator investigation; do not clear
-them just to permit retries. UTC day/month windows apply to monetary limits.
+The usage API displays estimates and uncertain holds separately. Reviewed provider
+invoice lines can now be imported as described below; this does not charge
+customers, convert currency, or meter carrier charges. Historical uncertain holds
+require operator investigation; do not clear them just to permit retries. UTC
+day/month windows apply to monetary limits.
 
 ## Additional verification
 
@@ -272,3 +273,108 @@ fails until separate human/carrier/relay/production acceptance is documented.
 ## Extracted media and baseline reconciliation
 
 See [the authenticated media contract](VOICE_MEDIA_SERVICE.md). The launcher now requires a private `database-roles.json` with separate `agent_api`, `agent_worker` and `agent_migrator` credentials; the old single `voice_runtime_pilot` credential is not compatible with production row-level security. Use `scripts/database_roles.py` against a dedicated fresh database, then migrate as its migrator. Never point this reconciled source at the old voice-050 migration lineage. The previously saved pilot database and configuration backup remain available for recovery.
+
+## October 11 follow-up: tools, specialists and accounting
+
+These changes are applied to the isolated local profile through migration 066.
+They are not a claim of public deployment or real telephone activation.
+
+### Human microphone retest
+
+The owner reported hearing only the greeting. Event metadata showed repeated
+interruptions cancelling the answer. The synthetic clinic demo now has
+interruptions disabled and exact FAQ streaming enabled (version 2). The local
+profile uses `AI_LOCAL_TTS_ENGLISH_VOICE=en-gb`; supported English choices are
+`en-us` and `en-gb`. This avoids the observed automated recognition ambiguity in
+the opening-hours reply. Other agents' settings remain independent.
+
+The same demo completed a real HTTP/WebRTC synthetic audio test with the full
+nine-to-five reply. This does not confirm a human heard it. Open
+`http://127.0.0.1:4161/voice`, select **Local voice demo — synthetic clinic**,
+consent to audio processing, click **Talk to AI**, allow the microphone, wait for
+the greeting, then ask **What are your opening hours?** End the call afterward.
+Barge-in quality and mobile/public human audio still need separate acceptance.
+
+The subsequent human call recognized a clinic-hours question but returned the
+generic fallback. Local exact-quote mode now selects one bounded source-sentence
+ID (or explicitly declines), and the server supplies the original text after
+rechecking its source. This avoids small-model quotation rewriting. It returns
+one complete sentence, not multi-source synthesis or token-by-token speech.
+Three opening/closing-hours variants passed local model checks; absent pricing
+and medical-advice questions were declined. Human confirmation remains pending.
+
+### Two consuming apps
+
+Both apps expose `POST /integrations/agent-platform/voice` using the platform's
+signed business-handler contract. Bind each platform agent only to its own app
+and callback secret in the private `AI_WEB_VOICE_HANDLERS` configuration. HTTPS
+is required for deployed callbacks. Loopback callbacks are a local test facility.
+
+- **Sahayak:** configure its existing calling-agent/clinic binding. The new
+  internet-voice route uses the same appointment state machine, confirmation,
+  event receipts, clinic isolation and uncertain-outcome handling. The isolated
+  test completed one booking via the actual platform Python HTTP client. It did
+  not touch real patients or send messages.
+- **Reach CRM:** privately configure `AGENT_VOICE_BINDINGS` as
+  `{ "<agent UUID>": {"organization_id":"<organization UUID>",
+  "app_id":"<platform app UUID>", "secret":"<private shared secret>"} }`.
+  Its initial handler searches approved organization knowledge and returns
+  extractive FAQ answers. It does not book appointments or perform CRM writes.
+  Tests cover signatures, event replay and separation between organizations.
+
+Session creation accepts optional E.164 `caller_phone`; the widget accepts
+`callerPhone` (a value or getter). This contact is pinned only to the session and
+passed to its authorized app handler. It is **not verified caller identity** and
+must never authorize patient-history access. Sahayak needs it to complete a
+booking. The app should obtain it through its own authenticated/contact flow.
+
+### Controlled FAQ specialists
+
+An agent configuration can contain up to five routes:
+`"specialists": [{"name":"billing", "agent_id":"<same-app agent UUID>"}]`.
+Save it through the existing owner-only configuration/version endpoint.
+Say **Talk to billing** to select it, or **Talk to main assistant** to return.
+Names must be lowercase and unique; “main assistant” is reserved.
+
+This only changes FAQ grounding. Every target must be enabled and visible to
+the caller in the same app, with no business action handler. There are at most
+three switches per session. The root session's providers, spending limits,
+deadline and language stay pinned; conversation history resets at a switch.
+Revoking target access prevents further turns. Handoff events contain IDs and
+hop counts, not caller words. Business-handler agents do not use this FAQ routing.
+This is not a human transfer or delegated authority to perform transactions.
+
+### Reviewed provider-charge reconciliation
+
+Migration 065 keeps actual charges separate from original runtime estimates.
+Using an operator-owned private database connection, run:
+
+```sh
+.venv-voice/bin/python scripts/voice_accounting.py reconcile --file /private/path/reviewed-charges.json
+```
+
+The file is a JSON array. Each line needs `ledger_id`, `app_id`, `provider`,
+`model`, `stage`, `currency`, `actual_amount`, `invoice_reference`,
+`line_reference`, and the matching `provider_response_id` if recorded. Use
+actual provider evidence, not model-generated prices. Runtime app roles cannot
+write this table. Imports are atomic and idempotent; mismatches or changed
+previously imported amounts require operator review. Active reservations cannot
+be imported. Reconciliation does not change UNKNOWN execution outcomes or retry
+the call. Reviewed actual amounts replace estimates/holds for budget checks.
+No invoice import has been verified against a real provider bill yet.
+
+### Monitoring and bounded soak
+
+`GET /v1/voice/health` requires `agents:read` and reports the visible caller's
+last-24-hour session counts, uncertain turns and `attention_required`. It contains
+no transcripts and does not certify provider readiness or telephone operation.
+
+```sh
+.venv-voice/bin/python scripts/verify_voice_load.py --waves 60 --concurrent 1 --duration-seconds 300
+```
+
+This alternates synthetic calls between two isolated apps, checks foreign-app
+session reads are denied and revokes fixture credentials afterward. It stops
+on the first failed audio call. One concurrent fixture leaves the second pilot
+slot available; start only when no calls are active. Local soak evidence does
+not establish production concurrency, mobile networking or paid-provider limits.

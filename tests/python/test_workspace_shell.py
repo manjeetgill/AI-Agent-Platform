@@ -54,3 +54,32 @@ def test_upstream_outage_keeps_workspace_navigation():
         assert 'private infrastructure' not in r.text
         r=c.get('/monitor/connections',headers={'X-Monitor-Intent':'user-action'})
         assert r.status_code==503 and 'private infrastructure' not in r.text
+
+
+def test_bridge_with_api_security_does_not_require_console_monitor_flag(monkeypatch):
+    from agent_platform.db_scope import operator_access
+    from agent_platform.route_security import install as install_security
+
+    monkeypatch.setenv('AI_LOCAL_MONITOR','0')
+    calls=[]
+    def upstream(request):
+        assert operator_access.get() is False
+        calls.append(request.url.path)
+        return httpx.Response(200,text='<html><head></head><body>Operations</body></html>',headers={'content-type':'text/html'})
+    app=FastAPI()
+    install_security(app,'fixture')
+    install_bridge(app,local,transport=httpx.MockTransport(upstream))
+    with TestClient(app) as client:
+        for path in ['/monitor/email','/monitor/sms','/monitor/onboard']:
+            result=client.get(path)
+            assert result.status_code==200 and 'Platform capabilities' in result.text
+        assert client.get('/monitor/email',headers={'Host':'public.example'}).status_code==403
+        assert client.get('/monitor/sms',headers={'Origin':'https://foreign.example'}).status_code==403
+        assert client.post('/monitor/setup/apps',json={}).status_code==403
+    assert len(calls)==3
+    # The actual operations API still requires its explicit monitor opt-in.
+    standalone=FastAPI()
+    install_security(standalone,'fixture')
+    with TestClient(standalone) as client:
+        result=client.get('/monitor/email')
+        assert result.status_code==404 and result.json()['detail']=='Local monitoring is disabled'

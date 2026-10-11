@@ -279,3 +279,20 @@ def test_barge_in_allows_next_faq_but_never_replays_uncertain_action(monkeypatch
         before = len(sql('SELECT id FROM web_voice_turns WHERE session_id=%s', (call,)))
         assert c.portal.call(captured[0].respond, 'Try again')['action']=='handoff'
         assert len(sql('SELECT id FROM web_voice_turns WHERE session_id=%s', (call,)))==before
+
+
+def test_browser_track_end_is_not_decoder_failure():
+    from aiortc.mediastreams import MediaStreamError
+    async def run():
+        ended=[]
+        events=[]
+        async def answer(text):return {'action':'continue','text':'Hello'}
+        async def close():ended.append(True)
+        session=calling_media.Session(answer,'Hello',close)
+        async def event(kind,details=None,text=None):events.append(kind)
+        session.event=event
+        class EndedTrack:
+            async def recv(self):raise MediaStreamError()
+        await session.consume(EndedTrack())
+        assert session.closed and ended==[True] and 'failed' not in events
+    asyncio.run(run())

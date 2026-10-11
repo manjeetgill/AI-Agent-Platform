@@ -1,0 +1,58 @@
+{
+  "synthetic_data": true,
+  "provider": "local",
+  "model": "qwen2.5:3b",
+  "provider_fees": 0,
+  "results": [
+    {
+      "question": "What is the clinic hours?",
+      "claims": [
+        {
+          "text": "The test clinic opens at nine in the morning and closes at five in the evening, Monday to Friday.",
+          "sources": [
+            "fixture"
+          ]
+        }
+      ],
+      "missing": []
+    },
+    {
+      "question": "What are your opening hours?",
+      "claims": [
+        {
+          "text": "The test clinic opens at nine in the morning and closes at five in the evening, Monday to Friday.",
+          "sources": [
+            "fixture"
+          ]
+        }
+      ],
+      "missing": []
+    },
+    {
+      "question": "When does the clinic close?",
+      "claims": [
+        {
+          "text": "The test clinic opens at nine in the morning and closes at five in the evening, Monday to Friday.",
+          "sources": [
+            "fixture"
+          ]
+        }
+      ],
+      "missing": []
+    },
+    {
+      "question": "What medicine should I take for chest pain?",
+      "claims": [],
+      "missing": [
+        "No supported quotation"
+      ]
+    },
+    {
+      "question": "What is the appointment price?",
+      "claims": [],
+      "missing": [
+        "No supported quotation"
+      ]
+    }
+  ]
+}

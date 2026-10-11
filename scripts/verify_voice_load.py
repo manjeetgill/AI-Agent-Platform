@@ -22,7 +22,7 @@ from agent_platform import service_identity, voice_config
 ROOT=Path(__file__).resolve().parents[1]
 
 
-async def run(waves):
+async def run(waves, concurrent=2, duration_seconds=0):
     os.environ.update(json.loads((ROOT/'.runtime/voice/config.json').read_text()))
     cfg=voice_config.defaults()
     if (cfg.asr,cfg.tts,cfg.reasoning)!=('local','local','local'):
@@ -55,11 +55,16 @@ async def run(waves):
                     organisation='Synthetic voice load test',app_name=f'Voice load fixture {index}',days=1,
                     scopes=['agents:read','agents:write','agents:run','knowledge:read','knowledge:write','knowledge:publish']))
             headers=[{'Authorization':'Bearer '+k['credential'],'X-External-User-ID':'synthetic-caller'} for k in keys]
+            tested_waves=0
             for wave in range(waves):
-                combined=await asyncio.gather(*(audio_call(streaming=True,api_url='http://127.0.0.1:4160/v1/',headers=h,save_report=False) for h in headers),capacity_probe(),return_exceptions=True)
-                pair=combined[:2]
-                overload.append(combined[2] is True)
-                for index,value in enumerate(pair):
+                indices=list(range(2)) if concurrent==2 else [wave % 2]
+                calls=[audio_call(streaming=True,api_url='http://127.0.0.1:4160/v1/',headers=headers[i],save_report=False) for i in indices]
+                if concurrent==2: calls.append(capacity_probe())
+                combined=await asyncio.gather(*calls,return_exceptions=True)
+                pair=combined[:concurrent]
+                if concurrent==2: overload.append(combined[concurrent] is True)
+                tested_waves+=1
+                for index,value in zip(indices,pair,strict=True):
                     if isinstance(value,BaseException):
                         results.append({'wave':wave+1,'app_index':index,'status':'FAIL','error_type':type(value).__name__,
                             'assertion':str(value)[:200] if isinstance(value,AssertionError) else None})
@@ -67,6 +72,8 @@ async def run(waves):
                         results.append({'wave':wave+1,'app_index':index,**{k:v for k,v in value.items() if k not in {'events','spoken_reply_transcription'}}})
                 if any(isinstance(value,BaseException) for value in pair):
                     break  # No blind retries or extra pressure after a failed wave.
+                if duration_seconds and time.monotonic()-started >= duration_seconds:
+                    break
             isolation=[]
             async with httpx.AsyncClient(base_url='http://127.0.0.1:4160/v1/',timeout=10) as client:
                 for result in results:
@@ -76,13 +83,13 @@ async def run(waves):
             times=sorted(r['last_input_frame_to_first_received_audio_ms'] for r in results if r['status']=='PASS')
             def percentile(p):
                 return times[max(0,math.ceil(len(times)*p)-1)] if times else None
-            report={'status':'PASS' if len(results)==waves*2 and all(r['status']=='PASS' for r in results) and all(isolation) and all(overload) else 'FAIL',
+            report={'status':'PASS' if len(results)==tested_waves*concurrent and (not duration_seconds or time.monotonic()-started>=duration_seconds) and all(r['status']=='PASS' for r in results) and all(isolation) and all(overload) else 'FAIL',
                 'synthetic_audio':True,'human_microphone_tested':False,'public_network_tested':False,
-                'concurrent_callers':2,'waves':waves,'duration_seconds':round(time.monotonic()-started,2),
+                'concurrent_callers':concurrent,'waves':tested_waves,'minimum_duration_seconds':duration_seconds,'duration_seconds':round(time.monotonic()-started,2),
                 'first_reply_audio_ms':{'p50':percentile(.5),'p95':percentile(.95),'p99':percentile(.99)},
                 'sample_warning':'Small local capacity sample, not a production SLO or soak certification.',
-                'overload_rejected':all(overload),'cross_app_reads_denied':all(isolation) and bool(isolation),'runs':results}
-            (ROOT/'docs/verification/voice-load.json').write_text(json.dumps(report,indent=2)+'\n')
+                'overload_rejected':all(overload) if overload else None,'cross_app_reads_denied':all(isolation) and bool(isolation),'runs':results}
+            (ROOT/('docs/verification/voice-soak.json' if duration_seconds else 'docs/verification/voice-load.json')).write_text(json.dumps(report,indent=2)+'\n')
             print(json.dumps(report,indent=2))
             return report
         finally:
@@ -93,6 +100,8 @@ async def run(waves):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--waves',type=int,choices=range(1,6),default=3)
+    parser.add_argument('--waves',type=int,choices=range(1,61),default=3)
+    parser.add_argument('--concurrent',type=int,choices=[1,2],default=2)
+    parser.add_argument('--duration-seconds',type=int,choices=range(901),default=0)
     args=parser.parse_args()
-    raise SystemExit(0 if asyncio.run(run(args.waves))['status']=='PASS' else 1)
+    raise SystemExit(0 if asyncio.run(run(args.waves,args.concurrent,args.duration_seconds))['status']=='PASS' else 1)

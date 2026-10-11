@@ -154,7 +154,9 @@ def spoken_clock(text):
 
 async def local_speak(text):
     """Optional CPU speech fallback. Text goes to stdin, never a shell or process arguments."""
-    voice = "hi" if re.search(r"[\u0900-\u097f]", text) else "en-us"
+    voice = "hi" if re.search(r"[\u0900-\u097f]", text) else os.environ.get('AI_LOCAL_TTS_ENGLISH_VOICE','en-us')
+    if voice not in {'hi','en-us','en-gb'}:
+        raise ValueError('Unsupported configured local speech voice')
     process = await asyncio.create_subprocess_exec(
         os.environ.get('AI_LOCAL_TTS_BINARY', 'espeak-ng'),
         "--stdout",

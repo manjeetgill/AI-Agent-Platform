@@ -54,6 +54,8 @@ class VoiceRuntime:
             from .web_voice import dialogue
             with voice_config.using(agent.get("config")):
                 reply = await dialogue(pool, agent, call, text, history, on_claim)
+            if reply.pop("reset_history", False):
+                history.clear()
             if reply["action"] == "continue":
                 history.extend(
                     [{"role": "user", "text": text[:1500]}, {"role": "assistant", "text": reply["text"]}]

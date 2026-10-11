@@ -5,11 +5,16 @@ verified against the provider contract. Use a quote/reference, never credentials
 """
 import argparse
 import asyncio
+import json
 import os
 from decimal import Decimal
+from pathlib import Path
 from uuid import UUID
 
+from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
+
+from agent_platform.voice_reconciliation import Charge, reconcile
 
 
 def amount(value):
@@ -20,7 +25,12 @@ def amount(value):
 
 
 async def run(args):
-    async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False) as pool, pool.connection() as conn:
+    async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False, kwargs={'row_factory': dict_row}) as pool, pool.connection() as conn:
+        if args.command == 'reconcile':
+            lines=json.loads(Path(args.file).read_text())
+            result=await reconcile(conn,[Charge.model_validate(line) for line in lines])
+            print(json.dumps(result))
+            return
         if args.command == 'rate':
             if args.provider == 'local':
                 raise ValueError('Local external API fees are automatically zero; infrastructure is separate')
@@ -46,6 +56,8 @@ async def run(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
+    reconciliation = commands.add_parser('reconcile', help='Import reviewed provider charges; no payment or provider request')
+    reconciliation.add_argument('--file', required=True, help='Private JSON array of Charge records; never include credentials')
     rate = commands.add_parser('rate')
     rate.add_argument('--provider', required=True, choices=['gemini','sarvam','nvidia','openrouter','together'])
     rate.add_argument('--model', required=True)

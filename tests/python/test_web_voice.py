@@ -280,3 +280,23 @@ def test_internet_readiness_requires_knowledge_runtime_and_authority(monkeypatch
         status = c.get(path, headers=h).json()
         assert not status['ready_to_attempt']
         assert status['knowledge_documents_available'] == 0
+
+
+def test_voice_contact_is_pinned_but_not_identity_and_health_scoped(monkeypatch):
+    monkeypatch.setattr(web_voice,'ready',lambda:True)
+    monkeypatch.setattr(web_voice.calling_media,'Session',Media)
+    with environment(monkeypatch) as (c,h,key,_):
+        agent,_=create(c,h,key)
+        path='/v1/voice/agents/'+agent['id']+'/sessions'
+        body={'sdp':'v=0\r\n'+'fixture '*5,'request_key':uuid4().hex,'audio_consent':True,'caller_phone':'bad'}
+        assert c.post(path,headers=h,json=body).status_code==422
+        body['caller_phone']='+919000000001'
+        reply=c.post(path,headers=h,json=body)
+        assert reply.status_code==201,reply.text
+        row=sql('SELECT owner_id,agent_snapshot FROM web_voice_sessions WHERE id=%s',(reply.json()['id'],))[0]
+        assert row['agent_snapshot']['caller_phone']==body['caller_phone']
+        assert str(row['owner_id'])!=body['caller_phone']
+        health=c.get('/v1/voice/health',headers=h)
+        assert health.status_code==200 and health.json()['active']==1
+        with environment(monkeypatch) as (_,other,_,_):
+            assert c.get('/v1/voice/health',headers=other).json()['sessions']==0

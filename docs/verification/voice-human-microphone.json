@@ -123,5 +123,22 @@
       "details": {},
       "created_at": "2026-10-11T13:52:05.555572+05:30"
     }
-  ]
+  ],
+  "latest_user_attempt": {
+    "session_id": "b4a15d60-00b0-460c-a472-89012abb0f4f",
+    "browser_connected": true,
+    "question_recognized": true,
+    "spoken_reply_heard": true,
+    "opening_hours_answer_confirmed": false,
+    "outcome": "User reported generic cannot-confirm fallback. Local quotation selection corrected; human retest pending.",
+    "transcript_exported": false
+  },
+  "user_follow_up": {
+    "reported_at_date": "2026-10-11",
+    "timezone": "Asia/Calcutta",
+    "statement": "Everything is finished now.",
+    "local_test_completion_reported": true,
+    "exact_spoken_answer_explicitly_confirmed": false,
+    "public_audio_or_telephone_verified": false
+  }
 }

@@ -1265,6 +1265,20 @@
       "reason": "Operator-reviewed public pricing metadata; runtime read-only."
     },
     {
+      "name": "voice_reconciliations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "voice_usage_ledger"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
       "name": "voice_spend_limits",
       "rls": true,
       "forced": true,
@@ -2883,11 +2897,11 @@
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
-      "line": 67
+      "line": 69
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
-      "line": 103
+      "line": 105
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
@@ -2895,15 +2909,19 @@
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
-      "line": 77
+      "line": 79
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
-      "line": 80
+      "line": 82
     },
     {
       "file": "src/agent_platform/voice_runtime.py",
-      "line": 119
+      "line": 121
+    },
+    {
+      "file": "src/agent_platform/voice_specialists.py",
+      "line": 23
     },
     {
       "file": "src/agent_platform/voice_usage.py",
@@ -2915,27 +2933,27 @@
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 148
+      "line": 149
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 239
+      "line": 247
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 314
+      "line": 322
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 332
+      "line": 340
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 377
+      "line": 357
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 424
+      "line": 402
     },
     {
       "file": "src/agent_platform/web_voice.py",
@@ -2943,67 +2961,75 @@
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 495
+      "line": 474
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 513
+      "line": 520
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 525
+      "line": 538
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 537
+      "line": 550
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 545
+      "line": 562
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 569
+      "line": 570
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 576
+      "line": 594
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 595
+      "line": 601
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 687
+      "line": 620
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 726
+      "line": 714
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 735
+      "line": 753
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 231
+      "line": 762
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 698
+      "line": 239
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 749
+      "line": 725
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 435
+      "line": 776
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 680
+      "line": 460
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 213
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 707
     },
     {
       "file": "src/agent_platform/whatsapp.py",
@@ -3235,7 +3261,7 @@
     }
   ],
   "summary": {
-    "tables": 118,
+    "tables": 119,
     "without_rls": 6,
     "unclassified": 0
   },

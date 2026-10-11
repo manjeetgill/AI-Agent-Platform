@@ -20,7 +20,7 @@ def voice_routes(current):
     """Expose authenticated voice APIs, never the internal media control socket."""
     block = '''    @voiceapps {
         host agents.myalgodesk.in
-        path /v1/voice/agents /v1/voice/agents/* /v1/voice/sessions /v1/voice/sessions/* /v1/voice/usage /v1/voice/capabilities
+        path /v1/voice/agents /v1/voice/agents/* /v1/voice/sessions /v1/voice/sessions/* /v1/voice/usage /v1/voice/capabilities /v1/voice/health
     }
     handle @voiceapps {
         reverse_proxy agent-platform-api-1:4060
@@ -28,6 +28,9 @@ def voice_routes(current):
 '''
     if block in current:
         return current
+    previous = block.replace(' /v1/voice/health', '')
+    if current.count(previous) == 1:
+        return current.replace(previous, block, 1)
     if '@voiceapps' in current or current.count('    @businesspages {') != 1:
         raise RuntimeError('Unexpected voice proxy layout')
     return current.replace('    @businesspages {', block+'    @businesspages {', 1)
@@ -221,7 +224,10 @@ def main():
             os.chown(socket_dir,10001,10001)
             secret=secrets.token_urlsafe(48)
             mount={'type':'bind','source':str(socket_dir),'target':'/run/agent-media'}
-            config['services']['api'].setdefault('volumes',[]).append(mount)
+            config['services']['api']['volumes'] = [
+                item for item in config['services']['api'].get('volumes', [])
+                if item.get('target') != '/run/agent-media'
+            ] + [mount]
             config['services']['api']['environment'].update(AI_VOICE_MEDIA_URL='http://localhost',
                 AI_VOICE_MEDIA_SOCKET='/run/agent-media/control.sock',AI_VOICE_MEDIA_SECRET=secret)
             media_env=process_env(config['services']['api']['environment'],roles['agent_api'])
@@ -287,6 +293,7 @@ def main():
                       'https://shayak.myalgodesk.in/v1/orchestration/automations':404}
             if media_release:
                 expected.update({'https://agents.myalgodesk.in/v1/voice/agents':401,
+                                 'https://agents.myalgodesk.in/v1/voice/health':401,
                                  'https://agents.myalgodesk.in/v1/voice/sessions':401,
                                  'https://agents.myalgodesk.in/internal/v1/status':404})
             for _ in range(10):
@@ -302,7 +309,8 @@ def main():
         except Exception:
             # Additive migrations stay in place; never restore data over live writes.
             capture(['docker','compose','-p','agent-platform','-f',str(backup/'rollback.compose.json'),
-                     'up','-d','--no-deps','--no-build','--pull','never',*SERVICES])
+                     'up','-d','--no-deps','--no-build','--pull','never',*SERVICES,
+                     *(['media'] if media_release and 'media' in config['services'] else [])])
             if changed_proxy:
                 proxy.write_text((backup/'Caddyfile').read_text())
                 capture(['docker','restart','myalgodesk-proxy-1'])

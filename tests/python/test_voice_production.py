@@ -96,7 +96,7 @@ def test_streamed_quotations_validate_before_speech_and_close(monkeypatch):
             gateway.on_claim=speak
             gateway.verify_stream_claim=current
             try:
-                result=await gateway.structured('research','',{'passages':[{'id':'source-1','text':'Open nine to five.'}]},Generated,lambda x:x)
+                result=await gateway.structured('research','',{'passages':[{'id':'source-1','text':'Open nine to five.','title':'Internal storage metadata'}]},Generated,lambda x:x)
             except RunFailure:
                 result=None
             return result,spoken
@@ -119,6 +119,45 @@ def test_sse_limits_and_tool_calls_fail_closed():
                 async for _ in voice_stream.content_chunks(client,'https://fixture.invalid',{}, {}, {}):
                     pass
     asyncio.run(run())
+
+
+def test_local_voice_selects_source_text_and_rejects_unknown_or_incomplete_choices():
+    async def run(content, complete=True, revoked=False):
+        spoken=[]
+        async def handler(request):
+            payload=json.loads(request.content)
+            assert payload['temperature']==0
+            assert json.loads(payload['messages'][1]['content'])['quotations']==[
+                {'id':'quote_1','text':'Open nine to five.'}]
+            lines=[('data: '+json.dumps({'choices':[{'index':0,'delta':{'content':content}}]})+'\n\n').encode()]
+            if complete:
+                lines += [b'data: {"usage":{"total_tokens":12},"choices":[]}\n\n', b'data: [DONE]\n\n']
+            return httpx.Response(200,headers={'content-type':'text/event-stream'},stream=Stream(lines))
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            provider=NVIDIAProvider('fixture')
+            provider.name='local'
+            gateway=Gateway(provider,client=client,model_override='fixture',max_attempts=1)
+            async def speak(text): spoken.append(text)
+            async def current(claim):
+                assert claim.sources==['permitted-source']
+                if revoked: raise ValueError('Source no longer published')
+            gateway.on_claim=speak
+            gateway.verify_stream_claim=current
+            try:
+                result=await gateway.structured('research','',{'question':'Hours?', 'passages':[
+                    {'id':'permitted-source','text':'Open nine to five.','title':'Not sent to model'}]},Generated,lambda x:x)
+            except RunFailure:
+                result=None
+            return result,spoken
+    result,spoken=asyncio.run(run('{"selection":"quote_1"}'))
+    assert result[1]==12 and spoken==['Open nine to five.']
+    result,spoken=asyncio.run(run('{"selection":"none"}'))
+    assert result[0].claims==[] and result[0].missing and spoken==[]
+    for raw in ['{"selection":"foreign"}', '{"selection":"quote_1","selection":"none"}',
+                '{"selection":"quote_1","text":"Invented fact"}', '[]']:
+        assert asyncio.run(run(raw))==(None,[])
+    assert asyncio.run(run('{"selection":"quote_1"}',complete=False))==(None,[])
+    assert asyncio.run(run('{"selection":"quote_1"}',revoked=True))==(None,[])
 
 
 def test_clock_pronunciation_preserves_values():

@@ -26,7 +26,7 @@ def resample(raw, rate, target):
     return b''.join(bytes(f.planes[0])[:f.samples*2] for f in converter.resample(frame)+converter.resample(None))
 
 
-async def main(barge_in=False, *, streaming=False, api_url=None, headers=None, save_report=True, after_connected=None):
+async def main(barge_in=False, *, streaming=False, api_url=None, headers=None, save_report=True, after_connected=None, existing_agent_id=None, question='What are the clinic opening hours?'):
     import os
 
     from agent_platform import calling_audio, voice_config
@@ -41,7 +41,7 @@ async def main(barge_in=False, *, streaming=False, api_url=None, headers=None, s
     heard = asyncio.Event()
     audio_stats = {'frames': 0, 'last_loud': 0.0, 'input_done': None, 'first_reply': None}
     started = time.monotonic()
-    pcm, rate = await calling_audio.local_speak('What are the clinic opening hours?')
+    pcm, rate = await calling_audio.local_speak(question)
     outgoing = bytearray(resample(pcm, rate, 48000))
 
     class Speech(MediaStreamTrack):
@@ -103,12 +103,17 @@ async def main(barge_in=False, *, streaming=False, api_url=None, headers=None, s
             capability = await request('voice/capabilities')
             assert capability['configured'] and capability['reasoning_provider']=='local'
             unique = uuid4().hex
-            doc = await request('knowledge/documents', {'external_id':'voice-pilot-'+unique,
-                'title':'Synthetic voice test clinic', 'text':'The test clinic opening hours are nine in the morning to five in the evening, Monday to Friday.',
-                'source_label':'Synthetic test fixture, not a real clinic', 'visibility':'app'})
-            agent = await request('voice/agents', {'external_id':'voice-pilot-'+unique,
-                'name':'Local voice verification', 'greeting':'Welcome to the synthetic test clinic.',
-                'documents':[doc['id']], 'config':{**voice_config.defaults().model_dump(), 'stream_grounded_quotes':streaming}, 'language':'en'})
+            if existing_agent_id:
+                agent = next(a for a in (await request('voice/agents'))['agents'] if a['id']==existing_agent_id)
+                if not agent['name'].startswith('Local voice demo'):
+                    raise ValueError('Existing-agent verification is limited to the synthetic local demo')
+            else:
+                doc = await request('knowledge/documents', {'external_id':'voice-pilot-'+unique,
+                    'title':'Synthetic voice test clinic', 'text':'The test clinic opening hours are nine in the morning to five in the evening, Monday to Friday.',
+                    'source_label':'Synthetic test fixture, not a real clinic', 'visibility':'app'})
+                agent = await request('voice/agents', {'external_id':'voice-pilot-'+unique,
+                    'name':'Local voice verification', 'greeting':'Welcome to the synthetic test clinic.',
+                    'documents':[doc['id']], 'config':{**voice_config.defaults().model_dump(), 'stream_grounded_quotes':streaming}, 'language':'en'})
             await pc.setLocalDescription(await pc.createOffer())
             result = await request('voice/agents/'+agent['id']+'/sessions', {
                 'sdp':pc.localDescription.sdp, 'request_key':unique, 'audio_consent':True, 'transcript_consent':True})
@@ -137,7 +142,19 @@ async def main(barge_in=False, *, streaming=False, api_url=None, headers=None, s
                 await asyncio.sleep(.5)
             else:
                 raise TimeoutError('No synthesized answer before deadline')
-            transcript = await calling_audio.transcribe(bytes(received)[-384000:])
+            # Verify all returned speech; taking only the last 12 seconds can
+            # cut off the opening hour in longer answers and mislabel good audio.
+            from array import array
+            raw_reply=bytes(received)
+            voiced=[offset for offset in range(0,len(raw_reply),640)
+                    if any(abs(x)>500 for x in array('h',raw_reply[offset:offset+640]))]
+            if not voiced:raise AssertionError('Returned audio contained no audible speech')
+            raw_reply=raw_reply[max(0,voiced[0]-3200):voiced[-1]+3840]
+            transcripts=[]
+            for offset in range(0,len(raw_reply),320000):
+                part=raw_reply[max(0,offset-16000):offset+352000]
+                if part:transcripts.append(await calling_audio.transcribe(part))
+            transcript=' '.join(transcripts)
             answer = next(e['content'] for e in timeline if e['kind']=='assistant')
             if save_report:
                 (ROOT/'.runtime/voice/audio-attempt.json').write_text(json.dumps({'answer':answer,'transcription':transcript,'bytes':len(received),'events':timeline},default=str))
@@ -191,5 +208,7 @@ if __name__=='__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--barge-in', action='store_true', help='Speak over the greeting and require an interruption event')
     parser.add_argument('--streaming', action='store_true')
+    parser.add_argument('--existing-agent', help='ID of the labelled synthetic local demo only')
+    parser.add_argument('--question', default='What are the clinic opening hours?', help='Synthetic opening-hours question variant; the same factual answer is still required')
     args=parser.parse_args()
-    asyncio.run(main(args.barge_in, streaming=args.streaming))
+    asyncio.run(main(args.barge_in, streaming=args.streaming, existing_agent_id=args.existing_agent, question=args.question))

@@ -183,6 +183,7 @@ class Session:
                               'provider': calling_audio.speech_provider('tts'), 'characters': len(text)})
 
     async def consume(self, track):
+        from aiortc.mediastreams import MediaStreamError
         from av import AudioResampler
 
         from .voice_vad import SpeechDetector
@@ -227,6 +228,11 @@ class Session:
                         chunks.clear()
                         quiet = 0
                         partial_at = 32000
+        except MediaStreamError:
+            # Browser End call stops its track before the HTTP end request arrives.
+            # A normal end-of-stream is not a media decoder failure. ICE failure is
+            # reported separately by connectionstatechange.
+            await self.close()
         except Exception:  # noqa: BLE001 -- no audio/transcripts in exceptions or logs
             await self.fail('media_receive')
 

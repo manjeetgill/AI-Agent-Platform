@@ -57,9 +57,9 @@ async def reserve(stage, maximum):
         hold = maximum * rate
         if hold:
             used = await (await conn.execute("""SELECT
-                coalesce(sum(coalesce(amount,reserved_amount)) FILTER (WHERE created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS daily,
-                coalesce(sum(coalesce(amount,reserved_amount)),0) AS monthly
-                FROM voice_usage_ledger WHERE app_id=%s AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'""", (call['app_id'],))).fetchone()
+                coalesce(sum(coalesce(r.actual_amount,l.amount,l.reserved_amount)) FILTER (WHERE l.created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0) AS daily,
+                coalesce(sum(coalesce(r.actual_amount,l.amount,l.reserved_amount)),0) AS monthly
+                FROM voice_usage_ledger l LEFT JOIN voice_reconciliations r ON r.ledger_id=l.id WHERE l.app_id=%s AND l.created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'""", (call['app_id'],))).fetchone()
             if used['daily']+hold > limits['daily'] or used['monthly']+hold > limits['monthly']:
                 raise ValueError('Voice spending allowance reached')
         await conn.execute('''INSERT INTO voice_usage_ledger(id,session_id,app_id,stage,provider,model,unit,state,reserved_units,currency,rate,reserved_amount,rate_reference)
@@ -96,13 +96,17 @@ async def measured(stage, maximum, operation, quantity):
 
 
 async def summary(conn, app):
-    rows = await (await conn.execute("""SELECT currency,stage,unit,
-        count(*) AS attempts,coalesce(sum(units),0) AS measured_units,
-        count(*) FILTER(WHERE state<>'DONE') AS uncertain_attempts,
-        coalesce(sum(amount),0) AS estimated_amount,
-        coalesce(sum(reserved_amount) FILTER(WHERE state<>'DONE'),0) AS held_amount
-        FROM voice_usage_ledger WHERE app_id=%s
-        AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-        GROUP BY currency,stage,unit ORDER BY currency,stage""", (app,))).fetchall()
+    rows = await (await conn.execute("""SELECT l.currency,l.stage,l.unit,
+        count(*) AS attempts,coalesce(sum(l.units),0) AS measured_units,
+        count(*) FILTER(WHERE l.state<>'DONE' AND r.ledger_id IS NULL) AS uncertain_attempts,
+        coalesce(sum(l.amount),0) AS estimated_amount,
+        coalesce(sum(l.reserved_amount) FILTER(WHERE l.state<>'DONE' AND r.ledger_id IS NULL),0) AS held_amount,
+        count(r.ledger_id) AS reconciled_attempts,
+        coalesce(sum(r.actual_amount),0) AS reconciled_amount,
+        coalesce(sum(r.actual_amount-coalesce(l.amount,l.reserved_amount)),0) AS reconciliation_delta,
+        coalesce(sum(coalesce(r.actual_amount,l.amount,l.reserved_amount)),0) AS budget_amount
+        FROM voice_usage_ledger l LEFT JOIN voice_reconciliations r ON r.ledger_id=l.id
+        WHERE l.app_id=%s AND l.created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+        GROUP BY l.currency,l.stage,l.unit ORDER BY l.currency,l.stage""", (app,))).fetchall()
     return {'period': 'UTC calendar month', 'stages': rows, 'invoice': False,
-            'scope': 'Configured API rate estimates; excludes hosting, electricity, carrier and taxes. Unknown attempts retain reservations.'}
+            'scope': 'API estimates plus reviewed provider charges; excludes hosting, electricity, carrier and taxes. Unreconciled unknown attempts retain holds.'}

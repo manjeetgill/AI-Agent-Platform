@@ -52,6 +52,7 @@ class Offer(Strict):
     request_key: str = Field(min_length=8, max_length=100, pattern=r"^[a-zA-Z0-9_.:-]+$")
     audio_consent: bool
     transcript_consent: bool = False
+    caller_phone: str | None = Field(default=None, pattern=r"^\+[1-9]\d{7,14}$")
 
 
 def ready():
@@ -188,6 +189,7 @@ async def dialogue(pool, agent, call, text, history=None, on_claim=None):
             result = await invoke(
                 cfg,
                 {
+                    **({"caller_phone":agent["caller_phone"]} if agent.get("caller_phone") else {}),
                     "event_id": str(event),
                     "session_id": str(call["id"]),
                     "agent_id": str(agent["id"]),
@@ -205,6 +207,12 @@ async def dialogue(pool, agent, call, text, history=None, on_claim=None):
                 raise ValueError("Mismatched action response")
             reply = {"action": result["action"], "text": result["text"]}
         else:
+            from .voice_specialists import select
+            agent, routed = await select(pool, agent, call, text)
+            if routed:
+                async with pool.connection() as conn:
+                    await conn.execute("UPDATE web_voice_turns SET state='DONE',reply=%s WHERE id=%s", (Jsonb({'action':'continue'}), event))
+                return routed
             selected_gateway = configured_gateway(agent)
             if on_claim and agent.get("config", {}).get("stream_grounded_quotes"):
                 selected_gateway.on_claim = on_claim
@@ -325,6 +333,23 @@ def install_web_voice(app):
                 'session_seconds_limit': 120, 'installation_concurrency_limit': 2,
                 'estimated_cost': None, 'cost_status': 'unknown',
                 'quota_basis': 'Session attempts reserve allowance, including failures; money is not estimated from duration.'}
+
+    @router.get('/health')
+    async def voice_health(request: Request):
+        pool, claims = await context(request, 'agents:read')
+        async with pool.connection() as conn:
+            counts = await (await conn.execute("""SELECT count(*) AS sessions,
+                count(*) FILTER(WHERE state='FAILED') AS failed,
+                count(*) FILTER(WHERE state='UNKNOWN') AS unknown,
+                count(*) FILTER(WHERE state IN ('STARTING','ACTIVE') AND expires_at>now()) AS active,
+                count(*) FILTER(WHERE state='ENDED') AS ended
+                FROM web_voice_sessions WHERE app_id=%s AND created_at>now()-interval '24 hours'""", (claims['app_id'],))).fetchone()
+            uncertain = await (await conn.execute("""SELECT count(*) AS uncertain_turns FROM web_voice_turns t
+                JOIN web_voice_sessions s ON s.id=t.session_id
+                WHERE s.app_id=%s AND t.state='UNKNOWN' AND t.created_at>now()-interval '24 hours'""", (claims['app_id'],))).fetchone()
+        return {'window':'last 24 hours','scope':'sessions visible to this caller',**counts,**uncertain,
+                'attention_required':bool(counts['failed'] or counts['unknown'] or uncertain['uncertain_turns']),
+                'telephone_verified':False}
 
     @router.get("/agents/{ident}/readiness")
     async def readiness(ident: UUID, request: Request):
@@ -658,9 +683,11 @@ def install_web_voice(app):
             ).fetchone()
 
             pinned = snapshot(agent)
+            if body.caller_phone:
+                pinned["caller_phone"] = body.caller_phone  # Contact only; never caller authentication.
             await conn.execute('UPDATE web_voice_sessions SET agent_snapshot=%s,transcript_consent=%s WHERE id=%s',
                 (Jsonb(pinned), body.transcript_consent, call['id']))
-            agent = {**agent, 'config': pinned['config'], 'retain_content': False}
+            agent = {**agent, 'config': pinned['config'], 'retain_content': False, 'caller_phone': body.caller_phone}
             if media_client.enabled():
                 await conn.execute('UPDATE web_voice_sessions SET media_remote=true WHERE id=%s', (call['id'],))
             if handoff:
