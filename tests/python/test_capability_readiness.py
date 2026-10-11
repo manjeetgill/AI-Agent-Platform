@@ -40,6 +40,20 @@ def test_mock_and_configured_never_claim_live_success_or_return_secret_fields():
         assert private not in str(report)
 
 
+def test_invalid_capability_response_does_not_break_other_checks():
+    def response(request):
+        if request.url.path.endswith('sms/configuration'):
+            return httpx.Response(200, json=['unexpected schema'])
+        return httpx.Response(200, json={'configured': True, 'mock': True, 'provider': 'mock'})
+    async def run():
+        async with httpx.AsyncClient(base_url='http://internal', transport=httpx.MockTransport(response)) as c:
+            return await collect(c, {'notifications:read'})
+    report = {item['id']: item for item in checklist(asyncio.run(run()))}
+    assert report['sms']['status'] == 'UNAVAILABLE'
+    assert report['email']['status'] == 'MOCK_ONLY'
+    assert 'unexpected schema' not in str(report)
+
+
 def test_http_contract_is_scoped_and_does_not_invoke_planner(monkeypatch):
     with environment(monkeypatch) as (client, headers, key, planner):
         path='/v1/integrations/capability-readiness'

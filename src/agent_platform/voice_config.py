@@ -49,6 +49,18 @@ class VoiceConfig(Strict):
 active: ContextVar[VoiceConfig | None] = ContextVar('voice_configuration', default=None)
 
 
+class VoiceGeminiProvider(FallbackProvider):
+    """Pin short voice turns to documented low-latency thinking settings."""
+
+    def request(self, model, policy, data):
+        url, headers, payload = super().request(model, policy, data)
+        if model.startswith(('gemini-3.1-flash-lite', 'gemini-3-flash')):
+            payload['reasoning_effort'] = 'minimal'
+        elif model in {'gemini-2.5-flash', 'gemini-2.5-flash-lite'}:
+            payload['reasoning_effort'] = 'none'
+        return url, headers, payload
+
+
 def defaults() -> VoiceConfig:
     speech = os.environ.get('AI_CALLING_SPEECH_PROVIDER', 'gemini')
     return VoiceConfig.model_validate({'asr': speech, 'tts': speech,
@@ -77,7 +89,7 @@ def gateway() -> Gateway:
     provider: NVIDIAProvider
     if config.reasoning == 'gemini':
         from .calling_audio import key
-        provider = FallbackProvider('gemini', key())
+        provider = VoiceGeminiProvider('gemini', key())
     elif config.reasoning == 'nvidia':
         provider = NVIDIAProvider(os.environ.get('NVIDIA_API_KEY', ''))
     elif config.reasoning == 'local':

@@ -53,7 +53,7 @@ def install_integration_status(app):
                 (app_id, owner))).fetchone()
             trial = await (await conn.execute('''SELECT expires_at,whatsapp_turns,whatsapp_sends,voice_calls
                 FROM channel_trial_policies WHERE app_id=%s''', (app_id,))).fetchone()
-        return {
+        report = {
             'app_id': app_id,
             'task_readiness_url': '/v1/integrations/task-readiness',
             'features_granted': enabled_features(claims['scopes']),
@@ -78,5 +78,16 @@ def install_integration_status(app):
             'note': ('This inventory reports saved platform state. Provider eligibility, model access, '
                      'live audio and real message delivery require their dedicated readiness/live tests.'),
         }
+        # A key for notifications must not reveal the app's unrelated channels,
+        # recipients or memory counts merely because it shares an app identity.
+        required = {'whatsapp_support': 'channels:read', 'whatsapp_notifications': 'channels:read',
+                    'whatsapp_calling': 'calling:read', 'internet_voice': 'agents:read',
+                    'telephone_voice': 'telephony:read', 'memory': 'memory:read'}
+        for component, permission in required.items():
+            if permission not in claims['scopes']:
+                report['components'][component] = {'status': 'ACCESS_REQUIRED', 'required_scope': permission}
+        if not set(claims['scopes']) & {'channels:read', 'calling:read', 'agents:read', 'telephony:read'}:
+            report['trial_policy'] = None
+        return report
 
     app.include_router(router)

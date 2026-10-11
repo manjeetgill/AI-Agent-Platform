@@ -97,7 +97,11 @@ async def _transcribe(pcm):
                     ],
                 }
             ],
-            "generationConfig": {"maxOutputTokens": 512, "temperature": 0},
+            "generationConfig": {"maxOutputTokens": 512, "temperature": 0,
+                **({'thinkingConfig': {'thinkingLevel': 'minimal'}}
+                   if voice_config.current().asr_model.startswith(('gemini-3.1-flash-lite', 'gemini-3-flash'))
+                   else {'thinkingConfig': {'thinkingBudget': 0}}
+                   if voice_config.current().asr_model in {'gemini-2.5-flash', 'gemini-2.5-flash-lite'} else {})},
         },
     )
     return "".join(p.get("text", "") for p in parts if not p.get("thought"))[:1500]

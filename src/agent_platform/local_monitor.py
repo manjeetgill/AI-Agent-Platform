@@ -15,7 +15,7 @@ from .service_identity import authenticate
 
 ASSETS = Path(__file__).with_name('console')
 CSP = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'"
-READ = re.compile(r'(?:tasks(?:/summary|/[a-f0-9-]{36}(?:/events)?)?|integrations/(?:task-readiness|capability-readiness)|orchestration/usage|connectors(?:/reports)?|notifications/(?:email|sms)(?:/usage|/configuration|/templates|/[a-f0-9-]{36})?)$')
+READ = re.compile(r'(?:tasks(?:/summary|/[a-f0-9-]{36}(?:/events)?)?|integrations/(?:task-readiness|capability-readiness|capabilities)|orchestration/usage|connectors(?:/reports)?|notifications/(?:email|sms)(?:/usage|/configuration|/templates|/[a-f0-9-]{36})?)$')
 WRITE = re.compile(r'tasks/[a-f0-9-]{36}/(?:pause|resume|cancel|reconcile)$')
 
 

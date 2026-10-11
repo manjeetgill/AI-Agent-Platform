@@ -167,7 +167,7 @@ def test_media_provider_timeout_closes_and_logs_no_diagnostics(monkeypatch):
         session.event = emit
         await session.speech_turn(b'\x00\x00' * 100)
         assert session.closed
-        assert events == [('turn_failed', {'outcome': 'failed', 'stage': 'audio_turn'})]
+        assert events == [('turn_failed', {'outcome': 'TIMEOUT', 'stage': 'asr'})]
     asyncio.run(run())
 
 
@@ -296,3 +296,22 @@ def test_browser_track_end_is_not_decoder_failure():
         await session.consume(EndedTrack())
         assert session.closed and ended==[True] and 'failed' not in events
     asyncio.run(run())
+
+
+def test_voice_latency_settings_do_not_change_general_model_requests():
+    from agent_platform.gateway import FallbackProvider
+    from agent_platform.voice_config import VoiceGeminiProvider
+    general = FallbackProvider('gemini', 'fixture')
+    voice = VoiceGeminiProvider('gemini', 'fixture')
+    assert 'reasoning_effort' not in general.request('gemini-3.1-flash-lite', 'p', {})[2]
+    assert voice.request('gemini-3.1-flash-lite', 'p', {})[2]['reasoning_effort'] == 'minimal'
+    assert voice.request('gemini-2.5-flash', 'p', {})[2]['reasoning_effort'] == 'none'
+    assert 'reasoning_effort' not in voice.request('unknown-model', 'p', {})[2]
+
+
+def test_audio_stage_codes_do_not_include_provider_error_text():
+    import httpx
+    for status, expected in [(401, 'PROVIDER_AUTH'), (429, 'PROVIDER_QUOTA'), (503, 'PROVIDER_ERROR')]:
+        response = httpx.Response(status, request=httpx.Request('POST', 'https://example.com'))
+        error = httpx.HTTPStatusError('private-key and private transcript', request=response.request, response=response)
+        assert calling_media.failure_code(error) == expected

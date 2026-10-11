@@ -6,9 +6,31 @@ import json
 import os
 import time
 from contextlib import nullcontext
+from contextvars import ContextVar
 from uuid import uuid4
 
+import httpx
+
 from . import calling_audio, voice_config, voice_ice, voice_usage
+
+_stage = ContextVar('audio_turn_stage', default='audio_turn')
+
+
+class StageFailure(Exception):
+    def __init__(self, stage, code):
+        self.stage, self.code = stage, code
+        super().__init__(code)
+
+
+def failure_code(error):
+    if isinstance(error, StageFailure):
+        return error.code
+    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+        return 'TIMEOUT'
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        return 'PROVIDER_AUTH' if status in {401, 403} else 'PROVIDER_QUOTA' if status == 429 else 'PROVIDER_ERROR'
+    return 'FAILED'
 
 
 def available():
@@ -243,14 +265,30 @@ class Session:
                 await asyncio.wait_for(self.process_turn(pcm, generation), config.turn_timeout_seconds)
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001 -- report only stage, never provider diagnostics
-            await self.emit('turn_failed', {'outcome': 'failed', 'stage': 'audio_turn'})
-            await self.close()
+        except Exception as error:  # noqa: BLE001 -- never emit raw provider errors
+            try:
+                await self.emit('turn_failed', {'outcome': failure_code(error),
+                    'stage': error.stage if isinstance(error, StageFailure) else 'audio_turn'})
+            finally:
+                await self.close()
         finally:
             if generation == self.generation:
                 self.busy = False
 
     async def process_turn(self, pcm, generation):
+        token = _stage.set('asr')
+        try:
+            return await self._process_turn(pcm, generation)
+        except asyncio.CancelledError:
+            # wait_for cancels the child task on the whole-turn deadline. Leave
+            # the outer turn responsible for closing; cancellation also covers barge-in.
+            raise
+        except Exception as error:  # noqa: BLE001 -- redact provider diagnostics at the media boundary
+            raise StageFailure(_stage.get(), failure_code(error)) from None
+        finally:
+            _stage.reset(token)
+
+    async def _process_turn(self, pcm, generation):
         started = time.monotonic()
         text = await calling_audio.transcribe(pcm)
         await self.emit('asr', {'duration_ms': int((time.monotonic()-started)*1000),
@@ -258,6 +296,7 @@ class Session:
         if not text.strip() or generation != self.generation or self.closed:
             return
         await self.emit('user', {'characters': len(text)}, text)
+        _stage.set('reasoning')
         started = time.monotonic()
         streamed = []
 
@@ -265,7 +304,9 @@ class Session:
             if generation != self.generation or self.closed:
                 raise asyncio.CancelledError()
             # Never persist speculative raw tokens. This callback receives a validated quotation.
+            _stage.set('tts')
             await self.say(quotation, generation)
+            _stage.set('reasoning')
             streamed.append(quotation)
             await self.emit('streamed_claim', {'characters': len(quotation), 'outcome': 'source_validated'})
 
@@ -280,6 +321,7 @@ class Session:
             return
         await self.emit('assistant', {'characters': len(reply['text'])}, reply['text'])
         if not streamed:
+            _stage.set('tts')
             await self.say(reply["text"], generation)
         elif reply['action'] != 'continue':
             # An incomplete stream must not keep emitting a newly generated answer.

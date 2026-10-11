@@ -142,6 +142,7 @@ def test_setup_guards_and_worker_test_permissions(tmp_path, monkeypatch):
         data = body()
         assert client.get('/monitor/onboard').status_code == 200
         assert client.get('/monitor/setup/catalog', headers=INTENT).status_code == 200
+        assert len(client.get('/monitor/setup/catalog', headers=INTENT).json()['capabilities']) == 12
         assert client.post('/monitor/setup/apps', json=data).status_code == 403
         assert client.post('/monitor/setup/apps', headers={**INTENT,'Origin':'https://foreign.example'}, json=data).status_code == 403
         assert client.post('/monitor/setup/apps', headers=INTENT, json={**data,'scopes':['admin:all']}).status_code == 422
@@ -154,6 +155,40 @@ def test_setup_guards_and_worker_test_permissions(tmp_path, monkeypatch):
             monkeypatch.setenv('AI_LOCAL_ONBOARDING', '0')
             assert client.get('/monitor/onboard').status_code == 404
             assert client.get('/monitor/setup/catalog', headers=INTENT).status_code == 404
+        finally:
+            cleanup([a['app_id']])
+
+
+def test_notification_only_connection_can_check_capabilities(tmp_path, monkeypatch):
+    with environment(monkeypatch) as (client, _, key, _):
+        setup(tmp_path, monkeypatch, key)
+        sql('UPDATE platform_service_keys SET scopes=%s WHERE id=%s',
+            (['notifications:read'], key['key_id']))
+        report = client.get('/monitor/setup/existing/capabilities', headers=INTENT)
+        assert report.status_code == 200, report.text
+        assert report.json()['app_id'] == key['app_id']
+        features = {f['id']: f for f in report.json()['integration_contracts']}
+        assert features['email']['missing_scopes'] == ['notifications:send']
+        assert not features['agent_tasks']['permissions_granted']
+        assert client.get('/monitor/setup/missing/capabilities', headers=INTENT).status_code == 404
+        assert client.get('/monitor/setup/existing/capabilities').status_code == 403
+
+
+def test_create_messaging_app_without_task_scopes_or_tool_grants(tmp_path, monkeypatch):
+    with environment(monkeypatch) as (client, _, key, _):
+        setup(tmp_path, monkeypatch, key)
+        a, saved = save(client, {**body('Email app'), 'scopes': ['notifications:read', 'notifications:send'], 'tools': []})
+        try:
+            assert saved['tools'] == []
+            assert set(saved['scopes']) == {'notifications:read', 'notifications:send'}
+            report = client.get('/monitor/setup/'+a['connection']+'/capabilities', headers=INTENT)
+            assert report.status_code == 200, report.text
+            features = {f['id']: f for f in report.json()['integration_contracts']}
+            assert features['email']['permissions_granted']
+            assert not features['agent_tasks']['permissions_granted']
+            assert not sql('SELECT tool FROM platform_tool_grants WHERE app_id=%s', (a['app_id'],))
+            assert client.post('/monitor/setup/'+a['connection']+'/test', headers=INTENT,
+                               json={'test_id': str(uuid4())}).status_code == 403
         finally:
             cleanup([a['app_id']])
 

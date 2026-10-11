@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from .integration_catalog import catalogue
 from .service_identity import authenticate
 from .task_api import credential_contract
 
@@ -39,8 +40,13 @@ async def collect(client, scopes):
         try:
             async with semaphore, asyncio.timeout(3):
                 response = await client.get(path)
+                payload = response.json() if response.status_code == 200 else None
+                if response.status_code == 200:
+                    expected = dict if name in {'planning', 'wa_setup', 'voice', 'sms', 'email'} else (dict, list)
+                    if not isinstance(payload, expected):
+                        return name, {'status': 503}
                 return name, {'status': response.status_code,
-                              'data': response.json() if response.status_code == 200 else None}
+                              'data': payload}
         except Exception:  # noqa: BLE001 -- isolate errors without returning private upstream data
             return name, {'status': 503}
 
@@ -55,7 +61,8 @@ def checklist(sources):
 
     def rows(name, key):
         value = data(name)
-        return value if isinstance(value, list) else value.get(key, [])
+        items = value if isinstance(value, list) else value.get(key, [])
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
 
     def add(code, title, dependencies, configured, detail, steps, link, *, mock=False, evidence=None):
         statuses = [sources.get(d, {}).get('status', 503) for d in dependencies]
@@ -146,19 +153,32 @@ def checklist(sources):
 def install(app):
     router = APIRouter(prefix='/v1/integrations', dependencies=[Depends(credential_contract)])
 
-    @router.get('/capability-readiness')
-    async def readiness(request: Request):
+    async def identity(request):
         authorization = request.headers.get('authorization', '')
         if not authorization.startswith('Bearer apk_'):
             raise HTTPException(401, 'Application service credential required')
-        claims = await authenticate(request.app.state.repository.pool, authorization,
-                                    request.headers.get('X-External-User-ID'), None)
+        return await authenticate(request.app.state.repository.pool, authorization,
+                                  request.headers.get('X-External-User-ID'), None)
+
+    @router.get('/capabilities')
+    async def capabilities(request: Request):
+        claims = await identity(request)
+        return {'app_id': claims['app_id'], 'contract_version': 1,
+                'capabilities': catalogue(claims['scopes']),
+                'readiness_url': '/v1/integrations/capability-readiness',
+                'note': 'Permissions are not activation. Tools, provider authorization, limits and live tests are required separately.'}
+
+    @router.get('/capability-readiness')
+    async def readiness(request: Request):
+        claims = await identity(request)
+        authorization = request.headers.get('authorization', '')
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://internal',
                                     headers={'Authorization': authorization,
                                              'X-External-User-ID': request.headers['X-External-User-ID']}) as client:
             sources = await collect(client, set(claims['scopes']))
         return {'app_id': claims['app_id'], 'checked_at': datetime.now(UTC),
-                'capabilities': checklist(sources), 'provider_checks_performed': False,
+                'capabilities': checklist(sources), 'integration_contracts': catalogue(claims['scopes']),
+                'provider_checks_performed': False,
                 'note': 'Saved state for this application and user only. Counts cover the first page; configuration is not proof of a successful live test.'}
 
     app.include_router(router)
