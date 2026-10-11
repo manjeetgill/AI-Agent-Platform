@@ -156,20 +156,36 @@ class Gateway:
         from . import voice_usage
         self.usage_reported, self.response_id = False, None
         maximum = len(policy.encode()) + len(json.dumps(data, default=str).encode()) + 8192
+        prepared = None
+        # A single, non-streaming Gemini voice request has a hard combined
+        # thinking/output cap. Reserve its exact serialized request plus that
+        # cap and conservative framing headroom, not an unrelated 8192 tokens.
+        # Streaming rewrites its prompt; retries/fallbacks retain the old bound.
+        if (voice_usage.active.get() is not None and self.provider.name == 'gemini'
+                and self.max_attempts == 1 and not self.allow_fallback
+                and not getattr(self, 'on_claim', None)):
+            prepared = self.provider.request(self.model_for(task), policy, data)
+            payload = prepared[2]
+            if schema is Report:
+                payload['max_tokens'] = 2048
+            cap = payload.get('max_tokens')
+            if type(cap) is not int or not 1 <= cap <= 8192:
+                raise RunFailure('INVALID_MODEL_CONFIGURATION')
+            maximum = len(json.dumps(payload, default=str).encode()) + cap + 1024
         reservation = await voice_usage.reserve('reasoning', maximum)
         try:
             if getattr(self, 'on_claim', None):
                 from .voice_stream import generate
                 result = await generate(self, task, policy, data, schema, validator)
             else:
-                result = await self._structured(task, policy, data, schema, validator)
+                result = await self._structured(task, policy, data, schema, validator, prepared=prepared)
         except BaseException:
             await asyncio.shield(voice_usage.settle(reservation))
             raise
         await voice_usage.settle(reservation, result[1] if self.usage_reported else None, self.response_id)
         return result
 
-    async def _structured(self, task, policy, data, schema, validator):
+    async def _structured(self, task, policy, data, schema, validator, *, prepared=None):
         model = self.model_for(task)
         # Bound serialized context before sending it to any provider or fallback.
         maximum = int(os.environ.get('AI_MODEL_MAX_CONTEXT_BYTES', '100000'))
@@ -177,7 +193,7 @@ class Gateway:
             raise RunFailure('CONTEXT_BUDGET_EXCEEDED')
         if not enabled('AI_NVIDIA', default=True) or not model or not getattr(self.provider, 'key', None):
             raise RunFailure('MODEL_NOT_CONFIGURED')
-        url, headers, payload = self.provider.request(model, policy, data)
+        url, headers, payload = prepared or self.provider.request(model, policy, data)
         if schema is Report:
             payload['max_tokens'] = 2048
         client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(50, connect=5))

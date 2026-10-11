@@ -44,6 +44,7 @@ async def run(index=0, *, hold_seconds=0, after_connected=None):
     received = bytearray()
     tasks = []
     session = None
+    agent = None
     stats = {"frames": 0, "loud": 0.0, "input_end": None, "reply_start": None}
 
     class Speech(MediaStreamTrack):
@@ -215,6 +216,7 @@ async def run(index=0, *, hold_seconds=0, after_connected=None):
                 "reply": answer,
                 "received_speech": transcript,
                 "duration_seconds": round(time.monotonic() - started, 2),
+                "first_reply_audio_ms": round((stats["reply_start"] - stats["input_end"]) * 1000) if stats["reply_start"] and stats["input_end"] else None,
                 "usage": await api("voice/usage"),
             }
             (ROOT / f"docs/verification/voice-public-audio-{index}.json").write_text(
@@ -241,6 +243,13 @@ async def run(index=0, *, hold_seconds=0, after_connected=None):
                     await api("voice/sessions/" + session + "/end", {})
                 except (httpx.HTTPError, RuntimeError):
                     print("Session end was not confirmed; inspect session state before retrying.")
+            if agent:
+                try:
+                    paused = await client.post('voice/agents/' + agent['id'] + '/settings', json={'enabled': False, 'language': 'en'})
+                    if paused.status_code >= 400:
+                        print('Synthetic agent pause needs operator verification.')
+                except httpx.HTTPError:
+                    print('Synthetic agent pause needs operator verification.')
             for t in tasks:
                 t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
