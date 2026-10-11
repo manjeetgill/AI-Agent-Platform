@@ -1,5 +1,9 @@
 # Public voice release verification — 2026-10-11
 
+Follow-up runtime release and ten-minute local load results:
+[Signup recovery and voice diagnostics](RECOVERY_AND_VOICE_2026-10-11.md).
+The deployment section below records the preceding release.
+
 ## Deployment
 
 Runtime revision: `efb8e1ba5e967eb42bcae59b478ff3682b1ccb8f` on

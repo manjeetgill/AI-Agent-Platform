@@ -1,0 +1,10 @@
+{
+  "migration_067": true,
+  "pilot_total_limit_inr": "100.0000000000",
+  "public_error_asset": true,
+  "reach_recovery_status": "operator_review",
+  "signup_secrets_absent": true,
+  "cross_app_session_denied": true,
+  "status": "PASS",
+  "temporary_keys_revoked": 3
+}
