@@ -80,6 +80,7 @@ def test_reject_bad_frames_without_reading_large_payload(wire):
 
 
 def test_pcm_conversion():
+    pytest.importorskip('av')
     pcm = tone()
     converted = resample(pcm, 8000, 16000)
     assert len(converted) == len(pcm) * 2
@@ -199,6 +200,7 @@ def test_agent_response_cannot_enable_business_actions():
 
 
 def test_local_speech_mode_does_not_call_gemini(monkeypatch):
+    pytest.importorskip('av')
     from agent_platform import calling_audio
 
     async def run():
@@ -257,6 +259,7 @@ def test_byoc_bridge_uses_only_connection_key_and_server_history():
 
 
 def test_connection_config_needs_no_ai_credentials_and_audio_uses_platform(tmp_path):
+    pytest.importorskip('av')
     from agent_platform.telephony_speech import wav_bytes
     value = {'mode': 'agent', 'platform_url': 'https://platform.example', 'connection_id': str(uuid4()),
              'gateway_key': 'tgw_'+'x'*48, 'number': '+15551234567'}

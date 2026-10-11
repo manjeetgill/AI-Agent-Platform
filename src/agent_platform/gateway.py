@@ -82,17 +82,26 @@ class FallbackProvider(NVIDIAProvider):
 
 
 class Gateway:
-    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True):
+    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True, allow_chain=True, pool=None, model_override=None):
         if max_attempts not in {1, 2}:
             raise ValueError("Gateway supports one or two attempts")
+        self.allow_chain = allow_chain
+        self.pool = pool
+        self.chain_attempt = False
+        self.pinned_model = None
         self.allow_fallback = allow_fallback
         self.max_attempts = max_attempts
         self.provider = provider
+        self.model_override = model_override
         self.client = client
-        self.fast_model = os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
-        self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model
+        self.fast_model = model_override if model_override is not None else os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
+        self.reasoning_model = model_override if model_override is not None else (os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model)
 
     def model_for(self, task):
+        if self.model_override is not None:
+            return self.model_override
+        if self.pinned_model:
+            return self.pinned_model
         try:
             routes = json.loads(os.environ.get('AI_MODEL_ROUTES', '{}'))
             model = routes.get(task, {}).get(self.provider.name)
@@ -140,7 +149,27 @@ class Gateway:
                   'Return only JSON matching this schema: ' + json.dumps(StrategyPlan.model_json_schema()))
         return await self.structured('research', policy, {'request': request}, StrategyPlan, lambda value: value)
 
-    async def structured(self, task, policy, data, schema, validator):
+    async def structured(self, task, policy, data, schema, validator, *, claims=None):
+        if self.allow_chain and os.environ.get('AI_MODEL_PROVIDER_CHAIN'):
+            from .provider_chain import execute
+            return await execute(self, task, policy, data, schema, validator, claims)
+        from . import voice_usage
+        self.usage_reported, self.response_id = False, None
+        maximum = len(policy.encode()) + len(json.dumps(data, default=str).encode()) + 8192
+        reservation = await voice_usage.reserve('reasoning', maximum)
+        try:
+            if getattr(self, 'on_claim', None):
+                from .voice_stream import generate
+                result = await generate(self, task, policy, data, schema, validator)
+            else:
+                result = await self._structured(task, policy, data, schema, validator)
+        except BaseException:
+            await asyncio.shield(voice_usage.settle(reservation))
+            raise
+        await voice_usage.settle(reservation, result[1] if self.usage_reported else None, self.response_id)
+        return result
+
+    async def _structured(self, task, policy, data, schema, validator):
         model = self.model_for(task)
         # Bound serialized context before sending it to any provider or fallback.
         maximum = int(os.environ.get('AI_MODEL_MAX_CONTEXT_BYTES', '100000'))
@@ -157,6 +186,8 @@ class Gateway:
             for attempt in range(self.max_attempts):
                 try:
                     response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code in {429, 503} and self.chain_attempt:
+                        raise RunFailure("PROVIDER_BACKPRESSURE")
                     if response.status_code in {429, 503} and self.allow_fallback:
                         name = os.environ.get('AI_PLATFORM_FALLBACK_PROVIDER', '').strip()
                         key = os.environ.get('AI_PLATFORM_FALLBACK_API_KEY', '').strip()
@@ -174,7 +205,10 @@ class Gateway:
                         await asyncio.sleep(0.5)
                         continue
                     response.raise_for_status()
-                    content, tokens = self.provider.response(response.json())
+                    packet = response.json()
+                    self.usage_reported = isinstance((packet.get('usage') or {}).get('total_tokens'), int)
+                    self.response_id = packet.get('id')
+                    content, tokens = self.provider.response(packet)
                     total_tokens += tokens
                     output = validator(schema.model_validate_json(content))
                     return output, total_tokens, self.provider.name, model

@@ -1,0 +1,738 @@
+[
+  {
+    "status": "PASS",
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "9fed4803-5368-422f-bd20-eda4faa3f2e3",
+    "agent_id": "a6b71e02-b107-4b2b-baa9-202c59ad1df8",
+    "duration_seconds": 19.06,
+    "last_input_frame_to_first_received_audio_ms": 2641,
+    "final_state": "ENDED",
+    "received_frames": 942,
+    "spoken_reply_transcription": "The clinic opens at 9 o'clock in the morning and closes at 5 o'clock in the evening on weekdays.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T12:35:49.926564+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T12:35:49.957110+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 33
+        },
+        "created_at": "2026-10-11T12:35:49.992824+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 700
+        },
+        "created_at": "2026-10-11T12:35:59.560508+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T12:35:59.561601+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 6,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 1310
+        },
+        "created_at": "2026-10-11T12:36:00.873471+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 7,
+        "kind": "assistant",
+        "details": {
+          "characters": 56
+        },
+        "created_at": "2026-10-11T12:36:00.874363+05:30",
+        "role": "assistant",
+        "content": "The clinic opens at 9 AM and closes at 5 PM on weekdays."
+      },
+      {
+        "sequence": 8,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 56,
+          "duration_ms": 60
+        },
+        "created_at": "2026-10-11T12:36:00.936455+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 9,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T12:36:08.862246+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  },
+  {
+    "status": "PASS",
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "9e6098bd-6d18-4326-a2b8-419194be186e",
+    "agent_id": "44705ae6-0ac3-48d4-896f-33838221825b",
+    "duration_seconds": 20.6,
+    "last_input_frame_to_first_received_audio_ms": 3523,
+    "final_state": "ENDED",
+    "received_frames": 1017,
+    "spoken_reply_transcription": "The clinic opens at 9 o'clock in the morning and closes at 5 o'clock in the evening on weekdays.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T12:37:19.085881+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T12:37:19.115097+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 37
+        },
+        "created_at": "2026-10-11T12:37:19.154721+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 1519
+        },
+        "created_at": "2026-10-11T12:37:29.548907+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T12:37:29.552162+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 6,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 1332
+        },
+        "created_at": "2026-10-11T12:37:30.890059+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 7,
+        "kind": "assistant",
+        "details": {
+          "characters": 56
+        },
+        "created_at": "2026-10-11T12:37:30.894183+05:30",
+        "role": "assistant",
+        "content": "The clinic opens at 9 AM and closes at 5 PM on weekdays."
+      },
+      {
+        "sequence": 8,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 56,
+          "duration_ms": 77
+        },
+        "created_at": "2026-10-11T12:37:30.977702+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 9,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T12:37:39.539318+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  },
+  {
+    "status": "PASS",
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "barge_in_tested": true,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "d8029fd8-f80f-4633-ba33-8aac402a022b",
+    "agent_id": "2649e4d5-5d18-4c4c-8092-e09a84ef4732",
+    "duration_seconds": 16.02,
+    "last_input_frame_to_first_received_audio_ms": 5140,
+    "final_state": "ENDED",
+    "received_frames": 777,
+    "spoken_reply_transcription": "The clinic opens at 9 o'clock in the morning and closes at 5 o'clock in the evening on weekdays.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T12:46:11.779922+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T12:46:11.813168+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 25
+        },
+        "created_at": "2026-10-11T12:46:11.841116+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "interrupted",
+        "details": {
+          "outcome": "playback_cleared"
+        },
+        "created_at": "2026-10-11T12:46:12.156176+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 732
+        },
+        "created_at": "2026-10-11T12:46:15.429063+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 6,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T12:46:15.430217+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 7,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 3774
+        },
+        "created_at": "2026-10-11T12:46:19.206419+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 8,
+        "kind": "assistant",
+        "details": {
+          "characters": 56
+        },
+        "created_at": "2026-10-11T12:46:19.208115+05:30",
+        "role": "assistant",
+        "content": "The clinic opens at 9 AM and closes at 5 PM on weekdays."
+      },
+      {
+        "sequence": 9,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 56,
+          "duration_ms": 52
+        },
+        "created_at": "2026-10-11T12:46:19.261837+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 10,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T12:46:27.428773+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  },
+  {
+    "status": "PASS",
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "barge_in_tested": true,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "108d43f9-ef55-47f9-a9c1-e946b84dc376",
+    "agent_id": "23d88667-195c-4bb9-b73c-fc30841a2e1f",
+    "duration_seconds": 15.45,
+    "last_input_frame_to_first_received_audio_ms": 4681,
+    "final_state": "ENDED",
+    "received_frames": 749,
+    "spoken_reply_transcription": "The clinic opens at 9 o'clock in the morning and closes at 5 o'clock in the evening on weekdays.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T12:54:22.516803+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T12:54:22.550743+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 27
+        },
+        "created_at": "2026-10-11T12:54:22.580970+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "interrupted",
+        "details": {
+          "outcome": "playback_cleared"
+        },
+        "created_at": "2026-10-11T12:54:22.893947+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 595
+        },
+        "created_at": "2026-10-11T12:54:26.029063+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 6,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T12:54:26.029842+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 7,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 3488
+        },
+        "created_at": "2026-10-11T12:54:29.519261+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 8,
+        "kind": "assistant",
+        "details": {
+          "characters": 56
+        },
+        "created_at": "2026-10-11T12:54:29.520030+05:30",
+        "role": "assistant",
+        "content": "The clinic opens at 9 AM and closes at 5 PM on weekdays."
+      },
+      {
+        "sequence": 9,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 56,
+          "duration_ms": 31
+        },
+        "created_at": "2026-10-11T12:54:29.553092+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 10,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T12:54:37.600082+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  },
+  {
+    "status": "PASS",
+    "streaming_tested": true,
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "barge_in_tested": false,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "6ca8a9ff-3457-47ba-9426-b5bf4993bfd9",
+    "agent_id": "5428878a-de5c-4c30-86ef-d69f0e86c5fc",
+    "duration_seconds": 17.38,
+    "last_input_frame_to_first_received_audio_ms": 2302,
+    "final_state": "ENDED",
+    "received_frames": 842,
+    "spoken_reply_transcription": "9 o'clock in the morning to 5 o'clock in the evening Monday to Friday",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T14:04:38.381958+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T14:04:38.416601+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 48
+        },
+        "created_at": "2026-10-11T14:04:38.467358+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 638
+        },
+        "created_at": "2026-10-11T14:04:47.977041+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T14:04:47.978145+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 6,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 60,
+          "duration_ms": 58
+        },
+        "created_at": "2026-10-11T14:04:49.061035+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 7,
+        "kind": "streamed_claim",
+        "details": {
+          "outcome": "source_validated",
+          "characters": 60
+        },
+        "created_at": "2026-10-11T14:04:49.062661+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 8,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 1188
+        },
+        "created_at": "2026-10-11T14:04:49.168636+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 9,
+        "kind": "assistant",
+        "details": {
+          "characters": 60
+        },
+        "created_at": "2026-10-11T14:04:49.169367+05:30",
+        "role": "assistant",
+        "content": "nine in the morning to five in the evening, Monday to Friday"
+      },
+      {
+        "sequence": 10,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T14:04:55.320970+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  },
+  {
+    "status": "PASS",
+    "streaming_tested": true,
+    "synthetic_audio": true,
+    "human_microphone_tested": false,
+    "barge_in_tested": true,
+    "telephone_tested": false,
+    "provider_fees": 0,
+    "model": "qwen2.5:3b",
+    "asr_model": "ggml-small.bin",
+    "language": "en",
+    "session_id": "007112ed-7413-4c28-aa8e-e249a1852c80",
+    "agent_id": "90553ba7-7cc5-4429-9587-25aed2c185f5",
+    "duration_seconds": 9.54,
+    "last_input_frame_to_first_received_audio_ms": 2041,
+    "final_state": "ENDED",
+    "received_frames": 466,
+    "spoken_reply_transcription": "Hello. 9 o'clock in the morning to 5 o'clock in the evening.",
+    "events": [
+      {
+        "sequence": 1,
+        "kind": "connecting",
+        "details": {
+          "version": 1
+        },
+        "created_at": "2026-10-11T14:05:10.913965+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 2,
+        "kind": "connected",
+        "details": {},
+        "created_at": "2026-10-11T14:05:10.945019+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 3,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 69,
+          "duration_ms": 46
+        },
+        "created_at": "2026-10-11T14:05:10.992776+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 4,
+        "kind": "interrupted",
+        "details": {
+          "outcome": "playback_cleared"
+        },
+        "created_at": "2026-10-11T14:05:12.026661+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 5,
+        "kind": "asr",
+        "details": {
+          "provider": "local",
+          "duration_ms": 600
+        },
+        "created_at": "2026-10-11T14:05:14.467464+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 6,
+        "kind": "user",
+        "details": {
+          "characters": 34
+        },
+        "created_at": "2026-10-11T14:05:14.468267+05:30",
+        "role": "user",
+        "content": "What are the clinic opening hours?"
+      },
+      {
+        "sequence": 7,
+        "kind": "tts",
+        "details": {
+          "provider": "local",
+          "characters": 42,
+          "duration_ms": 54
+        },
+        "created_at": "2026-10-11T14:05:15.333558+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 8,
+        "kind": "streamed_claim",
+        "details": {
+          "outcome": "source_validated",
+          "characters": 42
+        },
+        "created_at": "2026-10-11T14:05:15.334415+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 9,
+        "kind": "reasoning",
+        "details": {
+          "model": "qwen2.5:3b",
+          "outcome": "continue",
+          "provider": "local",
+          "duration_ms": 938
+        },
+        "created_at": "2026-10-11T14:05:15.408071+05:30",
+        "role": null,
+        "content": null
+      },
+      {
+        "sequence": 10,
+        "kind": "assistant",
+        "details": {
+          "characters": 42
+        },
+        "created_at": "2026-10-11T14:05:15.408792+05:30",
+        "role": "assistant",
+        "content": "nine in the morning to five in the evening"
+      },
+      {
+        "sequence": 11,
+        "kind": "ended",
+        "details": {},
+        "created_at": "2026-10-11T14:05:20.339287+05:30",
+        "role": null,
+        "content": null
+      }
+    ]
+  }
+]

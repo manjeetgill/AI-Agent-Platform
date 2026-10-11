@@ -47,6 +47,8 @@ class NextAction:
 
     def __init__(self, pool, registry, gateway):
         self.pool, self.registry, self.gateway = pool, registry, gateway
+        if isinstance(gateway, Gateway):
+            gateway.pool = pool
 
     def prepare(self, arguments):
         goal = Goal.model_validate(arguments, strict=True)
@@ -118,7 +120,7 @@ class NextAction:
                     'Return JSON matching: '+json.dumps(Decision.model_json_schema()),
                     {'goal': goal.goal, 'tools': tools, 'results': evidence, 'preferences': preferences,
                      'reviewed_memories': memories,
-                     'omitted_result_count': len(observations)-len(evidence)}, Decision, lambda result: result)
+                     'omitted_result_count': len(observations)-len(evidence)}, Decision, lambda result: result, **({"claims": claims} if isinstance(self.gateway, Gateway) else {}))
             usage = {'tokens': tokens, 'provider': provider, 'model': model}
             async with self.pool.connection() as conn, conn.transaction():
                 for memory in memories:

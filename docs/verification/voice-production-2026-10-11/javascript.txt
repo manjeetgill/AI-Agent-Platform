@@ -1,0 +1,42 @@
+✔ expired and arbitrary operations are rejected (1.7135ms)
+✔ fixed field only, no submission, secrets and takeover block filling (0.179708ms)
+✔ only canonical allowed product routes and local pairing, no URL credentials or arbitrary JS (1.809917ms)
+✔ Croma uses product price, not EMI; contradictory selected specification is flagged (0.482875ms)
+✔ JioMart mismatched pack sizes are unsafe even with delivery postcode (0.2155ms)
+✔ Zepto reads split currency DOM, requires confirmed delivery location (0.136458ms)
+✔ Instamart scopes price away from recommended products and marks unconfirmed pack (0.156416ms)
+✔ multiple prices, missing markup, redirect, expired and blocked pages fail closed (0.105375ms)
+✔ hydration ticks resume one saved job without opening duplicate tabs (1.371291ms)
+✔ ambiguous opening crash never opens another tab (0.116041ms)
+✔ stop removes local authority even when server is offline (0.146292ms)
+✔ missing Meta configuration does not fall back to Chakra (0.837167ms)
+✔ direct signup retains only ID and checks authoritative completion (0.210583ms)
+✔ reload reads saved session without starting another signup (0.08625ms)
+✔ fresh validated price keeps source time and unknown fees (2.08ms)
+✔ http_403 never produces price evidence or invokes parser (0.366208ms)
+✔ robots_restricted never produces price evidence or invokes parser (0.073333ms)
+✔ captcha never produces price evidence or invokes parser (0.060583ms)
+✔ login_required never produces price evidence or invokes parser (0.060208ms)
+✔ http_429 never produces price evidence or invokes parser (0.050709ms)
+✔ javascript_shell never produces price evidence or invokes parser (0.105791ms)
+✔ location and rendering requirements never imply verified prices (0.115709ms)
+✔ parser validation failures never become zero-priced observations (0.0915ms)
+✔ configured domain permits its www form, never unrelated hosts (0.108208ms)
+✔ failed robots fetch is not misreported as an explicit robots disallow (0.090917ms)
+✔ uncertain outcomes allow reconciliation, never resume or retry (0.63875ms)
+✔ elapsed time stops at terminal update and never fabricates missing usage (0.131708ms)
+✔ evidence links cannot execute code or contain credentials (0.07675ms)
+✔ stalled tasks describe recovery without offering blind execution (9.641625ms)
+✔ renderer only allows HTTPS public IPv4 destinations and read methods (0.987458ms)
+✔ server and extension use the same versioned DOM extraction (1.81325ms)
+✔ DNS resolving to private IP never launches a browser (0.439ms)
+✔ fresh context, sandbox, blocked websockets, access denials and cleanup (0.562916ms)
+✔ navigation failure closes the browser and reports unavailability without raw errors (0.163041ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 85.680875

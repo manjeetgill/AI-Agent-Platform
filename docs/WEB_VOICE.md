@@ -1,6 +1,12 @@
 # Internet voice agents (local pilot)
 
-A caller presses **Talk to AI** inside an app, consents to audio processing, and allows the microphone. WebRTC sends audio to this platform. Gemini transcribes short turns, the agent answers using selected app knowledge or an explicitly configured app handler, and Gemini generates speech back to the caller.
+A caller presses **Talk to AI** inside an app, consents to audio processing, and allows the microphone. WebRTC sends audio to this platform. The selected speech provider transcribes short turns, the agent answers using selected app knowledge or an explicitly configured app handler, and the selected synthesis provider generates speech back to the caller.
+
+**2026-10-11 update:** See [isolated local setup and current contracts](VOICE_LOCAL_SETUP.md)
+for per-agent providers, version restoration, barge-in, transcript consent,
+session history, usage limits and the verified local ASR/model/TTS path.
+The selected original checkout now uses `http://127.0.0.1:4161/voice` for this
+isolated pilot; normal-profile instructions below still use port 4061.
 
 No telephone number, Twilio, Meta authorization, or Chakra account is required. This does not dial a telephone or WhatsApp number. Hosting, AI inference and any TURN relay traffic may cost money. The existing WhatsApp messaging channel is independent.
 
@@ -13,7 +19,7 @@ Run `python scripts/console.py` from the configured virtual environment and open
 3. Press **Talk to AI**, allow the microphone and speak after the greeting.
 4. Press **End call** to release the microphone and server session.
 
-The platform does not save raw audio. Audio is sent to the configured speech provider; its account terms and retention settings apply. The knowledge subsystem saves the generated answer and citations; voice audit rows save an input hash, outcome and reply. App handlers receive the recognized words, so their own logging must follow the app's privacy policy.
+The platform does not retain raw call audio. Local recognition uses a private temporary file, removed after recognition. Audio is sent to the selected speech provider; external providers' terms and retention settings apply. Browser-call text is saved for 24 hours only with transcript consent. Live browser answers do not promote content into durable knowledge answers or memory learning; voice turns save an input hash and outcome. Text rehearsal has the existing knowledge-answer retention policy. App handlers receive recognized words, so their logging must follow the app's privacy policy.
 
 ## Private server configuration
 
@@ -26,7 +32,7 @@ The platform does not save raw audio. Audio is sent to the configured speech pro
 - `AI_CALLING_TTS_MODEL=gemini-2.5-flash-preview-tts`
 - `AI_VOICE_ICE_SERVERS` is an aiortc-compatible JSON array of ICE server settings. Localhost testing can use `[]`.
 
-The existing `AI_NVIDIA` model-dispatch kill switch also controls structured voice answers through the shared gateway. The browser voice gateway uses only the configured Gemini credential, with no automatic provider fallback.
+The existing `AI_NVIDIA` model-dispatch kill switch also controls structured voice answers through the shared gateway. Browser agents select a configured reasoning provider and pinned model, with no automatic provider fallback. Gemini remains the default when no operator overrides are set.
 
 ## Integrate another app
 
@@ -86,7 +92,7 @@ Return `{event_id, action: "continue" | "end" | "handoff", text}`. `handoff` end
 
 - Two concurrent calls across the installation, one per caller, 30 starts per app per rolling 24 hours.
 - Two-minute sessions, maximum 15 turns. FAQ answers also use existing app/user planning quotas.
-- Short turn-based speech; no barge-in or simultaneous talking. No recording, live transfer or outbound ringing.
+- Bounded utterance recognition, sentence synthesis and interruptible playback. Optional local rolling partial transcripts are provisional, not native ASR streaming. No recording, live transfer or outbound ringing.
 - Call media is transient. Audit/session rows survive a restart, but the audio call cannot resume after the media process exits.
 - Run one media/API process for this pilot. Multiple processes require sticky session routing or a dedicated media service for status and end controls.
 - Public use still needs an authenticated app frontend/backend, HTTPS, reachable WebRTC networking and tested STUN/TURN configuration. A normal HTTPS reverse proxy does not carry UDP audio automatically. Use short-lived TURN credentials and budget relay traffic.
@@ -126,7 +132,7 @@ Create agents with `language: "auto" | "en" | "hi" | "hinglish"` (default `auto`
 The FAQ responder uses up to four previous question/answer pairs for follow-up
 context. That context is untrusted; facts must still cite currently permitted FAQ
 passages. Raw conversation history is held only in the media session's memory
-and cleared at call end. The existing answer/citation audit remains persistent.
+and cleared at call end. Live browser voice content is retained only under the optional transcript policy; text rehearsal remains a separate knowledge-answer path.
 
 Hindi/Hinglish questions can fall back to the first six passages, interleaved
 across the agent's explicitly selected, app-published documents, when English

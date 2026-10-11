@@ -7,6 +7,7 @@ import os
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from .db_scope import worker_connection
 from .memory_embeddings import configuration, index_owned
 
 
@@ -32,12 +33,15 @@ async def tick(pool):
 
 async def serve():
     async with AsyncConnectionPool(
-        os.environ["AI_PLATFORM_DATABASE_URL"],
+        os.environ.get("AI_PLATFORM_WORKER_DATABASE_URL") or os.environ["AI_PLATFORM_DATABASE_URL"],
+        configure=worker_connection,
         open=False,
         kwargs={"row_factory": dict_row},
         min_size=1,
         max_size=2,
     ) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         while True:
             try:
                 count = await tick(pool)

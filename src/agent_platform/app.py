@@ -10,9 +10,9 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from psycopg.rows import dict_row
-from psycopg_pool import AsyncConnectionPool
 
 from .catalog import BUILTINS, TEMPLATES
+from .db_scope import APIPool as AsyncConnectionPool
 from .decision_tool import default_registry
 from .flags import capabilities, enabled
 from .gateway import model_configuration
@@ -29,7 +29,7 @@ from .workflow_report import assemble_workflow
 
 def create_app(*, repository=None, runtime=None, signing_key=None, task_registry=None):
     key = signing_key or os.environ.get('AI_PLATFORM_SIGNING_KEY', '')
-    database_url = os.environ.get('AI_PLATFORM_DATABASE_URL', '')
+    database_url = os.environ.get('AI_PLATFORM_API_DATABASE_URL') or os.environ.get('AI_PLATFORM_DATABASE_URL', '')
     memory_enabled = enabled('AI_MEMORY', default=True)
     logger = logging.getLogger('agent_platform')
 
@@ -43,12 +43,25 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
                                                'options': '-c statement_timeout=5000'})
             await pool.open()
             await pool.wait(timeout=10)
+            from .db_scope import assert_runtime_role
+            await assert_runtime_role(pool, "api")
             application.state.pool = pool
             application.state.repository = Repository(pool)
+            operator_url=os.environ.get('AI_PLATFORM_OPERATOR_DATABASE_URL')
+            if operator_url:
+                from psycopg_pool import AsyncConnectionPool as OperatorPool
+
+                from .db_scope import worker_connection
+                pool.operator_pool=OperatorPool(operator_url,open=False,kwargs={'row_factory':dict_row},configure=worker_connection)
+                await pool.operator_pool.open()
+                await pool.operator_pool.wait(timeout=10)
+                await assert_runtime_role(pool.operator_pool,'worker')
         else:
             application.state.repository = repository
         application.state.runtime = runtime or Runtime(
             os.environ.get('AI_PLATFORM_CONNECTOR_URL', ''), key, os.environ.get('NVIDIA_API_KEY', ''))
+        if hasattr(application.state.runtime, 'gateway'):
+            application.state.runtime.gateway.pool = getattr(application.state.repository, 'pool', None)
         from .research_tool import install_research_tool
         if getattr(application.state.repository, "pool", None) is not None:
             install_research_tool(registry, application.state.repository.pool, application.state.runtime)
@@ -65,13 +78,27 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
                 task.cancel()
             await asyncio.gather(*application.state.workflow_tasks, return_exceptions=True)
             if repository is None:
+                if application.state.pool.operator_pool is not None:
+                    await application.state.pool.operator_pool.close()
                 await application.state.pool.close()
 
-    app = FastAPI(title='AI Agent Platform', docs_url=None, redoc_url=None, lifespan=lifespan)
+    app = FastAPI(title='AI Agent Platform', docs_url=None, redoc_url=None,
+                  openapi_url='/openapi.json' if os.environ.get('AI_PLATFORM_ENV') == 'development' else None,
+                  lifespan=lifespan)
+    from .route_security import install as install_route_security
+    install_route_security(app, key)
 
     def actor(authorization):
         if not authorization or not authorization.startswith('Bearer '):
             raise HTTPException(401, 'Delegation required')
+        from .delegation import verified_for
+        cached = verified_for(authorization[7:])
+        if cached is not None:
+            if (cached.get('iss') != 'nraialgo'
+                    or cached.get('scope') != 'agents:access'
+                    or (authorization[7:].startswith('v2.') and (not cached.get('legacy_research_access') or cached.get('tenant')!='nraialgo'))):
+                raise HTTPException(403, 'Legacy research delegation required')
+            return cached
         try:
             return verify(key, authorization[7:], issuer='nraialgo', audience='agent-platform',
                           scope='agents:access')
@@ -400,6 +427,8 @@ def create_app(*, repository=None, runtime=None, signing_key=None, task_registry
     install_connection_test(app)
     from .email_api import install as install_email
     install_email(app)
+    from .sms_api import install as install_sms
+    install_sms(app)
     install_chakra_onboarding(app)
     from .meta_onboarding import install_onboarding
     from .meta_webhook import install_meta_webhook

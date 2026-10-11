@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SMS · Agent Platform</title><link rel="stylesheet" href="/monitor/assets/monitor.css"></head>
+<body><aside><a class="brand" href="/monitor">◈ Agent Platform</a><p class="eyebrow">LOCAL OPERATIONS</p><h2>SMS notifications</h2><label for="connection">Application connection</label><select id="connection" disabled></select><p class="hint">Uses this connection’s permissions. No SMS is sent by this screen.</p><nav><a href="/monitor">Task monitor</a><a href="/monitor/onboard">Connect an app</a></nav></aside>
+<main><header><div><p class="eyebrow">TRANSACTIONAL SMS</p><h1>SMS activity</h1><p>Mock sends are simulated. Accepted means the provider accepted the request; handset delivery remains unconfirmed. Choose a configured provider or an Android SIM pilot. Sending via a SIM uses your carrier plan.</p></div><button id="refresh" type="button">Refresh</button></header><div id="error" role="alert" hidden></div>
+<section class="panel"><h2>Connection and limits</h2><div id="configuration"></div></section>
+<section class="panel"><h2>Use Traccar with your Android SIM</h2>
+<ol><li>Install Traccar SMS Gateway from <a href="https://play.google.com/store/apps/details?id=org.traccar.gateway" target="_blank" rel="noopener noreferrer">Google Play</a>.</li>
+<li>Connect the phone and this platform to the same trusted Wi-Fi. Open its Gateway settings and enable the local gateway.</li>
+<li>Ask the platform operator to run <code>scripts/configure_sms.py --provider traccar_local</code> with the phone’s local address, SIM slot and allowed test recipients. Enter the local API key only in the hidden terminal prompt; do not use the cloud token.</li>
+<li>Run the saved connection check, then request a test through your app. SIM slots are numbered 1, 2 or 3 in platform setup. Phone acceptance does not prove receipt: check the receiving phone.</li></ol>
+<p>This pilot sends single-segment SMS to up to ten configured test numbers. The phone must stay powered and reachable. Carrier charges and permitted use still apply. Use trusted Wi-Fi only for HTTP; do not expose the phone’s server to the public internet. This does not add WhatsApp or telephone calls.</p>
+</section><section class="panel"><h2>Usage</h2><p>Application-wide request and attempt segment reservations, in UTC. Retries consume attempts. These are not billing totals.</p><div id="usage"></div></section>
+<section class="panel"><h2>Latest messages for this user</h2><p>Recipients, OTPs and message contents are kept out of this dashboard.</p><div id="messages"></div></section></main><script type="module" src="/monitor/assets/sms.js"></script></body></html>

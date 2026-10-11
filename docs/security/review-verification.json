@@ -1,0 +1,83 @@
+{
+  "date": "2026-10-09",
+  "base_revision": "c1b9a6ae9a449a8fa920cb568e2a66646e02a9d0",
+  "approval_mode": "existing approvals retained by user choice",
+  "schema": {
+    "migrations": 54,
+    "tables": 109,
+    "forced_rls_tenant_app_tables": 103,
+    "explicit_global_operator_tables": 6,
+    "forced_rls_total_including_global_heartbeat": 104,
+    "global_operator_tables_without_rls": 5
+  },
+  "tests": {
+    "voice_enabled_restricted_roles": {
+      "passed": 396,
+      "failed": 0,
+      "skipped": 0
+    },
+    "final_privilege_compatibility_gate_dev_only": {
+      "passed": 36,
+      "failed": 0
+    },
+    "javascript": {
+      "passed": 34,
+      "failed": 0
+    },
+    "role_provisioning_smoke": "passed in separate temporary PostgreSQL cluster, including second database role reuse",
+    "lint": "passed",
+    "global_provider_cap_and_security": {
+      "passed": 10,
+      "failed": 0
+    },
+    "consumer_delegation": {
+      "passed": 9,
+      "failed": 0,
+      "bidirectional_wire_and_postgres_replay": "passed"
+    },
+    "canonical_dev_only_final": {
+      "passed": 393,
+      "failed": 0,
+      "skipped_optional_media": 4
+    }
+  },
+  "operational": {
+    "live_database_changed": true,
+    "deployed": false,
+    "legacy_delegation_retired": false,
+    "paid_provider_chain_enabled": false,
+    "prototype_archived": false,
+    "local_databases_migrated": true,
+    "canonical_local_api_worker_running": true,
+    "production_deployed": false,
+    "consumer_commit": "f7ddf4ca",
+    "consumer_deployed": false,
+    "local_migrations": 54,
+    "runtime_roles": [
+      "agent_api",
+      "agent_worker"
+    ],
+    "live_unscoped_api_tables_checked": 103
+  },
+  "workbook": {
+    "source": "local platform_model_calls migration 039",
+    "calls": 38,
+    "known_total_tokens": 369148,
+    "unknown_cost_calls": 38,
+    "currency": "not recorded",
+    "original_workbook_replaced_in_place": false
+  },
+  "remaining": [
+    "Deploy/configure NRAIAlgo companion keys, verify both directions, then retire the legacy shared-secret path",
+    "Select verified provider rates and explicit app budgets before a paid provider-chain pilot",
+    "Exact accessible prototype/original workbook paths needed; Desktop access denied by macOS",
+    "Prototype provider credentials cannot be rotated before locating and identifying them",
+    "Production DigitalOcean deployment not changed by this local rollout"
+  ],
+  "local_task_proof": {
+    "task_id": "6f9544c4-2d91-4e4b-837c-c321a8da5357",
+    "status": "DONE",
+    "other_app_read_status": 404,
+    "provider_calls": 0
+  }
+}

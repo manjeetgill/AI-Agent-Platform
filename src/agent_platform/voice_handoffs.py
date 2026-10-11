@@ -141,6 +141,8 @@ def install(app, start, status, end):
         if not header.startswith("Bearer ") or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
             raise HTTPException(401, "Open the private voice link from your WhatsApp conversation")
         pool = request.app.state.repository.pool
+        from .db_scope import connection_identity
+        await connection_identity(pool, 'voice', hashlib.sha256(token.encode()).hexdigest())
         async with pool.connection() as conn:
             row = await (
                 await conn.execute(

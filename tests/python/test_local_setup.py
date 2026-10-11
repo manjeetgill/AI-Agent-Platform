@@ -65,9 +65,10 @@ def test_local_launcher_stops_companion_and_reports_stale_health(tmp_path, monke
         def wait(self, timeout=None):
             assert self.stopped
 
+    monkeypatch.syspath_prepend(str(Path(__file__).parents[2] / 'scripts'))
     monkeypatch.setattr(module.subprocess, 'Popen', Child)
     with pytest.raises(SystemExit, match=f'Local {failed} exited'):
-        module.supervise({'AI_DURABLE_TASKS': '1'})
+        module.supervise({'AI_DURABLE_TASKS': '1'}, {'agent_api': 'postgresql://api/test', 'agent_worker': 'postgresql://worker/test'})
     assert len(children) == 2 and all(child.stopped for child in children)
     assert module.service_status() == {'api': False, 'worker': False}
     module.save(tmp_path / 'services.json', {'updated_at': module.time.time() - 60,

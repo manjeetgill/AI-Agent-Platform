@@ -1,0 +1,14 @@
+{
+  "name": "lint",
+  "command": [
+    ".venv/bin/ruff",
+    "check",
+    "src",
+    "tests",
+    "scripts/local.py",
+    "--output-format",
+    "json"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.5
+}

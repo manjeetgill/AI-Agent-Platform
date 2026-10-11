@@ -1,29 +1,78 @@
 # AI Agent Platform architecture
 
-## Original consumer audit (2026-10-03)
+Code review baseline: 9 October 2026, GitHub main c1b9a6a, plus local security fixes.
 
-NRAIAlgo is a Next.js frontend (`frontend/nextjs`) and FastAPI backend (`backend/python/nraialgo`) backed by PostgreSQL numbered migrations. Browser authentication is a server-side session cookie; `api.auth.identity` validates session age, MFA and edition membership. The technical scanner writes workspace-scoped manual runs (`technical_runs`, `technical_run_items`) and public scheduled observations (`technical_scans`). Existing AI code in `nraialgo.ai` already provides NVIDIA/Groq/Gemini transports and bounded public-data reviews. The app has scanner, backtest, broker, execution, notification and news services, with the broker and execution paths outside this platform's boundary. The frontend proxies `/v1/*` to FastAPI. Tests use pytest and Vitest. Deployment is configured under `deploy/`; migrations are explicit and checksum-verified. Existing AI reviews do not provide agent definitions, tools or private research runs.
+## Ownership and runtime
 
-## Boundary and ownership
+This independent Python/FastAPI service owns agent definitions, durable task state,
+approvals, memory, channel bindings and usage records in PostgreSQL. Consuming apps
+own users, business records and domain tools. The Agent Workspace is a local
+operator console, not a hosted multi-user customer dashboard.
 
-The platform now lives in this independent repository at `src/agent_platform` as an independently startable FastAPI service with its own database and credentials. It never imports the NRAIAlgo store, broker or execution modules. NRAIAlgo owns identity, scanner facts and access checks; the platform owns agent definitions, run state, reports, preferences, observations and quotas. Communication is HTTP through fixed, allowlisted connectors. All tools are read-only. No order or broker tool is registered.
+The durable queue is PostgreSQL's `chore_jobs` table. Queue and task changes commit
+together; workers use row locks and leases. This repository does not require Redis
+and does not implement a separate Agent Factory service.
 
-## Request and execution flow
+## Implemented and remaining
 
-1. The signed-in browser uses NRAIAlgo's `/v1/agents/*` facade. NRAIAlgo validates the existing session and issues a short-lived HMAC-signed delegation for the platform with issuer, audience, tenant, user, scope, expiry and unique request ID.
-2. The platform validates the delegation and checks agent ownership, tool permission and run limits in its own database. A unique idempotency key prevents duplicate logical runs.
-3. For scanner research, the platform signs a separate audience-restricted tool token containing tenant, user, agent, run, tool and scope. NRAIAlgo independently validates it and fetches the requested manual scan with `workspace_id = user_id`.
-4. The platform validates and bounds the evidence, asks the configured NVIDIA model for structured commentary, validates source references against the retrieved evidence, and persists the report with immutable agent version. Backtest and completed options paper trade connectors provide separate read-only evidence scopes.
-5. The browser reads the run through the facade. A provider or connector outage yields a failed run and does not affect non-AI NRAIAlgo routes.
+| Capability | Implemented | Configuration or planned work |
+| --- | --- | --- |
+| App identity | Scoped service keys, app-owned users, forced RLS and separate API/worker roles | Apply validated role/RLS migration to each deployment |
+| Planning | Typed blueprints, tool grants, model-assisted plans, app quotas | Provider access and app grants |
+| Execution | Durable queue, leases, exact-action approvals, bounded retries and reconciliation | Domain adapters and real-effect verification |
+| Adaptive agents | Bounded model/tool loop | Not unrestricted autonomous execution |
+| Scheduling | PostgreSQL triggers, conditions, notifications and durable deliveries | Approved destinations and source adapters |
+| Memory/RAG | Structured checkpoints, reviewed memories, lexical retrieval, optional local embeddings | Documents, retention, consent and local embedding assets |
+| Models | Schema/evidence validation; explicit ordered provider chain, PostgreSQL budget reservations, cooldowns and sensitivity policies | Configure keys, verified rates and per-app policies; run a bounded live pilot |
+| WhatsApp | Meta/Chakra connections, signed callbacks, message queues and clinic bridge | Approved business/number, credentials, callback and live tests |
+| Voice | Internet voice, WhatsApp calling and Asterisk/BYOC adapters | Optional media runtime, authorized number/carrier and audio/network tests |
+| Email | Mock, Resend, Brevo, SMTP, limits, retries and delivery events | Verified sender and callbacks; SMTP acceptance is not delivery |
+| Retailer evidence | Paired Chrome runner, bounded server renderer, feeds and evidence checks | Approved source access and working adapters |
+| Usage | Migration-039 model-call records and scoped usage export | Currency is not recorded; estimates are not provider invoices |
+| Fine-tuning | Synthetic local pilot and reviewed-example export | No automatic production training or deployed fine-tuned model |
 
-## Security and failure model
+## Request flow
 
-Shared signing keys are supplied only through environment secrets; production must use distinct signing and provider keys. Delegations are valid for at most one minute, audience restricted and scoped. Tool data is serialized as untrusted data in the model prompt. Tool names and permissions are selected by server code, never by model output. All platform queries include tenant and user ownership predicates. The model cannot write facts, trade, call a broker or add capabilities. Execution tiers 4 and 5 are unavailable. Timeouts bound connector and provider calls. Run and request IDs permit correlation without logging prompts, tokens or private data.
+1. A consuming backend uses its own service key and authenticated external user ID.
+   NRAIAlgo research supports app-bound Ed25519 delegations; legacy HMAC remains during explicit migration overlap.
+2. The platform checks scope, app grants, ownership and quotas, then saves a typed plan.
+3. SEND steps retain the existing exact-action approval. USER_ONLY actions are not executed.
+4. Workers save progress and reconcile uncertain effects before repeating work.
+5. The consuming app reads results/events or receives configured webhooks. Task and
+   memory state remains outside the LLM when providers change.
 
-## Deployment and migration
+## Security review status
 
-Deploy the platform API separately using its own Dockerfile and Compose project. Configure platform settings from `.env.example`; configure the NRAIAlgo facade separately in its repository. Migrate its independent database before starting it. Enable the NRAIAlgo facade after the platform health check succeeds. Rollback by disabling the feature flag; existing app routes and data remain intact. The platform schema is additive and isolated. Do not share NRAIAlgo database credentials with the platform.
+The local update disables HTTP OpenAPI except in explicit development mode,
+authenticates versioned APIs before body validation, avoids identity INSERTs for
+returning users, and checks the complete route inventory with optional flags enabled.
+Public callbacks and expiring connection/voice sessions retain their own verification.
 
-## Open work
+Migration-054 inventory: 109 tables; all 103 tenant/app tables have forced RLS.
+Six global/operator tables are explicitly classified. API scope is transaction-local;
+worker access requires a restricted worker role, not just a caller-set session flag.
+Public callbacks bootstrap only their bound identity and still verify their signature.
+See `security/table-inventory.json` and `security/ROLLOUT.md`.
 
-The current implementation supports five built-ins over saved scanner, archive backtest and completed options paper trade evidence. Trade Review covers simulated paper results only. User preferences, model-labeled observations, run history and text search are separate stores; trading facts stay in NRAIAlgo. Two bounded, optional workflows run Signal Research → Signal Challenger or Backtest Auditor → Strategy Review, with persisted step runs and idempotency. The strategy builder interprets only the existing archive DSL, validates a structured draft, shows it for review, and submits to the existing backtest API only after explicit confirmation. Scheduling, broader trading-data retrieval, notifications, and production load validation must be completed before declaring the full platform production ready.
+Delegation supports app-bound Ed25519 issuer keys, validity windows, replay rejection
+and legacy overlap. Existing approval behavior is unchanged by owner choice.
+Legacy retirement and live database cutover are operational steps, not implied by
+source-code completion. The local operator console deliberately has a separate
+worker credential; public deployment must never receive that operator credential.
+
+## Sahayak contract
+
+`src/agent_platform/sahayak_bridge.py` and Sahayak's
+`apps/api/src/whatsapp-bridge.ts` agree on event, channel, app and clinic identifiers,
+sender and text. Both use HMAC-SHA256 over timestamp, a dot and the exact JSON bytes,
+with X-Agent-Timestamp and X-Agent-Signature headers. Sahayak enforces a five-minute
+time window and app/clinic binding. Probe responses contain the same clinic ID;
+normal responses contain the event ID, replies, handledBy and redFlag. This is a
+code-contract review, not a new live appointment/message-delivery test.
+
+## Deployment
+
+The platform has its own containers and database. The guarded release script backs
+up data, checks migration checksums, preserves private settings and verifies HTTPS
+boundaries. This security review is local work; it does not change the live server.
+Provider activation and customer authorization remain separate setup steps.

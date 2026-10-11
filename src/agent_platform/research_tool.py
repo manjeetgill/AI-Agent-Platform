@@ -140,4 +140,5 @@ def install_research_tool(registry, pool, runtime=None):
             runtime = Runtime(runtime.connector_url, runtime.signing_key, runtime.provider_key,
                               connector_client=runtime.connector_client, model_client=runtime.gateway.client)
             runtime.gateway.max_attempts = 1
+            runtime.gateway.pool = pool
         registry.adapters['research.explain'] = ResearchExplanation(pool, runtime, app_id)

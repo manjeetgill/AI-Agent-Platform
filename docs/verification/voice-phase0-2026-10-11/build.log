@@ -1,0 +1,10 @@
+WARNING: The directory '/Users/manjeet/Library/Caches/pip' or its parent directory is not owned or is not writable by the current user. The cache has been disabled. Check the permissions and owner of that directory. If executing pip with sudo, you should use sudo's -H flag.
+Processing ./.
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: ai-agent-platform
+  Building wheel for ai-agent-platform (pyproject.toml): started
+  Building wheel for ai-agent-platform (pyproject.toml): finished with status 'done'
+  Created wheel for ai-agent-platform: filename=ai_agent_platform-0.1.0-py3-none-any.whl size=422870 sha256=f35228890bf2b6c57771c95c73f620ab7f01952b0ef29d7b7a06aea60961a911
+  Stored in directory: /private/var/folders/c_/jv8spc0d319dsv6_rcjj56g80000gn/T/pip-ephem-wheel-cache-z0tcvnk8/wheels/8e/42/5b/92ec00bed24d0fcde108028d4f732a9f8733ef55478441b7ea
+Successfully built ai-agent-platform

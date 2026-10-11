@@ -1,0 +1,15 @@
+{
+  "role_flags": {
+    "rolsuper": false,
+    "rolcreatedb": false,
+    "rolcreaterole": false,
+    "rolbypassrls": false
+  },
+  "checks": {
+    "schema_create": "DENIED",
+    "rate_edit": "DENIED",
+    "limit_edit": "DENIED",
+    "migration_edit": "DENIED"
+  },
+  "status": "PASS"
+}

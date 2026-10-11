@@ -1,0 +1,21 @@
+{
+  "status": "PASS",
+  "streaming_tested": true,
+  "synthetic_audio": true,
+  "human_microphone_tested": false,
+  "barge_in_tested": false,
+  "telephone_tested": false,
+  "provider_fees": 0,
+  "model": "qwen2.5:3b",
+  "asr_model": "ggml-small.bin",
+  "language": "en",
+  "session_id": "97a393ae-efc8-46c6-ab9d-00214d6f1353",
+  "agent_id": "d6802f9f-d85d-4fa6-b728-0b9857732cc1",
+  "duration_seconds": 22.56,
+  "last_input_frame_to_first_received_audio_ms": 5640,
+  "final_state": "ENDED",
+  "received_frames": 1103,
+  "control_plane_restarted": true,
+  "media_process_restarted": false,
+  "original_api_restarted": false
+}

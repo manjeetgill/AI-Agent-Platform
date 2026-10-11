@@ -10,7 +10,7 @@ from agent_platform.workspace_shell import ASSETS, LINKS, install_bridge, shell
 def test_shared_navigation_preserves_existing_controls():
     for name,path in [('index.html','/workspace'),('dashboard.html','/'),('whatsapp.html','/whatsapp'),
                       ('calling.html','/calling'),('voice.html','/voice'),('telephony.html','/telephony'),
-                      ('memory.html','/memory'),('feeds.html','/connectors'),('email.html','/monitor/email')]:
+                      ('memory.html','/memory'),('feeds.html','/connectors'),('email.html','/monitor/email'),('sms.html','/monitor/sms')]:
         source=shell((ASSETS/name).read_text(),path)
         assert source.count('aria-current="page"')>=1
         assert '<nav class="workspace-nav" aria-label="Platform capabilities">' in source

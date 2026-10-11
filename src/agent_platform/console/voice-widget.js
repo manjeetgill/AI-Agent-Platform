@@ -5,9 +5,13 @@ export function mountVoiceWidget(root, {api, agentId, iceServers = [], beforeSta
   const label=document.createElement('label'), consent=document.createElement('input'); consent.type='checkbox'; label.append(consent, document.createTextNode(consentText));
   const start=document.createElement('button'), stop=document.createElement('button'), status=document.createElement('p'), audio=document.createElement('audio');
   start.textContent='Talk to AI'; stop.textContent='End call'; stop.disabled=true; status.setAttribute('role','status'); audio.autoplay=true; audio.controls=true;
-  root.append(notice,label,start,stop,status,audio);
-  let pc=null,stream=null,session=null,timer=null,poll=null,starting=false,epoch=0,disposed=false;
-  function closeLocal() { clearTimeout(timer);clearInterval(poll);timer=poll=null; if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;if(pc)pc.close();pc=null; audio.srcObject=null;stop.disabled=true;start.disabled=disposed;starting=false; }
+  const transcriptLabel=document.createElement('label'), transcriptConsent=document.createElement('input'); transcriptConsent.type='checkbox'; transcriptLabel.append(transcriptConsent,document.createTextNode('Save my call transcript for up to 24 hours (optional).'));
+  const mute=document.createElement('button');mute.textContent='Mute microphone';mute.disabled=true;
+  root.append(notice,label,transcriptLabel,start,stop,mute,status,audio);
+  mute.onclick=()=>{if(!stream)return;const enabled=!stream.getAudioTracks()[0]?.enabled;for(const t of stream.getAudioTracks())t.enabled=enabled;mute.textContent=enabled?'Mute microphone':'Unmute microphone';};
+  let pc=null,stream=null,session=null,timer=null,poll=null,starting=false,epoch=0,disposed=false,after=0,polling=false;
+  const captions=document.createElement('p');captions.setAttribute('aria-live','polite');root.append(captions);
+  function closeLocal() { clearTimeout(timer);clearInterval(poll);timer=poll=null; if(stream)stream.getTracks().forEach(t=>t.stop());stream=null;if(pc)pc.close();pc=null; audio.srcObject=null;stop.disabled=true;mute.disabled=true;mute.textContent='Mute microphone';start.disabled=disposed;starting=false; }
   async function end(message='Call ended') {epoch++;const id=session;session=null;closeLocal();status.textContent=message;if(id){try{await api(`voice/sessions/${id}/end`,'POST',{});}catch{status.textContent=message+'. Audio is closed locally; the server session expires automatically.';}}}
   stop.onclick=()=>end();
   start.onclick=async()=>{
@@ -22,19 +26,19 @@ export function mountVoiceWidget(root, {api, agentId, iceServers = [], beforeSta
       status.textContent='Allow microphone access to start.';
       const captured=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
       if(current!==epoch){captured.getTracks().forEach(t=>t.stop());return;}
-      stream=captured;pc=new RTCPeerConnection({iceServers});const connection=pc;
+      stream=captured;mute.disabled=false;pc=new RTCPeerConnection({iceServers});const connection=pc;
       for(const track of stream.getTracks())pc.addTrack(track,stream);
       pc.ontrack=e=>{audio.srcObject=e.streams[0]||new MediaStream([e.track]);audio.play().catch(()=>{status.textContent='Press Play on the audio control to hear the agent.';});};
-      pc.onconnectionstatechange=()=>{if(current!==epoch)return;if(connection.connectionState==='connected')status.textContent='Connected. Speak after the greeting.';if(['failed','closed'].includes(connection.connectionState))end('Audio connection ended');};
+      pc.onconnectionstatechange=()=>{if(current!==epoch)return;if(connection.connectionState==='connected')status.textContent='Connected. You may interrupt the assistant while it speaks.';if(['failed','closed'].includes(connection.connectionState))end('Audio connection ended');};
       await pc.setLocalDescription(await pc.createOffer());
       await new Promise((resolve,reject)=>{if(connection.iceGatheringState==='complete'){resolve();return;}const timeout=setTimeout(()=>reject(new Error('Network setup timed out')),12000);connection.addEventListener('icegatheringstatechange',()=>{if(connection.iceGatheringState==='complete'){clearTimeout(timeout);resolve();}});});
       if(current!==epoch)return;
       status.textContent='Connecting to your AI assistant…';
-      const result=await api(`voice/agents/${id}/sessions`,'POST',{sdp:connection.localDescription.sdp,request_key:crypto.randomUUID(),audio_consent:true});
+      const result=await api(`voice/agents/${id}/sessions`,'POST',{sdp:connection.localDescription.sdp,request_key:crypto.randomUUID(),audio_consent:true,transcript_consent:transcriptConsent.checked});
       if(current!==epoch){await api(`voice/sessions/${result.id}/end`,'POST',{});return;}
-      session=result.id;await connection.setRemoteDescription({type:'answer',sdp:result.sdp});
+      session=result.id;after=0;captions.textContent='';await connection.setRemoteDescription({type:'answer',sdp:result.sdp});
       timer=setTimeout(()=>end('Two-minute session limit reached'),120000);
-      poll=setInterval(async()=>{if(!session)return;try{const r=await api(`voice/sessions/${session}`);if(['ENDED','FAILED','UNKNOWN'].includes(r.state))end('Call ended');}catch{/* Bounded local deadline still ends the call. */}},4000);
+      poll=setInterval(async()=>{if(!session||polling)return;polling=true;const active=session;try{const r=await api(`voice/sessions/${active}`);if(active!==session)return;if(['ENDED','FAILED','UNKNOWN'].includes(r.state)){end(r.state==='FAILED'?'Call failed. Check the call history.':r.state==='UNKNOWN'?'The connection was lost. Check any pending action before starting again.':'Call ended');return;}const timeline=await api(`voice/sessions/${active}/events?after=${after}`);if(active!==session)return;after=timeline.next_after;for(const e of timeline.events){if(e.content)captions.textContent=(e.kind==='asr_partial'?'Provisional: ':e.role+': ')+e.content;}}catch{/* Bounded local deadline still ends the call. */}finally{polling=false;}},2000);
     }catch(error){if(current===epoch)await end(error.name==='NotAllowedError'?'Microphone access was not allowed.':(error.message||'Unable to connect audio'));}
     finally{if(current===epoch)starting=false;}
   };

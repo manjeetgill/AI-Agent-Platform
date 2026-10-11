@@ -61,7 +61,9 @@ def install_meta_webhook(app):
         for entry in payload['entry']:
             for change in entry['changes']:
                 value=change['value']
+                from .db_scope import connection_identity
                 if change.get('field')=='account_update':
+                    await connection_identity(pool,'meta_waba',entry['id'])
                     async with pool.connection() as conn:
                         await conn.execute('UPDATE meta_connections SET checked_at=NULL WHERE waba_id=%s',(entry['id'],))
                     continue
@@ -72,6 +74,7 @@ def install_meta_webhook(app):
                 phone=value['metadata'].get('phone_number_id')
                 if not isinstance(phone, str):
                     raise HTTPException(400, 'Invalid message metadata')
+                await connection_identity(pool,'meta_phone',phone)
                 async with pool.connection() as conn:
                     channel=await (await conn.execute("SELECT c.* FROM whatsapp_channels c JOIN meta_connections m ON m.phone_id=c.phone_id AND m.app_id=c.app_id AND m.owner_id=c.owner_id WHERE m.phone_id=%s AND m.waba_id=%s AND m.state NOT IN ('DISCONNECTING','DISCONNECTED')", (phone,entry['id']))).fetchone()
                 if channel:

@@ -18,10 +18,7 @@ TERMINAL = {'MOCK_SENT','ACCEPTED','FAILED','OUTCOME_UNKNOWN','EXPIRED','SUPPRES
 
 async def counts(conn, table, date_column, app_id=None):
     # Identifiers are constants supplied only by this module.
-    return await (await conn.execute(f'''SELECT count(*) FILTER(WHERE {date_column}>=date_trunc('day',now(),'UTC')) AS daily,
-        count(*) FILTER(WHERE {date_column}>=date_trunc('month',now(),'UTC')) AS monthly, count(*) FILTER(WHERE {date_column}>now()-interval '1 minute') AS per_minute
-        FROM {table} WHERE {date_column}>=least(date_trunc('month',now(),'UTC'),now()-interval '1 minute')
-        AND (%s::uuid IS NULL OR app_id=%s)''', (app_id,app_id))).fetchone()
+    return await (await conn.execute('SELECT * FROM agent_email_counts(%s,%s)',(table,app_id))).fetchone()
 
 
 def exceeded(used, limits, *, minute=False):

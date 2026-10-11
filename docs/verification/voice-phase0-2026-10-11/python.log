@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/Users/manjeet/Documents/ChatGPT/Algo/AI-Agent-Platform/scripts/test_orchestration_local.py", line 37, in <module>
+    raise SystemExit(asyncio.run(main()))
+                     ~~~~~~~~~~~^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py", line 205, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/runners.py", line 128, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/asyncio/base_events.py", line 720, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/Users/manjeet/Documents/ChatGPT/Algo/AI-Agent-Platform/scripts/test_orchestration_local.py", line 22, in main
+    async with await psycopg.AsyncConnection.connect(base, autocommit=True) as conn:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/manjeet/Documents/ChatGPT/Algo/AI-Agent-Platform/.venv/lib/python3.14/site-packages/psycopg/connection_async.py", line 144, in connect
+    raise last_ex.with_traceback(None)
+psycopg.OperationalError: connection failed: connection to server at "127.0.0.1", port 55460 failed: could not receive data from server: Connection refused

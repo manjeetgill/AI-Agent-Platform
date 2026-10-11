@@ -22,6 +22,7 @@ SOURCES = {
     'voice': ('agents:read', '/v1/voice/capabilities'),
     'voice_agents': ('agents:read', '/v1/voice/agents'),
     'telephone': ('telephony:read', '/v1/telephony/connections'),
+    'sms': ('notifications:read', '/v1/notifications/sms/configuration'),
     'email': ('notifications:read', '/v1/notifications/email/configuration'),
     'knowledge': ('knowledge:read', '/v1/knowledge/documents'),
     'feeds': ('tasks:read', '/v1/connectors/feeds'),
@@ -112,6 +113,12 @@ def checklist(sources):
     if sources.get('email', {}).get('status') == 200 and email.get('provider') == 'smtp':
         result[-1].update(status='NOT_SUPPORTED', summary='SMTP relay acceptance does not verify recipient delivery.',
                           next_steps=['Use provider delivery callbacks through Resend/Brevo when delivery tracking is required.'])
+    sms = data('sms')
+    add('sms', 'SMS notifications', ['sms'], sms.get('configured', False),
+        'Mock mode sends no SMS. Provider acceptance does not verify handset delivery.',
+        ['Configure an authorised SMS provider or a private Android SIM pilot with allowed test recipients.',
+         'Set segment limits, then verify one approved test on the recipient phone.'], '/monitor/sms',
+        mock=sms.get('mock', False), evidence={'provider':sms.get('provider'), 'limits':sms.get('limits')})
     docs = rows('knowledge', 'documents')
     add('knowledge', 'Knowledge / RAG', ['knowledge'], bool(docs),
         f'{len(docs)} accessible documents in this page. Lexical retrieval works without an embedding subscription.',

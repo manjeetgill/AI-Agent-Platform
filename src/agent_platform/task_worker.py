@@ -8,6 +8,7 @@ import signal
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+from .db_scope import worker_connection
 from .external_jobs import DeferredJob, JobFailure
 from .task_store import TaskStore
 from .tasks import Reconciliation
@@ -17,10 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 async def tick(store, registry):
+    from .delegation import prune_expired
+    await prune_expired(store.pool)
     await store.recover()
     claimed = await store.claim()
     if claimed is None:
         return False
+    from .db_scope import model_identity
+    marker=model_identity.set({'tenant':claimed['tenant_id'],'app_id':str(claimed.get('source_app_id') or ''),'user':str(claimed['owner_id'])})
     try:
         adapter, action = registry.resolve(claimed['step'])
         not_applied = False
@@ -85,21 +90,28 @@ async def tick(store, registry):
             await store.poll_failed(claimed)
         else:
             await store.finish(claimed, failed=True)
+    finally:
+        model_identity.reset(marker)
     return True
 
 
 async def serve(registry):
     if not registry.adapters:
         raise RuntimeError('No tested site adapters are installed; browser execution remains disabled')
-    async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], min_size=1, max_size=4,
+    async with AsyncConnectionPool(os.environ.get('AI_PLATFORM_WORKER_DATABASE_URL') or os.environ['AI_PLATFORM_DATABASE_URL'], configure=worker_connection, min_size=1, max_size=4,
             kwargs={'row_factory': dict_row, 'connect_timeout': 3,
                     'options': '-c statement_timeout=5000'}, open=False) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         await pool.wait(timeout=10)
         from .research_tool import install_research_tool
         install_research_tool(registry, pool)
         from .knowledge import KnowledgeAnswer
         registry.adapters['knowledge.answer'] = KnowledgeAnswer(pool)
         from .flags import enabled
+        if enabled('AI_BROWSER_TASKS'):
+            from .browser_runner import BrowserSearch
+            registry.adapters['browser.wikipedia_search']=BrowserSearch(pool)
         if enabled('AI_AUTOMATIONS'):
             from .adaptive_runtime import install
             install(registry, pool)
@@ -112,7 +124,12 @@ async def serve(registry):
             from .server_retailer import runtime_configured
             async with reporting(pool, registry, lambda: bool(
                     server_browser and not server_browser.done() and runtime_configured())):
+                retention_checked = 0.0
                 while True:
+                    if asyncio.get_running_loop().time() - retention_checked > 60:
+                        from .voice_events import expire
+                        await expire(pool)
+                        retention_checked = asyncio.get_running_loop().time()
                     from .flags import enabled
                     if enabled('AI_AUTOMATIONS'):
                         from .automation import tick as automation_tick
@@ -126,6 +143,12 @@ async def serve(registry):
                             await email_tick(pool)
                         except Exception:  # noqa: BLE001 -- no private notification content in logs
                             logger.warning('Email queue tick failed; durable state retained')
+                    if enabled('AI_SMS_NOTIFICATIONS'):
+                        from .sms_service import tick as sms_tick
+                        try:
+                            await sms_tick(pool)
+                        except Exception:  # noqa: BLE001 -- no private notification content in logs
+                            logger.warning('SMS queue tick failed; durable state retained')
                     if not await tick(store, registry):
                         await asyncio.sleep(1)
         finally:

@@ -14,6 +14,7 @@ from psycopg_pool import AsyncConnectionPool
 from . import calling_media, calling_provider
 from .calling import configuration_hash, connected
 from .calling_dialogue import respond
+from .db_scope import worker_connection
 
 
 async def ingest(pool, channel, payload):
@@ -303,8 +304,11 @@ class Worker:
 
 async def serve():
     async with AsyncConnectionPool(
-        os.environ["AI_PLATFORM_DATABASE_URL"], open=False, kwargs={"row_factory": dict_row}
+        os.environ.get("AI_PLATFORM_WORKER_DATABASE_URL") or os.environ["AI_PLATFORM_DATABASE_URL"],
+        configure=worker_connection, open=False, kwargs={"row_factory": dict_row}
     ) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         await Worker(pool).run()
 
 

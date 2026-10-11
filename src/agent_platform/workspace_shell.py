@@ -11,7 +11,7 @@ ASSETS = Path(__file__).with_name('console')
 LINKS = [('/', 'Overview'),('/setup','Setup checklist'),('/workspace','Build agents'),('/whatsapp','WhatsApp'),
          ('/calling','WhatsApp calling'),('/voice','Internet voice'),('/telephony','Telephone'),
          ('/memory','Memory & knowledge'),('/connectors','API & feeds'),
-         ('/monitor','Tasks & readiness'),('/monitor/email','Email'),('/monitor/onboard','Connected apps'),
+         ('/monitor','Tasks & readiness'),('/monitor/email','Email'),('/monitor/sms','SMS'),('/monitor/onboard','Connected apps'),
          ('/self-hosting','Self-hosting')]
 CSP = "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; media-src 'self' blob:; frame-ancestors 'none'; form-action 'self'"
 
@@ -61,7 +61,7 @@ def install_bridge(app, local, *, transport=None):
                                          follow_redirects=False,trust_env=False,transport=transport) as client:
                 response=await client.request(request.method,target,params=request.query_params,headers=headers,content=bytes(raw))
         except httpx.HTTPError:
-            if request.method=='GET' and path in {'','email','onboard'}:
+            if request.method=='GET' and path in {'','email','sms','onboard'}:
                 source='<!doctype html><html><head><title>Service unavailable · Agent Workspace</title></head><body><main><h1>Application service unavailable</h1><p>Start the local platform API and worker, then refresh. Your other workspace screens remain available.</p><a href="/">Back to overview</a></main></body></html>'
                 return HTMLResponse(shell(source,request.url.path),status_code=503,headers={'Cache-Control':'no-store','Content-Security-Policy':CSP})
             raise HTTPException(503,'Application service unavailable; other workspace capabilities remain available.') from None

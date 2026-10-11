@@ -1,6 +1,8 @@
 """Bounded read-only tool call followed by a validated model report."""
 import json
+import os
 import re
+import time
 
 import httpx
 
@@ -94,8 +96,17 @@ class Runtime:
         endpoints = {'scanner_evidence': 'scanner-evidence', 'backtest_evidence': 'backtest-evidence',
                      'paper_trade_evidence': 'paper-trade-evidence', 'research_evidence': 'research-evidence'}
         endpoint = endpoints[query.tool]
-        token = issue(self.signing_key, issuer='agent-platform', audience='nraialgo-connector',
-                      tenant=tenant, user=user, agent=agent_id, run=run_id, scope=query.tool + ':read')
+        issuer_file=os.environ.get('AI_CONNECTOR_ISSUER_KEY_FILE','').strip()
+        if issuer_file:
+            from .delegation import issue_from_file
+            token=issue_from_file(issuer_file,user=user,audience='nraialgo-connector',
+                                  scope_name=query.tool+':read',agent=agent_id,run=run_id)
+        else:
+            cutoff=os.environ.get('AI_CONNECTOR_LEGACY_UNTIL','').strip()
+            if cutoff and (not cutoff.isdigit() or int(time.time())>=int(cutoff)):
+                raise RunFailure('CONNECTOR_LEGACY_RETIRED')
+            token = issue(self.signing_key, issuer='agent-platform', audience='nraialgo-connector',
+                          tenant=tenant, user=user, agent=agent_id, run=run_id, scope=query.tool + ':read')
         client = self.connector_client or httpx.AsyncClient(timeout=httpx.Timeout(10, connect=3))
         try:
             response = await client.post(self.connector_url + '/v1/agent-connector/' + endpoint,

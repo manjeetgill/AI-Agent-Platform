@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Independent read-only research agent service"
 requires-python = ">=3.11"
 dependencies = [
-  "cryptography==46.0.7",
+  "cryptography==50.0.2",
   "Pillow==12.3.0",
   "fastapi==0.141.1", "httpx==0.28.1", "pydantic==2.13.5",
   "psycopg[binary]==3.3.6", "psycopg-pool==3.3.3", "uvicorn==0.53.0",
@@ -17,8 +17,9 @@ dependencies = [
 [project.optional-dependencies]
 training = ["torch>=2.6,<3", "transformers>=5,<6", "peft>=0.17,<1"]
 embeddings = ["sentence-transformers>=5,<6"]
-voice = ["aiortc==1.15.0"]
+voice = ["aiortc==1.15.0", "webrtcvad-wheels==2.0.14.post1"]
 dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+audit = ["mypy>=1.15,<2", "pip-audit>=2.9,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -33,3 +34,10 @@ testpaths = ["tests/python"]
 [tool.ruff]
 target-version = "py311"
 line-length = 110
+
+# Incremental typing starts at the new validated provider boundary. This does
+# not claim the older dynamic runtime has been fully type-checked.
+[tool.mypy]
+files = ["src/agent_platform/voice_config.py"]
+follow_imports = "silent"
+disallow_untyped_defs = true

@@ -20,7 +20,7 @@ async def schema_ready(connection):
         return False
     rows = await (await connection.execute('SELECT name,sha256 FROM agent_schema_migrations')).fetchall()
     applied = {row['name']: row['sha256'] for row in rows}
-    return all(applied.get(name) == digest for name, digest in expected.items())
+    return applied == expected
 
 
 async def migrate():
@@ -46,6 +46,8 @@ async def migrate():
             await connection.execute(source.decode())
             await connection.execute('INSERT INTO agent_schema_migrations(name,sha256) VALUES(%s,%s)',
                                      (path.name, digest))
+        # Runtime checks can read the manifest; only the migrator can change it.
+        await connection.execute('REVOKE INSERT,UPDATE,DELETE ON agent_schema_migrations FROM agent_runtime_api,agent_runtime_worker')
 
 
 if __name__ == '__main__':

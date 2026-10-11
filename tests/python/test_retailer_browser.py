@@ -170,7 +170,6 @@ def test_device_expiry_and_saved_job_survive_worker_reconstruction(monkeypatch):
 
 
 def test_browser_rls_hides_other_owner_and_app(monkeypatch):
-    from psycopg.sql import SQL, Identifier
 
     from agent_platform.automation import scope
     with setup(monkeypatch) as (client,headers,key,registry):
@@ -178,11 +177,7 @@ def test_browser_rls_hides_other_owner_and_app(monkeypatch):
         row=sql('SELECT tenant_id,owner_id FROM chore_tasks WHERE id=%s',(task,))[0]
         async def verify(pool):
             async with pool.connection() as conn,conn.transaction():
-                role=Identifier('browser_rls_'+uuid4().hex[:12])
-                await conn.execute(SQL('CREATE ROLE {} NOLOGIN NOSUPERUSER NOBYPASSRLS').format(role))
-                await conn.execute(SQL('GRANT SELECT ON retailer_browser_devices,retailer_browser_jobs TO {}').format(role))
                 try:
-                    await conn.execute(SQL('SET LOCAL ROLE {}').format(role))
                     own={'tenant':row['tenant_id'],'app_id':key['app_id'],'user':str(row['owner_id'])}
                     await scope(conn,own)
                     assert len(await (await conn.execute('SELECT id FROM retailer_browser_jobs')).fetchall())==1
@@ -192,7 +187,5 @@ def test_browser_rls_hides_other_owner_and_app(monkeypatch):
                         assert not await (await conn.execute('SELECT id FROM retailer_browser_jobs')).fetchall()
                         assert not await (await conn.execute('SELECT id FROM retailer_browser_devices')).fetchall()
                 finally:
-                    await conn.execute('RESET ROLE')
-                    await conn.execute(SQL('DROP OWNED BY {}').format(role))
-                    await conn.execute(SQL('DROP ROLE {}').format(role))
+                    await scope(conn,worker=True)
         drive(registry,verify)

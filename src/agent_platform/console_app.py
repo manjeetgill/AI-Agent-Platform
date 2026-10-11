@@ -1,4 +1,5 @@
 """Loopback-only operator console. Service credentials never leave the server."""
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -12,7 +13,7 @@ from .service_identity import provision
 from .workspace_shell import install_bridge, page
 
 ASSETS = Path(__file__).with_name('console')
-PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness)|orchestration/automations(?:/[a-zA-Z0-9-]+(?:/(?:approve|runs))?)?|connectors/feeds(?:/(?:profiles|[a-zA-Z0-9-]+)(?:/(?:credentials|test))?)?|(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents(?:/[a-f0-9-]{36})?|ask|search)|voice/(capabilities|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
+PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness)|orchestration/automations(?:/[a-zA-Z0-9-]+(?:/(?:approve|runs))?)?|connectors/feeds(?:/(?:profiles|[a-zA-Z0-9-]+)(?:/(?:credentials|test))?)?|(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents(?:/[a-f0-9-]{36})?|ask|search)|voice/(capabilities|usage|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
 
 
 def local(request, *, mutation=False):
@@ -37,7 +38,20 @@ def create_console(*, registry=None, app=None):
     @asynccontextmanager
     async def lifespan(instance):
         async with prior(instance):
-            pool = instance.state.repository.pool
+            from psycopg.rows import dict_row
+            from psycopg_pool import AsyncConnectionPool
+
+            from .db_scope import assert_runtime_role, worker_connection
+            url = os.environ.get('AI_PLATFORM_OPERATOR_DATABASE_URL')
+            if not url:
+                raise RuntimeError('Local console requires a separate operator database credential')
+            pool = instance.state.repository.pool.operator_pool
+            if pool is None:
+                pool = AsyncConnectionPool(url,open=False,kwargs={'row_factory':dict_row},configure=worker_connection)
+                await pool.open()
+                await pool.wait(timeout=10)
+                await assert_runtime_role(pool,'worker')
+                instance.state.repository.pool.operator_pool = pool
             registry.adapters['browser.wikipedia_search'] = BrowserSearch(pool)
             async with pool.connection() as conn:
                 existing = await (await conn.execute("SELECT id FROM platform_apps WHERE tenant_id='local-console' AND name='Console' ORDER BY created_at LIMIT 1")).fetchone()
@@ -57,6 +71,7 @@ def create_console(*, registry=None, app=None):
             finally:
                 async with pool.connection() as conn:
                     await conn.execute('UPDATE platform_service_keys SET revoked_at=now() WHERE id=%s', (credential['key_id'],))
+                await pool.close()
     application.router.lifespan_context = lifespan
 
     @application.get('/')

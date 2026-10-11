@@ -280,6 +280,7 @@ def test_success_with_nested_provider_error_is_not_ready():
 
 
 def test_local_webrtc_audio_handshake(monkeypatch):
+    pytest.importorskip('av')
     pytest.importorskip("aiortc")
     from agent_platform.calling_media import Session
 

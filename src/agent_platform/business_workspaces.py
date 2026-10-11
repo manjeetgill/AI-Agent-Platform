@@ -74,8 +74,10 @@ def install_business_workspaces(app):
                     raise HTTPException(409, 'Business reference already reserved')
                 return public(row)
             app_id = uuid4()
+            await conn.execute("SELECT set_config('agent.app',%s,true)",(str(app_id),))
             await conn.execute('INSERT INTO platform_apps(id,tenant_id,name) VALUES(%s,%s,%s)',
                                (app_id, claims['tenant'], body.name))
+            await conn.execute("SELECT set_config('agent.app',%s,true)",(claims['app_id'],))
             row = await (await conn.execute('''INSERT INTO platform_business_workspaces
                 (id,parent_app_id,owner_id,external_id,name,app_id) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *''',
                 (uuid4(), claims['app_id'], claims['user'], body.external_id, body.name, app_id))).fetchone()

@@ -51,6 +51,8 @@ def install(app):
             if len(secret)!=43:raise ValueError()
         except ValueError:
             raise HTTPException(401,'Pair this browser again') from None
+        from .db_scope import connection_identity
+        await connection_identity(pool,'retailer',identifier)
         async with pool.connection() as conn,conn.transaction():
             await scope(conn,worker=True)
             device=await (await conn.execute('''SELECT d.* FROM retailer_browser_devices d

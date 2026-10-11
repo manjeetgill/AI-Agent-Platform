@@ -1,0 +1,10 @@
+{
+  "name": "python",
+  "command": [
+    ".venv/bin/python",
+    "scripts/test_orchestration_local.py",
+    "tests/python"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 0.34
+}

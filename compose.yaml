@@ -12,14 +12,14 @@ services:
       retries: 20
   migrate:
     build: .
-    env_file: .env
+    env_file: [.runtime/database/migrate.env]
     command: [python, -m, agent_platform.migrate]
     depends_on:
       db: {condition: service_healthy}
     restart: 'no'
   api:
     build: .
-    env_file: .env
+    env_file: [.runtime/database/common.env, .runtime/database/api.env]
     ports: ['127.0.0.1:4060:4060']
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -35,7 +35,7 @@ services:
       retries: 10
   worker:
     build: .
-    env_file: .env
+    env_file: [.runtime/database/common.env, .runtime/database/worker.env]
     command: [python, -m, agent_platform.task_worker]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -47,7 +47,7 @@ services:
   whatsapp-worker:
     profiles: [whatsapp]
     build: .
-    env_file: .env
+    env_file: [.runtime/database/common.env, .runtime/database/worker.env]
     command: [python, -m, agent_platform.whatsapp_worker]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -59,7 +59,7 @@ services:
   meta-worker:
     profiles: [whatsapp]
     build: .
-    env_file: .env
+    env_file: [.runtime/database/common.env, .runtime/database/worker.env]
     command: [python, -m, agent_platform.meta_worker]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -73,7 +73,7 @@ services:
     build:
       context: .
       args: {INSTALL_VOICE: '1'}
-    env_file: .env
+    env_file: [.runtime/database/common.env, .runtime/database/worker.env]
     command: [python, -m, agent_platform.calling_worker]
     depends_on:
       migrate: {condition: service_completed_successfully}

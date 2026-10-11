@@ -80,6 +80,8 @@ def install_browser(app, registry):
             device_id = UUID(device_id)
         except ValueError:
             raise HTTPException(401, 'Pair Chrome again') from None
+        from .db_scope import connection_identity
+        await connection_identity(app.state.repository.pool, 'browser', device_id)
         async with app.state.repository.pool.connection() as conn:
             row = await (await conn.execute('SELECT * FROM browser_devices WHERE id=%s AND revoked_at IS NULL AND expires_at>now()', (device_id,))).fetchone()
         if not row or not hmac.compare_digest(row['secret_hash'], hashlib.sha256(secret.encode()).hexdigest()):

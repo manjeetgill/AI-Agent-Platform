@@ -1,0 +1,46 @@
+{
+  "status": "FAIL",
+  "synthetic_audio": true,
+  "human_microphone_tested": false,
+  "public_network_tested": false,
+  "concurrent_callers": 2,
+  "waves": 1,
+  "duration_seconds": 20.05,
+  "first_reply_audio_ms": {
+    "p50": 2202,
+    "p95": 2202,
+    "p99": 2202
+  },
+  "sample_warning": "Small local capacity sample, not a production SLO or soak certification.",
+  "overload_rejected": true,
+  "cross_app_reads_denied": true,
+  "runs": [
+    {
+      "wave": 1,
+      "app_index": 0,
+      "status": "PASS",
+      "streaming_tested": true,
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "barge_in_tested": false,
+      "telephone_tested": false,
+      "provider_fees": 0,
+      "model": "qwen2.5:3b",
+      "asr_model": "ggml-small.bin",
+      "language": "en",
+      "session_id": "21c9b110-fe98-4aa2-a04e-69776bf537ae",
+      "agent_id": "f1312c56-2855-411f-928f-404396a7e389",
+      "duration_seconds": 15.77,
+      "last_input_frame_to_first_received_audio_ms": 2202,
+      "final_state": "ENDED",
+      "received_frames": 778
+    },
+    {
+      "wave": 1,
+      "app_index": 1,
+      "status": "FAIL",
+      "error_type": "AssertionError",
+      "assertion": "Returned WebRTC audio did not contain the answer"
+    }
+  ]
+}

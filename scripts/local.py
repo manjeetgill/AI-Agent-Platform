@@ -3,6 +3,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -15,7 +16,13 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-STATE = ROOT / '.runtime' / 'local'
+PROFILE = os.environ.get('AGENT_LOCAL_PROFILE', 'local')
+if not re.fullmatch(r'[a-z][a-z0-9_-]{0,30}', PROFILE):
+    raise SystemExit('Invalid AGENT_LOCAL_PROFILE')
+STATE = ROOT / '.runtime' / PROFILE
+API_PORT = 4160 if PROFILE == 'voice' else 4060
+DB_PORT = 55560 if PROFILE == 'voice' else 55460
+CONSOLE_PORT = API_PORT + 1
 CONFIG = STATE / 'config.json'
 
 
@@ -41,15 +48,19 @@ def setup():
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     if not CONFIG.exists():
         save(CONFIG, {
-            'AI_PLATFORM_DATABASE_URL': f'postgresql://agent_platform:{secrets.token_hex(32)}@127.0.0.1:55460/postgres',
+            'AI_PLATFORM_DATABASE_URL': f'postgresql://agent_platform:{secrets.token_hex(32)}@127.0.0.1:{DB_PORT}/postgres',
             'AI_PLATFORM_SIGNING_KEY': secrets.token_hex(32),
             'AI_PLATFORM_CONNECTOR_URL': 'http://127.0.0.1:4022',
             'NVIDIA_API_KEY': '', 'AI_PLATFORM_NVIDIA_FAST_MODEL': '',
             'AI_PLATFORM_NVIDIA_REASONING_MODEL': '', 'AI_WORKFLOWS': '1',
         })
     values = load()
+    if PROFILE == 'voice':
+        for name, value in {'AI_DURABLE_TASKS': '1', 'AI_TASK_AGENTS': '1', 'AI_WEB_VOICE_ENABLED': '1'}.items():
+            values.setdefault(name, value)
+        save(CONFIG, values)
     save(STATE / 'client.json', {'AI_PLATFORM_ENABLED': '1',
-        'AI_PLATFORM_URL': 'http://127.0.0.1:4060',
+        'AI_PLATFORM_URL': f'http://127.0.0.1:{API_PORT}',
         'AI_PLATFORM_SIGNING_KEY': values['AI_PLATFORM_SIGNING_KEY']})
     print('Local platform configuration ready. Existing settings preserved.')
     print(f'Consumer connection file: {STATE / "client.json"}')
@@ -66,15 +77,15 @@ def pg(name):
 
 def database(values):
     from urllib.parse import urlparse
-    data = STATE / 'postgres'
+    data = Path(values.get('AI_PLATFORM_LOCAL_PGDATA', str(STATE / 'postgres'))).expanduser()
     if data.is_symlink():
         raise SystemExit('Refusing a symlinked database directory')
     status = subprocess.run([pg('pg_ctl'), '-D', str(data), 'status'], capture_output=True, check=False)
     if status.returncode == 0:
         return
     with socket.socket() as probe:
-        if probe.connect_ex(('127.0.0.1', 55460)) == 0:
-            raise SystemExit('Port 55460 is occupied by another database; nothing changed')
+        if probe.connect_ex(('127.0.0.1', DB_PORT)) == 0:
+            raise SystemExit(f'Port {DB_PORT} is occupied by another database; nothing changed')
     if not (data / 'PG_VERSION').exists():
         password_file = STATE / 'init-password'
         descriptor = os.open(password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -86,7 +97,7 @@ def database(values):
         finally:
             password_file.unlink(missing_ok=True)
     subprocess.run([pg('pg_ctl'), '-D', str(data), '-l', str(STATE / 'postgres.log'),
-                    '-o', '-h 127.0.0.1 -p 55460', '-w', 'start'], check=True)
+                    '-o', f'-h 127.0.0.1 -p {DB_PORT}', '-w', 'start'], check=True)
 
 
 def nvidia():
@@ -120,15 +131,28 @@ def lifecycle_lock():
         os.close(descriptor)
 
 
-def supervise(env):
+def supervise(env,roles):
     """Stop the companion if either API or worker exits; leave saved tasks intact."""
+    from runtime_env import process_env
+    api_env=process_env(env,roles['agent_api'])
+    worker_env=process_env(env,roles['agent_worker'])
+    if env.get('AI_LOCAL_MONITOR')=='1':
+        # This launcher binds only to loopback; production never receives this URL.
+        api_env['AI_PLATFORM_OPERATOR_DATABASE_URL']=roles['agent_worker']
     children = {}
     try:
+        if PROFILE == 'voice' and env.get('AI_VOICE_MEDIA_URL') == 'http://127.0.0.1:4162':
+            children['media'] = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'agent_platform.media_service:app',
+                '--host', '127.0.0.1', '--port', '4162', '--no-access-log'], env=api_env, cwd=ROOT)
         children['api'] = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'agent_platform.app:app',
-            '--host', '127.0.0.1', '--port', '4060', '--no-access-log'], env=env, cwd=ROOT)
+            '--host', '127.0.0.1', '--port', str(API_PORT), '--no-access-log'], env=api_env, cwd=ROOT)
+        if PROFILE == 'voice':
+            children['workspace'] = subprocess.Popen([sys.executable, '-m', 'uvicorn',
+                'agent_platform.console_app:create_console', '--factory', '--host', '127.0.0.1',
+                '--port', str(CONSOLE_PORT), '--no-access-log'], env={**api_env, 'AI_PLATFORM_OPERATOR_DATABASE_URL': roles['agent_worker']}, cwd=ROOT)
         if env.get('AI_DURABLE_TASKS') == '1':
             children['worker'] = subprocess.Popen([sys.executable, '-m', 'agent_platform.task_worker'],
-                                                 env=env, cwd=ROOT)
+                                                 env=worker_env, cwd=ROOT)
         while True:
             statuses = {name: child.poll() is None for name, child in children.items()}
             save(STATE / 'services.json', {'updated_at': time.time(), 'running': statuses})
@@ -156,14 +180,15 @@ def service_status():
     try:
         record = json.loads((STATE / 'services.json').read_text())
         fresh = 0 <= time.time() - record['updated_at'] < 5
-        return {name: fresh and record['running'].get(name, False) for name in ('api', 'worker')}
+        return {name: fresh and running for name, running in record['running'].items()}
     except (OSError, ValueError, KeyError, TypeError):
         return {'api': False, 'worker': False}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['setup', 'start', 'status', 'nvidia', 'vision', 'stop-db'])
+    parser.add_argument('command', choices=['setup', 'start', 'status', 'nvidia', 'vision', 'roles', 'stop-db'])
+    parser.add_argument('--console',action='store_true',help='Provision roles for the separate local console database')
     args = parser.parse_args()
     if args.command == 'setup':
         setup()
@@ -180,14 +205,29 @@ def main():
         print('NVIDIA: ' + ('configured (not verified)' if values.get('NVIDIA_API_KEY') and
               values.get('AI_PLATFORM_NVIDIA_FAST_MODEL') else 'awaiting key and model ID'))
         try:
-            with urlopen('http://127.0.0.1:4060/readiness', timeout=3) as response:
+            with urlopen(f'http://127.0.0.1:{API_PORT}/readiness', timeout=3) as response:
                 print('API/database: ' + json.load(response)['status'])
         except (URLError, TimeoutError):
             print('API/database: stopped or not ready')
         print('Local supervisor: ' + ', '.join(name + (' running' if running else ' not confirmed')
               for name, running in service_status().items()))
+    elif args.command == 'roles':
+        database(values)
+        admin=values['AI_PLATFORM_DATABASE_URL']
+        extra=[]
+        if args.console:
+            import psycopg
+            from psycopg.conninfo import make_conninfo
+            with psycopg.connect(admin,autocommit=True) as conn:
+                if not conn.execute("SELECT 1 FROM pg_database WHERE datname='agent_console'").fetchone():
+                    conn.execute("CREATE DATABASE agent_console TEMPLATE template0 ENCODING 'UTF8'")
+            admin=make_conninfo(admin,dbname='agent_console')
+            extra=['--reuse-roles',str(STATE/'database-roles.json')]
+        output=STATE/('console-database-roles.json' if args.console else 'database-roles.json')
+        subprocess.run([sys.executable,str(ROOT/'scripts/database_roles.py'),'--output',str(output),*extra],
+                       env={**os.environ,'AGENT_DB_ADMIN_URL':admin},check=True)
     elif args.command == 'stop-db':
-        subprocess.run([pg('pg_ctl'), '-D', str(STATE / 'postgres'), '-m', 'fast', 'stop'], check=True)
+        subprocess.run([pg('pg_ctl'), '-D', str(Path(values.get('AI_PLATFORM_LOCAL_PGDATA', str(STATE / 'postgres'))).expanduser()), '-m', 'fast', 'stop'], check=True)
     else:
         # Local settings are explicit; do not inherit another app's provider key or model URL.
         env = {k: v for k, v in os.environ.items() if not k.startswith(('AI_', 'NVIDIA_'))}
@@ -195,12 +235,29 @@ def main():
         env['PYTHONPATH'] = str(ROOT / 'src')
         with lifecycle_lock():
             with socket.socket() as probe:
-                if probe.connect_ex(('127.0.0.1', 4060)) == 0:
-                    raise SystemExit('Port 4060 is occupied; stop its existing launcher first. Nothing changed.')
+                if probe.connect_ex(('127.0.0.1', API_PORT)) == 0:
+                    raise SystemExit(f'Port {API_PORT} is occupied; stop its existing launcher first. Nothing changed.')
             database(values)
-            subprocess.run([sys.executable, '-m', 'agent_platform.migrate'], env=env, cwd=ROOT, check=True)
-            print('Platform: http://127.0.0.1:4060. Ctrl-C stops API and worker; database and reports persist.', flush=True)
-            supervise(env)
+            roles_file = STATE / 'database-roles.json'
+            if not roles_file.is_file() or roles_file.stat().st_mode & 0o077:
+                raise SystemExit('Provision private restricted database roles before starting')
+            roles = json.loads(roles_file.read_text())
+            from runtime_env import process_env
+            subprocess.run([sys.executable, '-m', 'agent_platform.migrate'],
+                           env=process_env(env, roles['agent_migrator']), cwd=ROOT, check=True)
+            print(f'Platform: http://127.0.0.1:{API_PORT}. Ctrl-C stops API and worker; database and reports persist.', flush=True)
+            supervise(env,roles)
+
+
+def role_urls(*, console=False):
+    """Operator tools reuse provisioned credentials without the bootstrap password."""
+    path=STATE/('console-database-roles.json' if console else 'database-roles.json')
+    if not path.is_file() or path.is_symlink() or path.stat().st_mode & 0o077:
+        raise SystemExit('Provision private database role credentials first')
+    result=json.loads(path.read_text())
+    if set(result)!={'agent_migrator','agent_api','agent_worker'}:
+        raise SystemExit('Invalid role credential file')
+    return result
 
 
 if __name__ == '__main__':

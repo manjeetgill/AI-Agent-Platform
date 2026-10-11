@@ -9,20 +9,22 @@ import wave
 
 import httpx
 
+from . import voice_config, voice_usage
 
-def speech_provider():
-    provider = os.environ.get('AI_CALLING_SPEECH_PROVIDER', 'gemini')
+
+def speech_provider(stage='asr'):
+    provider = getattr(voice_config.current(), stage)
     if provider not in {'gemini', 'sarvam', 'local'}:
         raise ValueError('Unsupported speech provider')
     return provider
 
 
-def speech_key():
-    if speech_provider() == 'local':
+def speech_key(stage='asr'):
+    if speech_provider(stage) == 'local':
         from .local_speech import assets
         assets()
         return None  # Readiness check only; no secret or external service is needed.
-    if speech_provider() == 'sarvam':
+    if speech_provider(stage) == 'sarvam':
         from .sarvam_speech import key as sarvam_key
         return sarvam_key()
     return key()
@@ -53,6 +55,11 @@ async def generate(model, payload):
 
 
 async def transcribe(pcm):
+    return await voice_usage.measured('asr', len(pcm)/32000,
+        lambda: _transcribe(pcm), lambda result: len(pcm)/32000)
+
+
+async def _transcribe(pcm):
     if speech_provider() == 'local':
         from .local_speech import transcribe as offline_transcribe
         return await offline_transcribe(pcm)
@@ -68,7 +75,7 @@ async def transcribe(pcm):
         wav.setframerate(16000)
         wav.writeframes(pcm)
     parts = await generate(
-        os.environ.get("AI_CALLING_STT_MODEL", "gemini-3.1-flash-lite"),
+        voice_config.current().asr_model,
         {
             "systemInstruction": {
                 "parts": [
@@ -98,7 +105,7 @@ async def transcribe(pcm):
 
 async def gemini_speak(text):
     parts = await generate(
-        os.environ.get("AI_CALLING_TTS_MODEL", "gemini-2.5-flash-preview-tts"),
+        voice_config.current().tts_model,
         {
             "contents": [
                 {
@@ -113,7 +120,7 @@ async def gemini_speak(text):
             ],
             "generationConfig": {
                 "responseModalities": ["AUDIO"],
-                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "Kore"}}},
+                "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice_config.current().voice}}},
             },
         },
     )
@@ -131,21 +138,37 @@ async def gemini_speak(text):
     return pcm, int(rate.group(1)) if rate else 24000
 
 
+def spoken_clock(text):
+    """Expand unambiguous English clock hours so local synthesis pronounces digits clearly."""
+    words = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve']
+    def replace(match):
+        hour = int(match.group(1))
+        period = match.group(2).upper()
+        if hour == 12:
+            return 'noon' if period == 'PM' else 'midnight'
+        suffix = 'in the morning' if period == 'AM' else ('in the afternoon' if hour < 5 else 'in the evening')
+        return words[hour] + " o'clock " + suffix
+    text = re.sub(r'(?<![\d:])\b(1[0-2]|[1-9])\s+(AM|PM)\b', replace, text, flags=re.IGNORECASE)
+    return re.sub(r'\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) in the (morning|afternoon|evening)\b', r"\1 o'clock in the \2", text, flags=re.IGNORECASE)
+
+
 async def local_speak(text):
     """Optional CPU speech fallback. Text goes to stdin, never a shell or process arguments."""
-    voice = "hi" if re.search(r"[\u0900-\u097f]", text) else "en-in"
+    voice = "hi" if re.search(r"[\u0900-\u097f]", text) else "en-us"
     process = await asyncio.create_subprocess_exec(
         os.environ.get('AI_LOCAL_TTS_BINARY', 'espeak-ng'),
         "--stdout",
         "-v",
         voice,
+        "-s",
+        "130",
         "--stdin",
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.DEVNULL,
     )
     try:
-        raw, _ = await asyncio.wait_for(process.communicate(text[:1200].encode()), timeout=5)
+        raw, _ = await asyncio.wait_for(process.communicate(spoken_clock(text[:1200]).encode()), timeout=5)
     except BaseException:
         if process.returncode is None:
             process.kill()
@@ -160,14 +183,39 @@ async def local_speak(text):
 
 
 async def speak(text):
-    if speech_provider() == 'local':
+    return await voice_usage.measured('tts', len(text),
+        lambda: _speak(text), lambda result: len(text))
+
+
+async def _speak(text):
+    if speech_provider('tts') == 'local':
         return await local_speak(text)
-    if speech_provider() == 'sarvam':
+    if speech_provider('tts') == 'sarvam':
         from .sarvam_speech import speak as sarvam_speak
         return await sarvam_speak(text)
     try:
         return await gemini_speak(text)
     except httpx.HTTPStatusError as exc:
-        if exc.response.status_code not in {429, 503} or os.environ.get("AI_VOICE_LOCAL_TTS_FALLBACK") != "1":
+        if voice_usage.active.get() is not None or exc.response.status_code not in {429, 503} or os.environ.get("AI_VOICE_LOCAL_TTS_FALLBACK") != "1":
             raise
         return await local_speak(text)
+
+
+async def speech_chunks(text):
+    """Bounded sentence synthesis, yielding audio before subsequent sentences finish.
+
+    Adapters currently synthesize one sentence at a time; this does not advertise
+    token streaming or partial ASR support that a provider does not implement.
+    """
+    pending = ''
+    parts = re.split(r'(?<=[.!?।])\s+', text[:1200])
+    chunks = []
+    for part in parts:
+        if pending and len(pending) + len(part) > 300:
+            chunks.append(pending)
+            pending = ''
+        pending = (pending + ' ' + part).strip()
+    if pending:
+        chunks.append(pending)
+    for chunk in chunks[:5]:
+        yield await speak(chunk)

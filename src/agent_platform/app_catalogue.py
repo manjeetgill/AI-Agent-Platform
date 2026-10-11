@@ -86,6 +86,8 @@ async def main():
     from .decision_tool import default_registry
     from .research_tool import install_research_tool
     async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False, kwargs={'row_factory': dict_row}) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         registry = default_registry()
         install_research_tool(registry, pool)
         from .knowledge import KnowledgeAnswer

@@ -1,3 +1,5 @@
+from worker_pool import WorkerPool
+
 """Two unrelated apps share an engine without sharing users, catalogues or tool authority."""
 import asyncio
 from types import SimpleNamespace
@@ -116,7 +118,7 @@ def test_business_package_runs_without_engine_changes(monkeypatch):
             run = client.post('/v1/task-agents/'+agent['id']+'/runs', headers=headers,
                               json={'idempotency_key': 'shipping-run'})
             assert run.status_code == 202, run.text
-            client.portal.call(tick, TaskStore(client.app.state.repository.pool), registry)
+            client.portal.call(tick, TaskStore(WorkerPool()), registry)
             task = client.get('/v1/tasks/'+run.json()['id'], headers=headers).json()
             assert task['status'] == 'DONE'
             assert task['steps'][0]['result']['total_minor_units'] == 375

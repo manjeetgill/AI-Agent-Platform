@@ -1,0 +1,81 @@
+{
+  "status": "BLOCKED",
+  "checks": [
+    {
+      "check": "migration_manifest",
+      "status": "PASS",
+      "detail": "Database must exactly match this release"
+    },
+    {
+      "check": "runtime_database_role",
+      "status": "PASS",
+      "detail": "Runtime must not be a database superuser, role creator, RLS bypass role or table owner"
+    },
+    {
+      "check": "drain_before_release",
+      "status": "PASS",
+      "detail": "Do not restart a media process during active calls"
+    },
+    {
+      "check": "audio_configuration",
+      "status": "PASS",
+      "detail": "Selected model and speech assets must be available; no paid request made"
+    },
+    {
+      "check": "turn_configuration",
+      "status": "BLOCKED",
+      "detail": "TURN must be configured and then verified by an actual relay-only call"
+    },
+    {
+      "check": "local_api",
+      "status": "PASS",
+      "detail": "Isolated voice API readiness"
+    },
+    {
+      "check": "public_voice_page",
+      "status": "PASS",
+      "detail": "HTTP 200; expected [200]"
+    },
+    {
+      "check": "unauthenticated_agent_api",
+      "status": "BLOCKED",
+      "detail": "HTTP 404; expected [401, 403]"
+    },
+    {
+      "check": "unauthenticated_session_api",
+      "status": "BLOCKED",
+      "detail": "HTTP 404; expected [401, 403]"
+    },
+    {
+      "check": "unauthenticated_usage_api",
+      "status": "BLOCKED",
+      "detail": "HTTP 404; expected [401, 403]"
+    },
+    {
+      "check": "private_workspace_hidden",
+      "status": "PASS",
+      "detail": "HTTP 404; expected [404]"
+    },
+    {
+      "check": "human_microphone_acceptance",
+      "status": "BLOCKED",
+      "detail": "Separate acceptance evidence required; this script cannot certify it"
+    },
+    {
+      "check": "carrier_live_call",
+      "status": "BLOCKED",
+      "detail": "Separate acceptance evidence required; this script cannot certify it"
+    },
+    {
+      "check": "relay_only_media",
+      "status": "BLOCKED",
+      "detail": "Separate acceptance evidence required; this script cannot certify it"
+    },
+    {
+      "check": "production_load_and_soak",
+      "status": "BLOCKED",
+      "detail": "Separate acceptance evidence required; this script cannot certify it"
+    }
+  ],
+  "read_only": true
+}

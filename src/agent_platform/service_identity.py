@@ -53,6 +53,20 @@ async def authenticate(pool, authorization, external_user, scope):
             raise ValueError()
     except (ValueError, AttributeError):
         raise invalid from None
+    from .db_scope import APIPool, identity
+    if isinstance(pool, APIPool):
+        if not external_user or len(external_user) > 200 or any(ord(c) < 32 for c in external_user):
+            raise HTTPException(422, 'X-External-User-ID is required (1–200 characters)')
+        async with pool.connection() as conn:
+            row = await (await conn.execute('SELECT agent_authenticate_service(%s,%s,%s) AS claims',
+                (key_id, hashlib.sha256(secret.encode()).hexdigest(), external_user))).fetchone()
+        claims = row['claims'] if row else None
+        if not claims:
+            raise invalid
+        if scope is not None and scope not in claims['scopes']:
+            raise HTTPException(403, 'Service credential lacks the required scope')
+        identity.set(claims)
+        return claims
     async with pool.connection() as conn, conn.transaction():
         row = await (await conn.execute('''SELECT k.*,a.tenant_id FROM platform_service_keys k
             JOIN platform_apps a ON a.id=k.app_id WHERE k.id=%s AND k.revoked_at IS NULL
@@ -63,10 +77,15 @@ async def authenticate(pool, authorization, external_user, scope):
             raise HTTPException(403, 'Service credential lacks the required scope')
         if not external_user or len(external_user) > 200 or any(ord(c) < 32 for c in external_user):
             raise HTTPException(422, 'X-External-User-ID is required (1–200 characters)')
-        await conn.execute('''INSERT INTO platform_external_users(app_id,external_id,owner_id)
-            VALUES(%s,%s,%s) ON CONFLICT DO NOTHING''', (row['app_id'], external_user, uuid4()))
         owner = await (await conn.execute('''SELECT owner_id FROM platform_external_users
             WHERE app_id=%s AND external_id=%s''', (row['app_id'], external_user))).fetchone()
+        if owner is None:
+            # Existing identities are read-only. A concurrent first request may win
+            # the insert; a new SELECT observes that winner under READ COMMITTED.
+            await conn.execute('''INSERT INTO platform_external_users(app_id,external_id,owner_id)
+                VALUES(%s,%s,%s) ON CONFLICT DO NOTHING''', (row['app_id'], external_user, uuid4()))
+            owner = await (await conn.execute('''SELECT owner_id FROM platform_external_users
+                WHERE app_id=%s AND external_id=%s''', (row['app_id'], external_user))).fetchone()
         return {'tenant': row['tenant_id'], 'user': str(owner['owner_id']),
                 'principal': 'service:' + str(key_id), 'app_id': str(row['app_id']),
                 'scopes': row['scopes']}
@@ -90,6 +109,8 @@ async def main():
     args = parser.parse_args()
     async with AsyncConnectionPool(os.environ['AI_PLATFORM_DATABASE_URL'], open=False,
                                    kwargs={'row_factory': dict_row}) as pool:
+        from .db_scope import assert_runtime_role
+        await assert_runtime_role(pool,'worker')
         if args.command in {'grant-tool', 'revoke-tool'}:
             async with pool.connection() as conn:
                 if args.command == 'grant-tool':

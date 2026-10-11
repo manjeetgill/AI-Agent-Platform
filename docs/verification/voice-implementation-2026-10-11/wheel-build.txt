@@ -1,0 +1,13 @@
+Processing ./.
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Getting requirements to build wheel: started
+  Getting requirements to build wheel: finished with status 'done'
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: ai-agent-platform
+  Building wheel for ai-agent-platform (pyproject.toml): started
+  Building wheel for ai-agent-platform (pyproject.toml): finished with status 'done'
+  Created wheel for ai-agent-platform: filename=ai_agent_platform-0.1.0-py3-none-any.whl size=433530 sha256=ea8f6b41a374c0b4f85b2b37d5630b73d63ad4415fbf06d791ee4532fe2cd9e4
+  Stored in directory: /private/var/folders/c_/jv8spc0d319dsv6_rcjj56g80000gn/T/pip-ephem-wheel-cache-zi0acz9a/wheels/8e/42/5b/92ec00bed24d0fcde108028d4f732a9f8733ef55478441b7ea
+Successfully built ai-agent-platform

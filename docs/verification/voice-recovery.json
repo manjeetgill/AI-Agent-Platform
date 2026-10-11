@@ -1,0 +1,14 @@
+{
+  "status": "PASS",
+  "scope": "isolated synthetic voice database",
+  "tables": {
+    "web_voice_agents": 10,
+    "web_voice_versions": 10,
+    "web_voice_sessions": 10,
+    "web_voice_events": 91
+  },
+  "ownership_mismatches": 0,
+  "backup_deleted": true,
+  "external_secret_recovery_tested": false,
+  "media_resumption": false
+}
