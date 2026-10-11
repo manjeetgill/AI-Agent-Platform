@@ -18,6 +18,21 @@ from .tasks import Strict
 from .whatsapp import audit
 
 
+async def verified_sender(config, phone_id):
+    if config.get('provider') == 'chakra':
+        from .chakra_client import ChakraError, phone_details
+        if config.get('phone_id') != phone_id:
+            raise HTTPException(502, 'Connection phone does not match the channel')
+        try:
+            return await phone_details(config)
+        except ChakraError:
+            raise HTTPException(503, 'WhatsApp number verification unavailable. Check the provider connection.') from None
+    sender = await graph(config, phone_id)
+    if str(sender.get('id', '')) != phone_id:
+        raise HTTPException(502, 'Provider response did not identify the requested number; connection is unverified.')
+    return sender
+
+
 class Draft(Strict):
     recipient: str = Field(pattern=r'^\+?[1-9]\d{7,14}$')
     template_id: str = Field(pattern=r'^\d{5,30}$')
@@ -128,14 +143,7 @@ def install_outbound(app):
     async def setup(channel_id: UUID, request: Request):
         pool, _, channel = await context(request, channel_id)
         config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
-        if config.get('provider') == 'chakra':
-            from .chakra_client import ChakraError, phone_details
-            try:
-                sender = await phone_details(config)
-            except ChakraError:
-                raise HTTPException(503, 'WhatsApp number verification unavailable. Check the provider connection.') from None
-        else:
-            sender = await graph(config, channel['phone_id'])
+        sender = await verified_sender(config, channel['phone_id'])
         options = await template_options(config)
         approved = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'APPROVED']
         pending = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'PENDING']
@@ -147,9 +155,7 @@ def install_outbound(app):
     async def check_connection(channel_id: UUID, request: Request):
         pool, claims, channel = await context(request, channel_id)
         config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
-        sender = await graph(config, channel['phone_id'])
-        if str(sender.get('id', '')) != channel['phone_id']:
-            raise HTTPException(502, 'Provider response did not identify the requested number; connection is unverified.')
+        await verified_sender(config, channel['phone_id'])
         async with pool.connection() as conn:
             await audit(conn, channel_id, None, 'sender_credentials_checked', claims['principal'])
         return {'credentials_checked': True, 'checked_at': datetime.now(UTC),

@@ -37,6 +37,11 @@ async def reserve(stage, maximum):
     config = voice_config.current()
     provider = getattr(config, stage)
     model = config.model if stage == 'reasoning' else getattr(config, stage + '_model')
+    if provider == 'sarvam' and stage in {'asr', 'tts'}:
+        # The Sarvam adapter pins its transport models; generic Gemini defaults
+        # must never select a different rate card or label the resulting usage.
+        from .sarvam_speech import MODELS
+        model = MODELS[stage]
     if provider == "local" and stage != "reasoning":
         model = Path(os.environ.get("AI_LOCAL_STT_MODEL", "unconfigured")).name if stage == "asr" else "espeak-ng"
     ident = uuid4()

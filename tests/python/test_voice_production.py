@@ -63,6 +63,29 @@ def test_paid_usage_reservation_unknown_hold_and_isolation(monkeypatch):
         operator_sql("DELETE FROM voice_rate_cards WHERE model='billing-fixture'")
 
 
+def test_sarvam_reservations_use_transport_models_not_generic_defaults(monkeypatch):
+    monkeypatch.setattr(web_voice, 'ready', lambda: True)
+    monkeypatch.setattr(web_voice.calling_media, 'Session', Media)
+    with environment(monkeypatch) as (client, headers, key, _):
+        agent, _ = create(client, headers, key)
+        session = client.post('/v1/voice/agents/'+agent['id']+'/sessions', headers=headers,
+            json={'sdp':'v=0\r\n'+'fixture '*5,'request_key':uuid4().hex,'audio_consent':True}).json()['id']
+        operator_sql("INSERT INTO voice_spend_limits(app_id,currency,daily,monthly) VALUES(%s,'INR',2,5)", (key['app_id'],))
+        for stage, model in [('asr', 'saaras:v3'), ('tts', 'bulbul:v3')]:
+            operator_sql("INSERT INTO voice_rate_cards(provider,model,stage,currency,per_unit,reference,expires_at) VALUES('sarvam',%s,%s,'INR',.01,'fixture',now()+interval '1 day') ON CONFLICT(provider,model,stage) DO UPDATE SET expires_at=excluded.expires_at", (model, stage))
+        async def verify():
+            from agent_platform.db_scope import BoundPool
+            from agent_platform.service_identity import authenticate
+            base = client.app.state.repository.pool
+            claims = await authenticate(base, headers['Authorization'], headers['X-External-User-ID'], None)
+            with voice_config.using({'asr':'sarvam','tts':'sarvam'}), voice_usage.using(BoundPool(base, claims), session):
+                for stage in ['asr', 'tts']:
+                    await voice_usage.settle(await voice_usage.reserve(stage, 1), 1)
+        client.portal.call(verify)
+        rows = sql('SELECT provider,model FROM voice_usage_ledger WHERE session_id=%s ORDER BY created_at', (session,))
+        assert [(r['provider'], r['model']) for r in rows] == [('sarvam', 'saaras:v3'), ('sarvam', 'bulbul:v3')]
+
+
 class Stream(httpx.AsyncByteStream):
     def __init__(self, lines):
         self.lines=lines

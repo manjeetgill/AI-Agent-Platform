@@ -3,6 +3,22 @@ import asyncio
 from agent_platform import chakra_client, whatsapp_outbound
 
 
+def test_connection_check_uses_bound_chakra_sender(monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+    async def forbidden(*args, **kwargs):
+        raise AssertionError('Chakra credential must not go to Meta')
+    async def details(config):
+        return {'display_phone_number': '+19999999999', 'verified_name': 'Fixture'}
+    monkeypatch.setattr(whatsapp_outbound, 'graph', forbidden)
+    monkeypatch.setattr(chakra_client, 'phone_details', details)
+    config = {'provider': 'chakra', 'phone_id': '12345678'}
+    assert asyncio.run(whatsapp_outbound.verified_sender(config, '12345678'))['verified_name'] == 'Fixture'
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(whatsapp_outbound.verified_sender(config, '87654321'))
+    assert error.value.status_code == 502
+
+
 def test_only_approved_static_templates_are_offered_for_review(monkeypatch):
     async def catalogue(config):
         assert config['provider'] == 'chakra'

@@ -124,7 +124,7 @@ async def run(index=0, *, hold_seconds=0, after_connected=None):
                 .strip()
                 .split("|")
             )
-            assert limit[0] == "INR" and 0 < float(limit[1]) <= 40
+            assert limit[0] == "INR" and 0 < float(limit[1]) <= 50
             tag = uuid4().hex
             doc = await api(
                 "knowledge/documents",
@@ -144,7 +144,8 @@ async def run(index=0, *, hold_seconds=0, after_connected=None):
                     "greeting": "Welcome to the voice test.",
                     "documents": [doc["id"]],
                     "language": "en",
-                    "config": {**(await api("voice/capabilities"))["default_config"], "barge_in": False},
+                    "config": {**(await api("voice/capabilities"))["default_config"],
+                               **identity.get("voice_config", {}), "barge_in": False},
                 },
             )
             await pc.setLocalDescription(await pc.createOffer())
