@@ -1,10 +1,1 @@
-{
-  "app": "Reach CRM Demo Organization",
-  "platform_api_http": 200,
-  "channel_count": 0,
-  "local_api_running": false,
-  "current_database_available": false,
-  "saved_backup_available": true,
-  "backup_restore_approval_pending": true,
-  "voice_end_to_end_verified": false
-}
+{"status": "PASS", "checks": {"faq_hours": true, "event_echo": true, "replay": true, "changed_replay": true, "cross_app": true, "root_private": true}, "event_id": "3bff094a-5b8f-4c7a-94b4-5b7c6c7d37b2", "source": "Reach CRM saved Demo Organization FAQ, isolated backup copy", "transport": "deployed platform signed callback through temporary HTTPS", "phone_call": false, "known_gap": "Opening hours phrasing does not match the app lexical retriever; open office phrasing works"}

@@ -1,21 +1,8 @@
 {
-  "currency": "INR",
-  "approved_total_cap": 100,
-  "limits_sum": 100,
-  "test_credentials_revoked": true,
-  "synthetic_agents_paused": true,
-  "actual_provider_invoice_supplied": false,
-  "usage": [
-    {
-      "app": "Public audio pilot 2",
-      "budget_amount": 28.14,
-      "uncertain": 3
-    },
-    {
-      "app": "Public audio pilot 1",
-      "budget_amount": 11.352,
-      "uncertain": 1
-    }
-  ],
-  "note": "Conservative estimates plus retained uncertain holds, not actual billed charges."
+  "approved_cap_inr": 100,
+  "estimated_inr": "29.0994",
+  "uncertain_holds_inr": "25.128",
+  "budget_consumed_inr": "54.2274",
+  "actual_provider_invoice_reconciled": false,
+  "synthetic_test_credentials_revoked": true
 }

@@ -1,7 +1,84 @@
 {
-  "status": "FAIL",
-  "session_id": "90880841-86be-446d-9298-a6d742071392",
-  "error_type": "RuntimeError",
-  "reason": "Public voice turn failed; inspect session events",
-  "no_automatic_retry": true
+  "status": "PASS",
+  "session_id": "55290318-77b5-47c6-b164-c225d4cccf97",
+  "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
+  "agent_id": "9b05d963-7781-46ee-99e3-22eabc8fbf0f",
+  "synthetic_audio": true,
+  "human_microphone_tested": false,
+  "public_https": true,
+  "relay_only_client": true,
+  "cross_app_read_denied": true,
+  "reply": "The clinic is open from 9:00 AM to 5:00 PM, Monday through Friday.",
+  "received_speech": "The clinic is open from 9am to 5pm, Monday through Friday.",
+  "duration_seconds": 85.25,
+  "usage": {
+    "daily_sessions": 7,
+    "monthly_sessions": 7,
+    "active_sessions": 0,
+    "duration_seconds": 424.848783,
+    "accounting": {
+      "period": "UTC calendar month",
+      "stages": [
+        {
+          "currency": "INR",
+          "stage": "asr",
+          "unit": "audio_seconds",
+          "attempts": 7,
+          "measured_units": 17.52,
+          "uncertain_attempts": 1,
+          "estimated_amount": 1.0512,
+          "held_amount": 0.292,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 1.3432
+        },
+        {
+          "currency": "INR",
+          "stage": "reasoning",
+          "unit": "tokens",
+          "attempts": 6,
+          "measured_units": 3898.0,
+          "uncertain_attempts": 0,
+          "estimated_amount": 3.898,
+          "held_amount": 0,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 3.898
+        },
+        {
+          "currency": "INR",
+          "stage": "tts",
+          "unit": "characters",
+          "attempts": 13,
+          "measured_units": 736.0,
+          "uncertain_attempts": 1,
+          "estimated_amount": 13.152,
+          "held_amount": 1.98,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 15.132
+        }
+      ],
+      "invoice": false,
+      "scope": "API estimates plus reviewed provider charges; excludes hosting, electricity, carrier and taxes. Unreconciled unknown attempts retain holds."
+    },
+    "daily_session_limit": 30,
+    "monthly_session_limit": 300,
+    "session_seconds_limit": 120,
+    "installation_concurrency_limit": 2,
+    "estimated_cost": null,
+    "cost_status": "unknown",
+    "quota_basis": "Session attempts reserve allowance, including failures; money is not estimated from duration."
+  },
+  "verified_voice_configuration": {
+    "asr": "sarvam",
+    "asr_model": "saaras:v3",
+    "reasoning": "gemini",
+    "model": "gemini-3.1-flash-lite",
+    "tts": "sarvam",
+    "tts_model": "bulbul:v3"
+  }
 }

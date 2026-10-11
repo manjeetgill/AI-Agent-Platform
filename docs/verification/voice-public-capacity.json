@@ -1,21 +1,69 @@
 {
-  "status": "FAIL",
+  "status": "PASS",
   "concurrent_sessions": 2,
-  "waves_completed": 1,
+  "waves_completed": 2,
   "waves_requested": 2,
-  "duration_seconds": 60.35,
+  "duration_seconds": 174.58,
   "overload_rejected": true,
   "synthetic_audio": true,
   "human_microphone_verified": false,
   "scale_limit": "Only the configured two-call pilot tested; no higher capacity claim.",
   "runs": [
     {
-      "status": "FAIL",
-      "error_type": "RuntimeError"
+      "status": "PASS",
+      "session_id": "e224e937-c620-431f-970c-b16745d01740",
+      "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
+      "agent_id": "1a31ac64-a7f2-48a1-9147-27718c49237f",
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "public_https": true,
+      "relay_only_client": true,
+      "cross_app_read_denied": true,
+      "duration_seconds": 85.28
     },
     {
-      "status": "FAIL",
-      "error_type": "RuntimeError"
+      "status": "PASS",
+      "session_id": "fbe2aa65-f627-4fe8-bd2d-2c2dd3c8e111",
+      "app_id": "867ba7e9-950e-45a3-9a7a-04ed76434a5d",
+      "agent_id": "e0030e44-9623-45d6-8e28-9d6b14c9e242",
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "public_https": true,
+      "relay_only_client": true,
+      "cross_app_read_denied": true,
+      "duration_seconds": 85.29
+    },
+    {
+      "status": "PASS",
+      "session_id": "55290318-77b5-47c6-b164-c225d4cccf97",
+      "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
+      "agent_id": "9b05d963-7781-46ee-99e3-22eabc8fbf0f",
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "public_https": true,
+      "relay_only_client": true,
+      "cross_app_read_denied": true,
+      "duration_seconds": 85.25
+    },
+    {
+      "status": "PASS",
+      "session_id": "2ec10209-1188-4665-976c-98936e17df24",
+      "app_id": "867ba7e9-950e-45a3-9a7a-04ed76434a5d",
+      "agent_id": "2aaea249-2835-4dd4-b770-a4b777c848eb",
+      "synthetic_audio": true,
+      "human_microphone_tested": false,
+      "public_https": true,
+      "relay_only_client": true,
+      "cross_app_read_denied": true,
+      "duration_seconds": 85.26
     }
-  ]
+  ],
+  "verified_voice_configuration": {
+    "asr": "sarvam",
+    "asr_model": "saaras:v3",
+    "reasoning": "gemini",
+    "model": "gemini-3.1-flash-lite",
+    "tts": "sarvam",
+    "tts_model": "bulbul:v3"
+  }
 }
