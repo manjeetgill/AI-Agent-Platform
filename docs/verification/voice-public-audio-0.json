@@ -1,8 +1,8 @@
 {
   "status": "PASS",
-  "session_id": "55290318-77b5-47c6-b164-c225d4cccf97",
+  "session_id": "f05d0b3c-97b5-45af-a6b3-583fd14c347d",
   "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
-  "agent_id": "9b05d963-7781-46ee-99e3-22eabc8fbf0f",
+  "agent_id": "260cfb5f-853f-4dca-8cc2-4c3277316abc",
   "synthetic_audio": true,
   "human_microphone_tested": false,
   "public_https": true,
@@ -10,12 +10,13 @@
   "cross_app_read_denied": true,
   "reply": "The clinic is open from 9:00 AM to 5:00 PM, Monday through Friday.",
   "received_speech": "The clinic is open from 9am to 5pm, Monday through Friday.",
-  "duration_seconds": 85.25,
+  "duration_seconds": 105.25,
+  "first_reply_audio_ms": 7491,
   "usage": {
-    "daily_sessions": 7,
-    "monthly_sessions": 7,
+    "daily_sessions": 9,
+    "monthly_sessions": 9,
     "active_sessions": 0,
-    "duration_seconds": 424.848783,
+    "duration_seconds": 630.956626,
     "accounting": {
       "period": "UTC calendar month",
       "stages": [
@@ -23,43 +24,43 @@
           "currency": "INR",
           "stage": "asr",
           "unit": "audio_seconds",
-          "attempts": 7,
-          "measured_units": 17.52,
+          "attempts": 9,
+          "measured_units": 23.36,
           "uncertain_attempts": 1,
-          "estimated_amount": 1.0512,
+          "estimated_amount": 1.168,
           "held_amount": 0.292,
           "reconciled_attempts": 0,
           "reconciled_amount": 0,
           "reconciliation_delta": 0,
-          "budget_amount": 1.3432
+          "budget_amount": 1.46
         },
         {
           "currency": "INR",
           "stage": "reasoning",
           "unit": "tokens",
-          "attempts": 6,
-          "measured_units": 3898.0,
+          "attempts": 8,
+          "measured_units": 5204.0,
           "uncertain_attempts": 0,
-          "estimated_amount": 3.898,
+          "estimated_amount": 5.204,
           "held_amount": 0,
           "reconciled_attempts": 0,
           "reconciled_amount": 0,
           "reconciliation_delta": 0,
-          "budget_amount": 3.898
+          "budget_amount": 5.204
         },
         {
           "currency": "INR",
           "stage": "tts",
           "unit": "characters",
-          "attempts": 13,
-          "measured_units": 736.0,
+          "attempts": 17,
+          "measured_units": 984.0,
           "uncertain_attempts": 1,
-          "estimated_amount": 13.152,
+          "estimated_amount": 14.64,
           "held_amount": 1.98,
           "reconciled_attempts": 0,
           "reconciled_amount": 0,
           "reconciliation_delta": 0,
-          "budget_amount": 15.132
+          "budget_amount": 16.62
         }
       ],
       "invoice": false,
@@ -72,13 +73,5 @@
     "estimated_cost": null,
     "cost_status": "unknown",
     "quota_basis": "Session attempts reserve allowance, including failures; money is not estimated from duration."
-  },
-  "verified_voice_configuration": {
-    "asr": "sarvam",
-    "asr_model": "saaras:v3",
-    "reasoning": "gemini",
-    "model": "gemini-3.1-flash-lite",
-    "tts": "sarvam",
-    "tts_model": "bulbul:v3"
   }
 }

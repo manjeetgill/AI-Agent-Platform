@@ -1,6 +1,7 @@
 """Provider-neutral structured model gateway with NVIDIA as the first adapter."""
 import asyncio
 import json
+import logging
 import os
 from typing import ClassVar, Protocol
 
@@ -242,12 +243,16 @@ class Gateway:
                         'For UNSUPPORTED_NUMBER, remove ALL digits from every prose field, including dates, versions, sample counts and indicator names. '
                         'Use qualitative wording without spelled-out numbers either (including one, two, five, twenty, thirty, half, twice). Omit numeric rule definitions and thresholds from prose. Put numerical facts only in numeric_claims, copying exact original label, numeric value and unit; or leave that list empty.'})
                 except httpx.TimeoutException as exc:
+                    logging.getLogger(__name__).warning('model_request_failed category=timeout')
                     raise RunFailure('MODEL_TIMEOUT') from exc
                 except httpx.HTTPStatusError as exc:
                     status = exc.response.status_code
-                    code = 'PROVIDER_BACKPRESSURE' if status == 429 else 'PROVIDER_AUTH' if status in {401, 403} else 'MODEL_UNAVAILABLE'
+                    # Never log upstream bodies, URLs, headers, or exception text.
+                    logging.getLogger(__name__).warning('model_request_failed category=http status=%d', status)
+                    code = 'PROVIDER_BACKPRESSURE' if status in {429, 503} else 'PROVIDER_AUTH' if status in {401, 403} else 'MODEL_UNAVAILABLE'
                     raise RunFailure(code) from exc
                 except httpx.HTTPError as exc:
+                    logging.getLogger(__name__).warning('model_request_failed category=transport')
                     raise RunFailure('MODEL_UNAVAILABLE') from exc
         finally:
             if self.client is None:

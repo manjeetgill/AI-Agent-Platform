@@ -1,8 +1,10 @@
 {
-  "approved_cap_inr": 100,
-  "estimated_inr": "29.0994",
-  "uncertain_holds_inr": "25.128",
-  "budget_consumed_inr": "54.2274",
+  "approved_cap_inr": "100.0000000000",
+  "estimated_inr": "33.8730000000",
+  "uncertain_holds_inr": "30.5200000000",
+  "budget_consumed_inr": "64.3930000000",
   "actual_provider_invoice_reconciled": false,
-  "synthetic_test_credentials_revoked": true
+  "synthetic_test_credentials_revoked": true,
+  "active_synthetic_sessions": 0,
+  "enabled_synthetic_agents": 0
 }
