@@ -122,6 +122,22 @@ def main():
         for filename in files:
             compose += ['-f', filename]
         config = json.loads(capture(compose+['config', '--format', 'json']))
+        # Individual integrations can have been released from smaller overlays.
+        # Recover absent services from their own actual Compose definitions.
+        for name, container in live.items():
+            if name in config['services']:
+                continue
+            source = ['docker','compose','--profile','*','-p','agent-platform']
+            for filename in container['Config']['Labels']['com.docker.compose.project.config_files'].split(','):
+                source += ['-f', filename]
+            other = json.loads(capture(source+['config','--format','json']))
+            config['services'][name] = other['services'][name]
+            for section in ('networks','volumes','secrets','configs'):
+                for ident, definition in other.get(section,{}).items():
+                    existing = config.setdefault(section,{}).get(ident)
+                    if existing is not None and existing != definition:
+                        raise RuntimeError('Conflicting Compose resource definition: '+section+'/'+ident)
+                    config[section][ident] = definition
         stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
         backup = Path('/opt/agent-platform/secrets')/('release-'+stamp)
         backup.mkdir(mode=0o700)
