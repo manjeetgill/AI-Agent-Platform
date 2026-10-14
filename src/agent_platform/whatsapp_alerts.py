@@ -1,7 +1,7 @@
 """App-scoped event delivery through an owned or operator-approved WhatsApp sender.
 
-Only recipients who opted in and recently messaged that sender can receive pilot
-session text. A future approved-template path is required outside that window.
+Only recipients who verified their number, opted in, and recently messaged
+that sender can receive session text. A future approved-template path is required outside that window.
 """
 import asyncio
 import base64
@@ -154,8 +154,6 @@ def install_alerts(app):
                 (claims['app_id'],))).fetchone()
         if not route:
             raise HTTPException(503, 'Alert sender is not configured for this app')
-        if route['allowed_external_user'] and route['allowed_external_user'] != request.headers.get('X-External-User-ID'):
-            raise HTTPException(403, 'WhatsApp alert pilot is not enabled for this user')
         return pool, claims, route
 
     async def manage_context(request, scope):
@@ -198,8 +196,7 @@ def install_alerts(app):
                 (app_id,channel_id,sender_number,enabled,daily_limit,require_recipient_verification)
                 VALUES(%s,%s,%s,true,%s,true) ON CONFLICT(app_id) DO UPDATE SET
                 channel_id=EXCLUDED.channel_id,sender_number=EXCLUDED.sender_number,enabled=true,
-                daily_limit=EXCLUDED.daily_limit,require_recipient_verification=true,
-                allowed_external_user=NULL''',
+                daily_limit=EXCLUDED.daily_limit,require_recipient_verification=true''',
                 (claims['app_id'], channel['id'], channel['display_number'], body.daily_limit))
         return {'channel_id': channel['id'], 'sender_number': channel['display_number'],
                 'daily_limit': body.daily_limit, 'enabled': True, 'recipient_verification': True}

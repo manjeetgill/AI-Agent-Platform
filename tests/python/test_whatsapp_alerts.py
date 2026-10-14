@@ -117,6 +117,9 @@ def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
         path = '/v1/whatsapp/alerts'
         sql('''INSERT INTO whatsapp_alert_routes(app_id,channel_id,sender_number,enabled)
             VALUES(%s,%s,'+15556377356',true)''', (app_key['app_id'], channel['id']))
+        # A different signed-in app user reaches verification through the same sender.
+        assert client.post(path + '/verifications', headers=other,
+                           json={'recipient': '+' + recipient}).status_code == 201
         try:
             created = client.post(path + '/verifications', headers=headers, json={'recipient': '+' + recipient})
             assert created.status_code == 201, created.text
