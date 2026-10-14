@@ -1,7 +1,7 @@
 """Release platform code on the existing pilot, retaining live service configuration.
 
 Run from a root-owned staged git archive. Credentials and backups stay outside the
-build context. Only this Compose project's five application services are recreated.
+build context. Only this Compose project's application services are recreated.
 """
 import fcntl
 import json
@@ -141,6 +141,12 @@ def main():
                     if existing is not None and existing != definition:
                         raise RuntimeError('Conflicting Compose resource definition: '+section+'/'+ident)
                     config[section][ident] = definition
+        # Every runtime must share the new migration manifest, including an existing media service.
+        services = list(SERVICES)
+        existing_media = 'media' in config['services']
+        if existing_media:
+            services.append('media')
+            live['media'] = inspect('media')
         stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
         backup = Path('/opt/agent-platform/secrets')/('release-'+stamp)
         backup.mkdir(mode=0o700)
@@ -150,7 +156,7 @@ def main():
             service['image'] = container['Config']['Image']
             service['environment'] = dict(entry.split('=', 1) for entry in container['Config']['Env'])
             service.pop('build', None)
-        if media_release:
+        if media_release or existing_media:
             # This release is drained; never terminate an established voice call.
             capture(['docker','exec','agent-platform-worker-1','python','-c',
                      ('import os,psycopg; c=psycopg.connect(os.environ["AI_PLATFORM_DATABASE_URL"]); '
@@ -206,10 +212,12 @@ def main():
         # Migration driver checks the old manifest and applies pending changes in one transaction.
         capture(['docker','run','--rm','--network','agent-platform_default','--env-file',str(backup/'migration.env'),image,
                  'python','-m','agent_platform.migrate'])
-        for name in SERVICES:
+        for name in services:
             config['services'][name]['image'] = image
-            config['services'][name]['environment'] = process_env(config['services'][name]['environment'],roles['agent_api' if name=='api' else 'agent_worker'])
+            config['services'][name]['environment'] = process_env(config['services'][name]['environment'],roles['agent_api' if name in {'api', 'media'} else 'agent_worker'])
         config['services']['voice-worker']['image'] = voice_image
+        if existing_media:
+            config['services']['media']['image'] = voice_image
         for name in ['api','worker']:
             config['services'][name]['environment']['AI_AUTOMATIONS'] = '1'
         for key,value in env.items():
@@ -246,9 +254,9 @@ def main():
         capture(runner+['config','--quiet'])
         changed_proxy = False
         try:
-            capture(runner+['up','-d','--no-deps','--no-build','--pull','never',*SERVICES,*(['media'] if media_release else [])])
+            capture(runner+['up','-d','--no-deps','--no-build','--pull','never',*services,*(['media'] if media_release and not existing_media else [])])
             wait_ready()
-            if media_release:
+            if media_release or existing_media:
                 capture(['docker','exec','agent-platform-api-1','python','-c',
                          'import asyncio; from agent_platform.media_client import check_ready; asyncio.run(check_ready())'])
             current = proxy.read_text()
@@ -309,8 +317,7 @@ def main():
         except Exception:
             # Additive migrations stay in place; never restore data over live writes.
             capture(['docker','compose','-p','agent-platform','-f',str(backup/'rollback.compose.json'),
-                     'up','-d','--no-deps','--no-build','--pull','never',*SERVICES,
-                     *(['media'] if media_release and 'media' in config['services'] else [])])
+                     'up','-d','--no-deps','--no-build','--pull','never',*services])
             if changed_proxy:
                 proxy.write_text((backup/'Caddyfile').read_text())
                 capture(['docker','restart','myalgodesk-proxy-1'])
