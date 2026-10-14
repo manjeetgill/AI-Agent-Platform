@@ -52,7 +52,7 @@ active: ContextVar[VoiceConfig | None] = ContextVar('voice_configuration', defau
 class VoiceGeminiProvider(FallbackProvider):
     """Pin short voice turns to documented low-latency thinking settings."""
 
-    def request(self, model, policy, data):
+    def request(self, model: str, policy: str, data: dict[str, Any]) -> tuple[str, dict[str, Any], dict[str, Any]]:
         url, headers, payload = super().request(model, policy, data)
         if model.startswith(('gemini-3.1-flash-lite', 'gemini-3-flash')):
             payload['reasoning_effort'] = 'minimal'
