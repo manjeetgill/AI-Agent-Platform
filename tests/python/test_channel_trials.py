@@ -31,4 +31,6 @@ def test_trial_atomic_limits_expiry_and_no_uncertain_refunds(monkeypatch):
         assert {r['resource']:r['units'] for r in status.json()['usage_today']} == {'whatsapp_turns':2,'whatsapp_sends':1}
         sql("UPDATE channel_trial_policies SET expires_at=now()-interval '1 second' WHERE app_id=%s", (app,))
         assert not asyncio.run(once('voice_calls',uuid4()))
+        sql('UPDATE channel_trial_policies SET whatsapp_sends=NULL WHERE app_id=%s', (app,))
+        assert asyncio.run(once('whatsapp_sends',uuid4()))
         assert client.get('/v1/whatsapp/usage').status_code == 401

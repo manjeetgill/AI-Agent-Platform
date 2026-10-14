@@ -13,6 +13,8 @@ async def reserve(conn, app_id, resource, operation_id):
     )).fetchone()
     if not policy:
         return True  # Non-pilot: existing product quotas still apply.
+    if policy[resource] is None:
+        return True  # This resource has no application trial cap or trial expiry.
     if policy['expires_at'] <= datetime.now(UTC):
         return False
     prior = await (await conn.execute(

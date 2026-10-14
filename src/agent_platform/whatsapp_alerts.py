@@ -34,7 +34,7 @@ class VerificationRequest(Strict):
 
 class RouteConfiguration(Strict):
     channel_id: UUID
-    daily_limit: int = Field(default=20, ge=1, le=1000)
+    daily_limit: int | None = Field(default=20, ge=1, le=1000)
 
 
 class NotificationDelivery(Strict):
@@ -354,7 +354,7 @@ def install_alerts(app):
                 raise HTTPException(409, 'WhatsApp session expired; an approved alert template is required')
             count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
                 WHERE app_id=%s AND created_at>now()-interval '24 hours' ''', (claims['app_id'],))).fetchone()
-            if count['n'] >= route['daily_limit']:
+            if route['daily_limit'] is not None and count['n'] >= route['daily_limit']:
                 raise HTTPException(429, 'Daily WhatsApp alert limit reached')
             ident = uuid4()
             await conn.execute('''INSERT INTO whatsapp_alert_deliveries
@@ -388,7 +388,7 @@ def install_alerts(app):
             count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
                 WHERE app_id=%s AND created_at>now()-interval '24 hours' ''',
                 (claims['app_id'],))).fetchone()
-            if count['n'] >= route['daily_limit']:
+            if route['daily_limit'] is not None and count['n'] >= route['daily_limit']:
                 raise HTTPException(429, 'Daily WhatsApp notification limit reached')
             ident = uuid4()
             await conn.execute('''INSERT INTO whatsapp_alert_deliveries

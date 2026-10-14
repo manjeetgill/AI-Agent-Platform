@@ -10,7 +10,16 @@ from test_whatsapp import setup
 
 from agent_platform.service_identity import provision
 from agent_platform.whatsapp import ingest
-from agent_platform.whatsapp_alerts import NotificationDelivery, notification_message, tick_alerts
+from agent_platform.whatsapp_alerts import (
+    NotificationDelivery,
+    RouteConfiguration,
+    notification_message,
+    tick_alerts,
+)
+
+
+def test_route_configuration_can_disable_application_daily_limit():
+    assert RouteConfiguration(channel_id=uuid4(), daily_limit=None).daily_limit is None
 
 
 def test_generic_notification_is_bounded_and_provider_neutral():
@@ -218,6 +227,14 @@ def test_owned_sender_route_and_generic_notification(monkeypatch):
             created = client.post(path + '/notifications', headers=headers, json=payload)
             assert created.status_code == 202, created.text
             assert client.post(path + '/notifications', headers=headers, json=payload).json()['id'] == created.json()['id']
+            unlimited = client.put(path + '/route', headers=headers,
+                                   json={'channel_id': channel['id'], 'daily_limit': None})
+            assert unlimited.status_code == 200, unlimited.text
+            assert client.get(path + '/route', headers=headers).json()['daily_limit'] is None
+            for index in range(4):
+                extra = client.post(path + '/notifications', headers=headers,
+                                    json={**payload, 'request_key': f'booking-confirmed-extra-{index}'})
+                assert extra.status_code == 202, extra.text
             saved = sql('SELECT recipient,body,kind,category FROM whatsapp_alert_deliveries WHERE id=%s',
                         (created.json()['id'],))[0]
             assert saved['recipient'] == recipient
