@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "tests_passed": 9,
+  "app": "Reach CRM",
+  "synthetic_business_data": true,
+  "signed_http_from_platform_client": true,
+  "cross_organization_isolation": true,
+  "approved_faq_only": true,
+  "outbound_messages": 0,
+  "telephone_calls": 0,
+  "public_audio_end_to_end": false
+}

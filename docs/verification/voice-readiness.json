@@ -1,0 +1,21 @@
+{
+  "4160": {
+    "status": 200,
+    "body": {
+      "status": "ready",
+      "service": "agent-platform"
+    }
+  },
+  "4161": {
+    "status": 200,
+    "body": {
+      "status": "ready",
+      "service": "agent-platform"
+    }
+  },
+  "workspace_html": {
+    "status": 200,
+    "version_restore_present": true,
+    "browser_rendered": false
+  }
+}

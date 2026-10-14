@@ -1,0 +1,7 @@
+{
+  "status": "FAIL",
+  "session_id": "7ae75f6c-88c8-4d06-a1c2-9e91e5eea46e",
+  "error_type": "RuntimeError",
+  "reason": "Public voice turn failed; inspect session events",
+  "no_automatic_retry": true
+}

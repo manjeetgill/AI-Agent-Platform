@@ -6,6 +6,7 @@ build context. Only this Compose project's five application services are recreat
 import fcntl
 import json
 import os
+import secrets
 import subprocess
 import time
 import urllib.error
@@ -13,6 +14,26 @@ import urllib.request
 from pathlib import Path
 
 SERVICES = ['api', 'worker', 'whatsapp-worker', 'meta-worker', 'voice-worker']
+
+
+def voice_routes(current):
+    """Expose authenticated voice APIs, never the internal media control socket."""
+    block = '''    @voiceapps {
+        host agents.myalgodesk.in
+        path /v1/voice/agents /v1/voice/agents/* /v1/voice/sessions /v1/voice/sessions/* /v1/voice/usage /v1/voice/capabilities /v1/voice/health
+    }
+    handle @voiceapps {
+        reverse_proxy agent-platform-api-1:4060
+    }
+'''
+    if block in current:
+        return current
+    previous = block.replace(' /v1/voice/health', '')
+    if current.count(previous) == 1:
+        return current.replace(previous, block, 1)
+    if '@voiceapps' in current or current.count('    @businesspages {') != 1:
+        raise RuntimeError('Unexpected voice proxy layout')
+    return current.replace('    @businesspages {', block+'    @businesspages {', 1)
 
 
 def notification_connector_routes(current):
@@ -82,6 +103,7 @@ def main():
     if os.geteuid() != 0:
         raise SystemExit('Run as root on the existing pilot')
     stage = Path(__file__).resolve().parents[1]
+    media_release = os.environ.get('AGENT_DEPLOY_MEDIA') == '1'
     import sys
     sys.path.insert(0,str(stage/'scripts'))
     from runtime_env import process_env
@@ -103,6 +125,22 @@ def main():
         for filename in files:
             compose += ['-f', filename]
         config = json.loads(capture(compose+['config', '--format', 'json']))
+        # Individual integrations can have been released from smaller overlays.
+        # Recover absent services from their own actual Compose definitions.
+        for name, container in live.items():
+            if name in config['services']:
+                continue
+            source = ['docker','compose','--profile','*','-p','agent-platform']
+            for filename in container['Config']['Labels']['com.docker.compose.project.config_files'].split(','):
+                source += ['-f', filename]
+            other = json.loads(capture(source+['config','--format','json']))
+            config['services'][name] = other['services'][name]
+            for section in ('networks','volumes','secrets','configs'):
+                for ident, definition in other.get(section,{}).items():
+                    existing = config.setdefault(section,{}).get(ident)
+                    if existing is not None and existing != definition:
+                        raise RuntimeError('Conflicting Compose resource definition: '+section+'/'+ident)
+                    config[section][ident] = definition
         stamp = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
         backup = Path('/opt/agent-platform/secrets')/('release-'+stamp)
         backup.mkdir(mode=0o700)
@@ -112,6 +150,11 @@ def main():
             service['image'] = container['Config']['Image']
             service['environment'] = dict(entry.split('=', 1) for entry in container['Config']['Env'])
             service.pop('build', None)
+        if media_release:
+            # This release is drained; never terminate an established voice call.
+            capture(['docker','exec','agent-platform-worker-1','python','-c',
+                     ('import os,psycopg; c=psycopg.connect(os.environ["AI_PLATFORM_DATABASE_URL"]); '
+                     'assert c.execute("SELECT count(*) FROM web_voice_sessions WHERE state IN (\'STARTING\',\'ACTIVE\') AND expires_at>now()").fetchone()[0]==0, "Active calls must drain first"')])
         private(backup/'rollback.compose.json', json.dumps(config))
         dump = backup/'database.dump'
         with open(dump, 'wb', opener=lambda name, flags: os.open(name, flags, 0o600)) as stream:
@@ -129,6 +172,16 @@ def main():
             'COPY agent_platform/ /usr/local/lib/python3.14/site-packages/agent_platform/\n'
             'LABEL org.opencontainers.image.revision="'+revision+'"\n')
         subprocess.run(['docker','build','--network=none','-t',image,str(build)],check=True)
+        if media_release:
+            # Source-only releases cannot install the new cryptography/VAD dependencies.
+            package = build/'package'
+            package.mkdir()
+            shutil.copy(stage/'pyproject.toml', package/'pyproject.toml')
+            shutil.copytree(stage/'src', package/'src')
+            (build/'Dockerfile.dependencies').write_text('FROM '+image+'\nUSER root\n'
+                'COPY package/ /tmp/release-package/\n'
+                'RUN pip install --no-cache-dir /tmp/release-package && pip check && rm -rf /tmp/release-package\nUSER app\n')
+            subprocess.run(['docker','build','-f',str(build/'Dockerfile.dependencies'),'-t',image,str(build)],check=True)
         capture(['docker','run','--rm','--network=none',image,'python','-c',
                  'from agent_platform import app, automation, adaptive_runtime, calling_worker, whatsapp_worker; print("imports valid")'])
         # Voice has native media dependencies in a separate existing image.
@@ -137,6 +190,12 @@ def main():
             'COPY agent_platform/ /usr/local/lib/python3.14/site-packages/agent_platform/\n'
             'LABEL org.opencontainers.image.revision="'+revision+'"\n')
         subprocess.run(['docker','build','--network=none','-f',str(build/'Dockerfile.voice'),'-t',voice_image,str(build)],check=True)
+        if media_release:
+            (build/'Dockerfile.voice-dependencies').write_text('FROM '+voice_image+'\nUSER root\n'
+                'COPY package/ /tmp/release-package/\n'
+                'RUN pip install --no-cache-dir "/tmp/release-package[voice]" && pip check && rm -rf /tmp/release-package\nUSER app\n')
+            subprocess.run(['docker','build','-f',str(build/'Dockerfile.voice-dependencies'),'-t',voice_image,str(build)],check=True)
+            capture(['docker','run','--rm','--network=none',voice_image,'python','-c','import webrtcvad; from agent_platform.media_service import app'])
         capture(['docker','run','--rm','--network=none',voice_image,'python','-c',
                  'from agent_platform import calling_worker; import aiortc; print("voice imports valid")'])
         env = process_env(config['services']['api']['environment'],roles['agent_migrator'])
@@ -159,14 +218,39 @@ def main():
         config['services']['migrate']['image'] = image
         config['services']['migrate']['environment'] = env
         config['services']['migrate'].pop('build', None)
+        if media_release:
+            socket_dir=backup/'media-control'
+            socket_dir.mkdir(mode=0o700)
+            os.chown(socket_dir,10001,10001)
+            secret=secrets.token_urlsafe(48)
+            mount={'type':'bind','source':str(socket_dir),'target':'/run/agent-media'}
+            config['services']['api']['volumes'] = [
+                item for item in config['services']['api'].get('volumes', [])
+                if item.get('target') != '/run/agent-media'
+            ] + [mount]
+            config['services']['api']['environment'].update(AI_VOICE_MEDIA_URL='http://localhost',
+                AI_VOICE_MEDIA_SOCKET='/run/agent-media/control.sock',AI_VOICE_MEDIA_SECRET=secret)
+            media_env=process_env(config['services']['api']['environment'],roles['agent_api'])
+            config['services']['media']={
+                'image':voice_image,'environment':media_env,'volumes':[mount],
+                'command':['uvicorn','agent_platform.media_service:app','--uds','/run/agent-media/control.sock','--no-access-log'],
+                'networks':['default'],'restart':'unless-stopped','read_only':True,
+                'tmpfs':['/tmp:size=128m,mode=1777'],'cap_drop':['ALL'],
+                'security_opt':['no-new-privileges:true'],'mem_limit':'512m','cpus':1.0,
+                'stop_grace_period':'15s','logging':{'driver':'json-file','options':{'max-size':'5m','max-file':'3'}},
+                'healthcheck':{'test':['CMD','python','-c',"import httpx; c=httpx.Client(transport=httpx.HTTPTransport(uds='/run/agent-media/control.sock')); c.get('http://localhost/health').raise_for_status()"],
+                              'interval':'10s','timeout':'5s','retries':3}}
         release_config = backup/'release.compose.json'
         private(release_config,json.dumps(config))
         runner = ['docker','compose','-p','agent-platform','-f',str(release_config)]
         capture(runner+['config','--quiet'])
         changed_proxy = False
         try:
-            capture(runner+['up','-d','--no-deps','--no-build','--pull','never',*SERVICES])
+            capture(runner+['up','-d','--no-deps','--no-build','--pull','never',*SERVICES,*(['media'] if media_release else [])])
             wait_ready()
+            if media_release:
+                capture(['docker','exec','agent-platform-api-1','python','-c',
+                         'import asyncio; from agent_platform.media_client import check_ready; asyncio.run(check_ready())'])
             current = proxy.read_text()
             marker = '    @businesspages {'
             route = '''    @orchestrationapps {
@@ -183,6 +267,8 @@ def main():
                     raise RuntimeError('Unexpected proxy layout')
                 updated = current.replace(marker,route+marker)
             updated = notification_connector_routes(updated)
+            if media_release:
+                updated = voice_routes(updated)
             if updated != current:
                 candidate = backup/'Caddyfile.candidate'
                 private(candidate,updated)
@@ -205,6 +291,11 @@ def main():
                       'https://agents.myalgodesk.in/setup':404,
                       'https://shayak.myalgodesk.in/v1/connectors':404,
                       'https://shayak.myalgodesk.in/v1/orchestration/automations':404}
+            if media_release:
+                expected.update({'https://agents.myalgodesk.in/v1/voice/agents':401,
+                                 'https://agents.myalgodesk.in/v1/voice/health':401,
+                                 'https://agents.myalgodesk.in/v1/voice/sessions':401,
+                                 'https://agents.myalgodesk.in/internal/v1/status':404})
             for _ in range(10):
                 observed={url:status(url) for url in expected}
                 if observed==expected:
@@ -218,7 +309,8 @@ def main():
         except Exception:
             # Additive migrations stay in place; never restore data over live writes.
             capture(['docker','compose','-p','agent-platform','-f',str(backup/'rollback.compose.json'),
-                     'up','-d','--no-deps','--no-build','--pull','never',*SERVICES])
+                     'up','-d','--no-deps','--no-build','--pull','never',*SERVICES,
+                     *(['media'] if media_release and 'media' in config['services'] else [])])
             if changed_proxy:
                 proxy.write_text((backup/'Caddyfile').read_text())
                 capture(['docker','restart','myalgodesk-proxy-1'])

@@ -13,7 +13,7 @@ from .service_identity import provision
 from .workspace_shell import install_bridge, page
 
 ASSETS = Path(__file__).with_name('console')
-PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness)|orchestration/automations(?:/[a-zA-Z0-9-]+(?:/(?:approve|runs))?)?|connectors/feeds(?:/(?:profiles|[a-zA-Z0-9-]+)(?:/(?:credentials|test))?)?|(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents(?:/[a-f0-9-]{36})?|ask|search)|voice/(capabilities|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
+PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness|capabilities)|orchestration/automations(?:/[a-zA-Z0-9-]+(?:/(?:approve|runs))?)?|connectors/feeds(?:/(?:profiles|[a-zA-Z0-9-]+)(?:/(?:credentials|test))?)?|(task-agents|tasks)(/[a-zA-Z0-9-]+){0,2}|telephony/(capabilities|connections)(/[a-zA-Z0-9-]+){0,2}|memory/(settings|metrics|records|candidates|search|events|feedback|index|examples|evaluations|dataset)(/[a-zA-Z0-9-]+){0,2}|knowledge/(documents(?:/[a-f0-9-]{36})?|ask|search)|voice/(capabilities|usage|agents|sessions)(/[a-zA-Z0-9-]+){0,3}|calling/(capabilities|agents)(/[a-zA-Z0-9-]+){0,4}|whatsapp/(setup|channels|connections|onboarding)(/[a-zA-Z0-9-]+){0,4})$')
 
 
 def local(request, *, mutation=False):
@@ -135,7 +135,7 @@ def create_console(*, registry=None, app=None):
     @application.get('/console/{asset}')
     async def asset(asset: str, request: Request):
         local(request)
-        if asset not in {'setup.js', 'workspace.css', 'feeds.js', 'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'telephony.js'}:
+        if asset not in {'setup.js', 'workspace.css', 'feeds.js', 'memory.js', 'app.js', 'style.css', 'whatsapp.js', 'whatsapp.css', 'whatsapp-customer.js', 'whatsapp-send.js', 'calling.js', 'voice.js', 'voice-widget.js', 'voice-errors.js', 'telephony.js'}:
             raise HTTPException(404)
         return FileResponse(ASSETS/asset)
 

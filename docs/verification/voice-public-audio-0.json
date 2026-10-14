@@ -1,0 +1,77 @@
+{
+  "status": "PASS",
+  "session_id": "f05d0b3c-97b5-45af-a6b3-583fd14c347d",
+  "app_id": "ffbcd1f3-74d7-4381-bee4-33dabfa73471",
+  "agent_id": "260cfb5f-853f-4dca-8cc2-4c3277316abc",
+  "synthetic_audio": true,
+  "human_microphone_tested": false,
+  "public_https": true,
+  "relay_only_client": true,
+  "cross_app_read_denied": true,
+  "reply": "The clinic is open from 9:00 AM to 5:00 PM, Monday through Friday.",
+  "received_speech": "The clinic is open from 9am to 5pm, Monday through Friday.",
+  "duration_seconds": 105.25,
+  "first_reply_audio_ms": 7491,
+  "usage": {
+    "daily_sessions": 9,
+    "monthly_sessions": 9,
+    "active_sessions": 0,
+    "duration_seconds": 630.956626,
+    "accounting": {
+      "period": "UTC calendar month",
+      "stages": [
+        {
+          "currency": "INR",
+          "stage": "asr",
+          "unit": "audio_seconds",
+          "attempts": 9,
+          "measured_units": 23.36,
+          "uncertain_attempts": 1,
+          "estimated_amount": 1.168,
+          "held_amount": 0.292,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 1.46
+        },
+        {
+          "currency": "INR",
+          "stage": "reasoning",
+          "unit": "tokens",
+          "attempts": 8,
+          "measured_units": 5204.0,
+          "uncertain_attempts": 0,
+          "estimated_amount": 5.204,
+          "held_amount": 0,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 5.204
+        },
+        {
+          "currency": "INR",
+          "stage": "tts",
+          "unit": "characters",
+          "attempts": 17,
+          "measured_units": 984.0,
+          "uncertain_attempts": 1,
+          "estimated_amount": 14.64,
+          "held_amount": 1.98,
+          "reconciled_attempts": 0,
+          "reconciled_amount": 0,
+          "reconciliation_delta": 0,
+          "budget_amount": 16.62
+        }
+      ],
+      "invoice": false,
+      "scope": "API estimates plus reviewed provider charges; excludes hosting, electricity, carrier and taxes. Unreconciled unknown attempts retain holds."
+    },
+    "daily_session_limit": 30,
+    "monthly_session_limit": 300,
+    "session_seconds_limit": 120,
+    "installation_concurrency_limit": 2,
+    "estimated_cost": null,
+    "cost_status": "unknown",
+    "quota_basis": "Session attempts reserve allowance, including failures; money is not estimated from duration."
+  }
+}

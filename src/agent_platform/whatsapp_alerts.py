@@ -95,11 +95,16 @@ def message(alert: AlertDelivery) -> str:
 def notification_message(app_name: str, notification: NotificationDelivery) -> str:
     moment = notification.occurred_at.astimezone(timezone(timedelta(hours=5, minutes=30)))
     name = ' '.join(app_name.split())[:80] or 'App'
-    label = name + (' TEST notification' if notification.test_mode else ' notification')
-    parts = [label, notification.title, notification.summary]
+    trade = notification.category in {
+        'trade.placed', 'trade.executed', 'trade.paper.placed', 'trade.paper.executed',
+    }
+    label = name + (' TEST notification' if notification.test_mode else '' if trade else ' notification')
+    title = f'*{notification.title}*' if trade else notification.title
+    parts = [label, title, notification.summary]
     if notification.reference:
         parts.append('Reference: ' + notification.reference)
     parts.extend((f'Time: {moment:%d %b %Y, %I:%M %p} IST',
+                  f'Open {name} for trade details.' if trade else
                   'Open the app for details. This message cannot make a payment or complete a transaction.'))
     return '\n'.join(parts)
 

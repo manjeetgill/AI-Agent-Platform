@@ -1,0 +1,41 @@
+# Linux Docker deployment overlay: control-plane/media use a PRIVATE Unix socket.
+# Apply after existing base/voice overlays. This file is prepared, not deployed.
+# Create VOICE_MEDIA_SOCKET_DIR owned by container uid 10001, mode 0700 first.
+# Public audio needs configured/tested TURN; no internal media HTTP port is published.
+services:
+  api:
+    environment:
+      AI_VOICE_MEDIA_URL: http://localhost
+      AI_VOICE_MEDIA_SOCKET: /run/agent-media/control.sock
+      AI_VOICE_MEDIA_SECRET: ${AI_VOICE_MEDIA_SECRET:?Set private media secret}
+    volumes:
+      - ${VOICE_MEDIA_SOCKET_DIR:?Set private socket directory}:/run/agent-media
+  media:
+    build:
+      context: .
+      args: {INSTALL_VOICE: '1'}
+    env_file: ${VOICE_MEDIA_ENV_FILE:?Set private runtime DB and speech/model configuration file}
+    environment:
+      AI_VOICE_MEDIA_SECRET: ${AI_VOICE_MEDIA_SECRET:?Set private media secret}
+      AI_WEB_VOICE_ENABLED: '1'
+    command: [uvicorn, agent_platform.media_service:app, --uds, /run/agent-media/control.sock, --no-access-log]
+    volumes:
+      - ${VOICE_MEDIA_SOCKET_DIR:?Set private socket directory}:/run/agent-media
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=128m,mode=1777']
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    cpus: 1
+    stop_grace_period: 15s
+    healthcheck:
+      test: [CMD, python, -c, "import httpx; c=httpx.Client(transport=httpx.HTTPTransport(uds='/run/agent-media/control.sock')); c.get('http://localhost/health').raise_for_status()"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '3'}

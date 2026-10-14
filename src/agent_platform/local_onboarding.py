@@ -15,6 +15,7 @@ from pydantic import Field, field_validator
 from .app_catalogue import AppManifest, Policy, configure
 from .connection_test import TOOL, Input, enqueue
 from .flags import enabled
+from .integration_catalog import catalogue
 from .local_monitor import ASSETS, CSP, connections, credential, local, private_json
 from .service_identity import SCOPES, authenticate, provision
 from .task_readiness import assess
@@ -28,7 +29,7 @@ class Setup(Strict):
     name: str = Field(min_length=2, max_length=100)
     external_user: str = Field(min_length=1, max_length=200)
     scopes: list[str] = Field(min_length=1, max_length=25)
-    tools: list[str] = Field(min_length=1, max_length=100)
+    tools: list[str] = Field(default_factory=list, max_length=100)
     days: int = Field(default=30, ge=1, le=90)
     policy: Policy = Field(default_factory=lambda: Policy(planning_calls_per_day=25,
         user_planning_calls_per_day=5, automation_runs_per_day=0, connector_checks_per_hour=30, feed_requests_per_hour=30))
@@ -88,8 +89,8 @@ def setup_lock():
 
 
 async def create(pool, registry, body):
-    if len(set(body.scopes)) != len(body.scopes) or not set(body.scopes) <= SCOPES or 'tasks:read' not in body.scopes:
-        raise HTTPException(422, 'Select supported unique scopes including tasks:read')
+    if len(set(body.scopes)) != len(body.scopes) or not set(body.scopes) <= SCOPES:
+        raise HTTPException(422, 'Select supported unique scopes')
     if len(set(body.tools)) != len(body.tools) or not set(body.tools) <= registry.adapters.keys():
         raise HTTPException(422, 'Select unique installed tools')
     fingerprint = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
@@ -143,6 +144,7 @@ def install(app, registry):
     async def catalog(request: Request):
         guard(request)
         return {'scopes': sorted(SCOPES), 'default_scopes': DEFAULT_SCOPES,
+                'capabilities': catalogue([]),
                 'default_policy': Setup.model_fields['policy'].default_factory().model_dump(),
                 'tools': [{'name': name, 'version': tool.version, 'risk': tool.risk,
                            'description': getattr(tool, 'description', '')} for name, tool in sorted(registry.adapters.items())]}
@@ -173,6 +175,18 @@ def install(app, registry):
         # The loopback operator can manage setup without broadening the app's key scopes.
         claims, _ = await claims_for(request, connection, scope=None)
         return await service_inventory(app.state.repository.pool, claims)
+
+    @app.get('/monitor/setup/{connection}/capabilities', include_in_schema=False)
+    async def check_capabilities(connection: str, request: Request):
+        # Messaging-only credentials must not need task execution permissions
+        # just to discover their own setup blockers.
+        _, config = await claims_for(request, connection, scope=None)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://internal') as client:
+            response = await client.get('/v1/integrations/capability-readiness', headers={
+                'Authorization': 'Bearer '+config['credential'], 'X-External-User-ID': config['external_user']})
+        if response.status_code != 200:
+            raise HTTPException(503, 'Capability checks unavailable; check the platform services.')
+        return response.json()
 
     @app.post('/monitor/setup/{connection}/services', include_in_schema=False)
     async def write_services(connection: str, body: Choice, request: Request):

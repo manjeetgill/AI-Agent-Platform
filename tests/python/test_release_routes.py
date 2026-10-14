@@ -43,3 +43,15 @@ def test_release_upgrades_existing_notification_matcher_once():
     assert release.notification_connector_routes(after) == after
     with pytest.raises(RuntimeError, match='Unexpected proxy layout'):
         release.notification_connector_routes(before.replace('agents.myalgodesk.in', 'another.example'))
+
+
+def test_voice_routes_keep_internal_control_and_workspace_private():
+    before='agents.myalgodesk.in {\n    @businesspages {\n    }\n}\n'
+    after=release.voice_routes(before)
+    assert '/v1/voice/sessions/*' in after
+    assert '/internal/' not in after and '/console' not in after
+    assert release.voice_routes(after)==after
+    assert '/v1/voice/health' in after
+    assert release.voice_routes(after.replace(' /v1/voice/health', '')) == after
+    with pytest.raises(RuntimeError):
+        release.voice_routes('    @voiceapps {\n    @businesspages {')

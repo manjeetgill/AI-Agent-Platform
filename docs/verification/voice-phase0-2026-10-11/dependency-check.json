@@ -1,0 +1,11 @@
+{
+  "name": "dependency-check",
+  "command": [
+    ".venv/bin/python",
+    "-m",
+    "pip",
+    "check"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.33
+}

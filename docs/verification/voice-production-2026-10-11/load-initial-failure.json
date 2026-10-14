@@ -1,0 +1,31 @@
+{
+  "status": "FAIL",
+  "synthetic_audio": true,
+  "human_microphone_tested": false,
+  "public_network_tested": false,
+  "concurrent_callers": 2,
+  "waves": 3,
+  "duration_seconds": 22.92,
+  "first_reply_audio_ms": {
+    "p50": null,
+    "p95": null,
+    "p99": null
+  },
+  "sample_warning": "Small local capacity sample, not a production SLO or soak certification.",
+  "overload_rejected": true,
+  "cross_app_reads_denied": false,
+  "runs": [
+    {
+      "wave": 1,
+      "app_index": 0,
+      "status": "FAIL",
+      "error_type": "AssertionError"
+    },
+    {
+      "wave": 1,
+      "app_index": 1,
+      "status": "FAIL",
+      "error_type": "AssertionError"
+    }
+  ]
+}

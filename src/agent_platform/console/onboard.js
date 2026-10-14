@@ -8,14 +8,14 @@ function json(parent,data){el('pre',JSON.stringify(data,null,2),parent);}
 function choice(parent,value,text,checked){const label=el('label',null,parent);const input=el('input',null,label);input.type='checkbox';input.value=value;input.checked=checked;el('span',text,label);}
 function chosen(id){return [...$(id).querySelectorAll('input:checked')].map(n=>n.value);}
 async function inventory(select){const r=await api('/monitor/connections');$('connection').replaceChildren();for(const c of r.connections){const option=el('option',c.name,$('connection'));option.value=c.id;}if(select)$('connection').value=select;}
-async function run(fn){if(busy)return;busy=true;$('error').hidden=true;for(const id of ['save','check','test','result','connection','load-services'])$(id).disabled=true;try{await fn();}catch(e){fail(e);}finally{busy=false;$('save').disabled=setupComplete;$('check').disabled=false;$('connection').disabled=false;$('load-services').disabled=false;$('result').disabled=!taskId;}}
+async function run(fn){if(busy)return;busy=true;$('error').hidden=true;for(const id of ['save','check','test','result','connection','load-services','capability-check'])$(id).disabled=true;try{await fn();}catch(e){fail(e);}finally{busy=false;$('save').disabled=setupComplete;$('check').disabled=false;$('connection').disabled=false;$('load-services').disabled=false;$('capability-check').disabled=false;$('result').disabled=!taskId;}}
 async function check(){const connection=$('connection').value;if(!connection)throw Error('Create or select a connection first.');const epoch=generation;const r=await api('/monitor/setup/'+connection+'/check?planning='+$('planning').checked);if(epoch!==generation)return;const root=$('checks');root.replaceChildren();el('h3',r.status,root);for(const c of r.checks){const p=el('div',null,root);p.className='check';el('strong',c.status+' · '+c.summary,p);if(c.next_action)el('p',c.next_action,p);}el('h3','Callbacks: '+r.callbacks.status,root);el('p',r.callbacks.next_action,root);el('p',r.callbacks.deliveries.length+' recent callback delivery records; this check does not verify live receipt.',root);if(r.callbacks.deliveries.length)json(root,r.callbacks.deliveries);$('test').disabled=!r.worker_test_available;if(!r.worker_test_available)el('p','Worker test unavailable: the operator must grant platform.connection_test and tasks:read, tasks:write, agents:run. Existing app permissions are preserved.',root);}
-$('setup-form').onsubmit=e=>{e.preventDefault();run(async()=>{const body=savedBody?JSON.parse(savedBody):{request_id:requestId,name:$('name').value.trim(),external_user:$('user').value.trim(),days:Number($('days').value),scopes:chosen('scopes'),tools:chosen('tools'),policy:Object.fromEntries(Object.keys(limits).map(k=>[k,Number($('limit-'+k).value)]))};const payload=JSON.stringify(body);if(savedBody&&savedBody!==payload)throw Error('Retry the original settings after an uncertain save; reload to begin a different application.');savedBody=payload;let r;try{r=await api('/monitor/setup/apps',body);}catch(error){$('save').textContent='Retry same connection setup';if(error.status===422)savedBody=null;throw error;}const root=$('created');root.replaceChildren();el('h3','Application connection saved',root);el('p','Private backend connection file:',root);el('code',r.credential_file,root);el('p','App ID: '+r.app_id,root);el('p','Permissions: '+r.scopes.join(', '),root);el('p','Tools: '+r.tools.join(', '),root);setupComplete=true;$('save').textContent='Connection created';await inventory(r.connection);generation++;await check();});};
+$('setup-form').onsubmit=e=>{e.preventDefault();run(async()=>{const body=savedBody?JSON.parse(savedBody):{request_id:requestId,name:$('name').value.trim(),external_user:$('user').value.trim(),days:Number($('days').value),scopes:chosen('scopes'),tools:chosen('tools'),policy:Object.fromEntries(Object.keys(limits).map(k=>[k,Number($('limit-'+k).value)]))};const payload=JSON.stringify(body);if(savedBody&&savedBody!==payload)throw Error('Retry the original settings after an uncertain save; reload to begin a different application.');savedBody=payload;let r;try{r=await api('/monitor/setup/apps',body);}catch(error){$('save').textContent='Retry same connection setup';if(error.status===422)savedBody=null;throw error;}const root=$('created');root.replaceChildren();el('h3','Application connection saved',root);el('p','Private backend connection file:',root);el('code',r.credential_file,root);el('p','App ID: '+r.app_id,root);el('p','Permissions: '+r.scopes.join(', '),root);el('p','Tools: '+r.tools.join(', '),root);setupComplete=true;$('save').textContent='Connection created';await inventory(r.connection);generation++;await checkCapabilities();});};
 $('check').onclick=()=>run(check);
-$('connection').onchange=()=>{generation++;testId=null;taskId=null;$('test').disabled=true;$('result').disabled=true;$('checks').replaceChildren();$('test-result').replaceChildren();$('service-choices').replaceChildren();};
+$('connection').onchange=()=>{generation++;testId=null;taskId=null;$('test').disabled=true;$('result').disabled=true;$('checks').replaceChildren();$('test-result').replaceChildren();$('service-choices').replaceChildren();$('capability-checks').replaceChildren();};
 $('test').onclick=()=>run(async()=>{testId??=crypto.randomUUID();const r=await api('/monitor/setup/'+$('connection').value+'/test',{test_id:testId});taskId=r.task_id;$('test-result').replaceChildren();el('p','Worker test '+r.status+'. Task: '+taskId,$('test-result'));el('p','Click Refresh test result to check execution. Repeating this request returns the same test.',$('test-result'));});
 $('result').onclick=()=>run(async()=>{const r=await api('/monitor/api/'+$('connection').value+'/tasks/'+taskId);const root=$('test-result');root.replaceChildren();el('h3','Worker test: '+r.status,root);json(root,{task_id:r.id,status:r.status,results:r.steps.map(s=>({status:s.status,result:s.result}))});if(r.status==='DONE')el('p','Worker round trip passed. Test your app’s real tools next.',root);else el('p','If this remains queued, check worker readiness. Failed or uncertain tasks are not retried automatically here.',root);});
-try{const c=await api('/monitor/setup/catalog');for(const t of c.tools)choice($('tools'),t.name,t.name+' · '+t.risk+' · '+t.description,t.name==='platform.connection_test');for(const s of c.scopes)choice($('scopes'),s,s,c.default_scopes.includes(s));for(const [key,[label,min,max]]of Object.entries(limits)){const l=el('label',label,$('limits'));const input=el('input',null,l);input.id='limit-'+key;input.type='number';input.min=min;input.max=max;input.required=true;input.value=c.default_policy[key];}await inventory();}catch(e){fail(e);$('save').disabled=true;}
+try{const c=await api('/monitor/setup/catalog');for(const t of c.tools)choice($('tools'),t.name,t.name+' · '+t.risk+' · '+t.description,false);for(const s of c.scopes)choice($('scopes'),s,s,false);installFeatures(c.capabilities || []);for(const [key,[label,min,max]]of Object.entries(limits)){const l=el('label',label,$('limits'));const input=el('input',null,l);input.id='limit-'+key;input.type='number';input.min=min;input.max=max;input.required=true;input.value=c.default_policy[key];}await inventory();}catch(e){fail(e);$('save').disabled=true;}
 
 async function loadServiceChoices(){
   const connection=$('connection').value, epoch=generation;
@@ -46,3 +46,40 @@ async function loadServiceChoices(){
   }
 }
 $('load-services').onclick=()=>run(loadServiceChoices);
+
+function installFeatures(features){
+  for(const feature of features){
+    const input=el('button','Add '+feature.title+' permissions',$('features'));
+    input.type='button';
+    input.onclick=()=>{
+      // Presets only add scopes. Explicit advanced selections are never removed
+      // when capabilities share permissions.
+      for(const scope of $('scopes').querySelectorAll('input')){
+        if(feature.required_scopes.includes(scope.value))scope.checked=true;
+      }
+    };
+  }
+  el('p','Selecting a capability adds its permissions below. Review Application permissions before saving; remove unwanted permissions there.',$('features'));
+}
+async function checkCapabilities(){
+  const connection=$('connection').value, epoch=generation;
+  if(!connection)throw Error('Create or select an application first.');
+  const report=await api('/monitor/setup/'+encodeURIComponent(connection)+'/capabilities');
+  if(epoch!==generation)return;
+  const root=$('capability-checks');root.replaceChildren();
+  el('h3','Capabilities for this application',root);
+  el('p',report.note,root);
+  const states=new Map(report.capabilities.map(item=>[item.id,item]));
+  for(const feature of report.integration_contracts){
+    const card=el('div',null,root);card.className='check';
+    const saved=states.get(feature.readiness_id);
+    el('strong',feature.title+' · '+(!feature.permissions_granted?'ACCESS REQUIRED':saved?.status||'CONFIGURATION CHECK REQUIRED'),card);
+    if(feature.missing_scopes.length)el('p','Missing permissions: '+feature.missing_scopes.join(', '),card);
+    el('p',feature.setup_requirement,card);
+    el('code',feature.api_root,card);
+    if(feature.required_tool_grants.length)el('p','Required tool grants: '+feature.required_tool_grants.join(', '),card);
+    if(feature.permission_note)el('p',feature.permission_note,card);
+    for(const step of saved?.next_steps||[])el('p',step,card);
+  }
+}
+$('capability-check').onclick=()=>run(checkCapabilities);

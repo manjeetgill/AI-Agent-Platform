@@ -1,6 +1,7 @@
 """Provider-neutral structured model gateway with NVIDIA as the first adapter."""
 import asyncio
 import json
+import logging
 import os
 from typing import ClassVar, Protocol
 
@@ -82,7 +83,7 @@ class FallbackProvider(NVIDIAProvider):
 
 
 class Gateway:
-    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True, allow_chain=True, pool=None):
+    def __init__(self, provider: ModelProvider, *, client=None, max_attempts=2, allow_fallback=True, allow_chain=True, pool=None, model_override=None):
         if max_attempts not in {1, 2}:
             raise ValueError("Gateway supports one or two attempts")
         self.allow_chain = allow_chain
@@ -92,11 +93,14 @@ class Gateway:
         self.allow_fallback = allow_fallback
         self.max_attempts = max_attempts
         self.provider = provider
+        self.model_override = model_override
         self.client = client
-        self.fast_model = os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
-        self.reasoning_model = os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model
+        self.fast_model = model_override if model_override is not None else os.environ.get('AI_PLATFORM_NVIDIA_FAST_MODEL', '').strip()
+        self.reasoning_model = model_override if model_override is not None else (os.environ.get('AI_PLATFORM_NVIDIA_REASONING_MODEL', '').strip() or self.fast_model)
 
     def model_for(self, task):
+        if self.model_override is not None:
+            return self.model_override
         if self.pinned_model:
             return self.pinned_model
         try:
@@ -147,9 +151,42 @@ class Gateway:
         return await self.structured('research', policy, {'request': request}, StrategyPlan, lambda value: value)
 
     async def structured(self, task, policy, data, schema, validator, *, claims=None):
-        if self.allow_chain and os.environ.get("AI_MODEL_PROVIDER_CHAIN"):
+        if self.allow_chain and os.environ.get('AI_MODEL_PROVIDER_CHAIN'):
             from .provider_chain import execute
             return await execute(self, task, policy, data, schema, validator, claims)
+        from . import voice_usage
+        self.usage_reported, self.response_id = False, None
+        maximum = len(policy.encode()) + len(json.dumps(data, default=str).encode()) + 8192
+        prepared = None
+        # A single, non-streaming Gemini voice request has a hard combined
+        # thinking/output cap. Reserve its exact serialized request plus that
+        # cap and conservative framing headroom, not an unrelated 8192 tokens.
+        # Streaming rewrites its prompt; retries/fallbacks retain the old bound.
+        if (voice_usage.active.get() is not None and self.provider.name == 'gemini'
+                and self.max_attempts == 1 and not self.allow_fallback
+                and not getattr(self, 'on_claim', None)):
+            prepared = self.provider.request(self.model_for(task), policy, data)
+            payload = prepared[2]
+            if schema is Report:
+                payload['max_tokens'] = 2048
+            cap = payload.get('max_tokens')
+            if type(cap) is not int or not 1 <= cap <= 8192:
+                raise RunFailure('INVALID_MODEL_CONFIGURATION')
+            maximum = len(json.dumps(payload, default=str).encode()) + cap + 1024
+        reservation = await voice_usage.reserve('reasoning', maximum)
+        try:
+            if getattr(self, 'on_claim', None):
+                from .voice_stream import generate
+                result = await generate(self, task, policy, data, schema, validator)
+            else:
+                result = await self._structured(task, policy, data, schema, validator, prepared=prepared)
+        except BaseException:
+            await asyncio.shield(voice_usage.settle(reservation))
+            raise
+        await voice_usage.settle(reservation, result[1] if self.usage_reported else None, self.response_id)
+        return result
+
+    async def _structured(self, task, policy, data, schema, validator, *, prepared=None):
         model = self.model_for(task)
         # Bound serialized context before sending it to any provider or fallback.
         maximum = int(os.environ.get('AI_MODEL_MAX_CONTEXT_BYTES', '100000'))
@@ -157,7 +194,7 @@ class Gateway:
             raise RunFailure('CONTEXT_BUDGET_EXCEEDED')
         if not enabled('AI_NVIDIA', default=True) or not model or not getattr(self.provider, 'key', None):
             raise RunFailure('MODEL_NOT_CONFIGURED')
-        url, headers, payload = self.provider.request(model, policy, data)
+        url, headers, payload = prepared or self.provider.request(model, policy, data)
         if schema is Report:
             payload['max_tokens'] = 2048
         client = self.client or httpx.AsyncClient(timeout=httpx.Timeout(50, connect=5))
@@ -185,7 +222,10 @@ class Gateway:
                         await asyncio.sleep(0.5)
                         continue
                     response.raise_for_status()
-                    content, tokens = self.provider.response(response.json())
+                    packet = response.json()
+                    self.usage_reported = isinstance((packet.get('usage') or {}).get('total_tokens'), int)
+                    self.response_id = packet.get('id')
+                    content, tokens = self.provider.response(packet)
                     total_tokens += tokens
                     output = validator(schema.model_validate_json(content))
                     return output, total_tokens, self.provider.name, model
@@ -203,8 +243,16 @@ class Gateway:
                         'For UNSUPPORTED_NUMBER, remove ALL digits from every prose field, including dates, versions, sample counts and indicator names. '
                         'Use qualitative wording without spelled-out numbers either (including one, two, five, twenty, thirty, half, twice). Omit numeric rule definitions and thresholds from prose. Put numerical facts only in numeric_claims, copying exact original label, numeric value and unit; or leave that list empty.'})
                 except httpx.TimeoutException as exc:
+                    logging.getLogger(__name__).warning('model_request_failed category=timeout')
                     raise RunFailure('MODEL_TIMEOUT') from exc
+                except httpx.HTTPStatusError as exc:
+                    status = exc.response.status_code
+                    # Never log upstream bodies, URLs, headers, or exception text.
+                    logging.getLogger(__name__).warning('model_request_failed category=http status=%d', status)
+                    code = 'PROVIDER_BACKPRESSURE' if status in {429, 503} else 'PROVIDER_AUTH' if status in {401, 403} else 'MODEL_UNAVAILABLE'
+                    raise RunFailure(code) from exc
                 except httpx.HTTPError as exc:
+                    logging.getLogger(__name__).warning('model_request_failed category=transport')
                     raise RunFailure('MODEL_UNAVAILABLE') from exc
         finally:
             if self.client is None:

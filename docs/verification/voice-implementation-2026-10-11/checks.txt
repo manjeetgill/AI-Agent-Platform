@@ -1,0 +1,10 @@
+2026-10-11 final working tree
+
+PASS exit 0: pip check — no broken requirements
+PASS exit 0: ruff check src tests scripts/local.py scripts/test_orchestration_local.py scripts/voice_local_setup.py scripts/verify_voice_local.py scripts/verify_voice_recovery.py
+PASS exit 0: mypy — provider configuration boundary only
+PASS exit 0: node --check src/agent_platform/console/voice.js
+PASS exit 0: node --check src/agent_platform/console/voice-widget.js
+PASS exit 0: git diff --check
+PASS exit 0: pip wheel --no-deps . -w /private/tmp/voice-wheel-final
+Browser observation: Chrome ERR_BLOCKED_BY_CLIENT at http://127.0.0.1:4161/voice; no workaround attempted

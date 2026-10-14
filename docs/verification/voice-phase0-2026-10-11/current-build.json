@@ -1,0 +1,18 @@
+{
+  "name": "current-build",
+  "checkout": "/Users/manjeet/AI-Agent-Python-clean",
+  "command": [
+    "/Users/manjeet/Documents/ChatGPT/Algo/AI-Agent-Platform/.venv/bin/python",
+    "-m",
+    "pip",
+    "wheel",
+    "--no-deps",
+    "--no-build-isolation",
+    "--no-index",
+    ".",
+    "-w",
+    "/private/tmp/agent-voice-phase0-20261011/current-wheels"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 0.98
+}

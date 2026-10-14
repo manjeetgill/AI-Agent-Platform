@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "unix_socket": true,
+  "signed_readiness": true,
+  "signed_drain": true,
+  "new_calls_rejected_while_draining": true,
+  "audio_calls": 0
+}

@@ -3,6 +3,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -15,7 +16,13 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-STATE = ROOT / '.runtime' / 'local'
+PROFILE = os.environ.get('AGENT_LOCAL_PROFILE', 'local')
+if not re.fullmatch(r'[a-z][a-z0-9_-]{0,30}', PROFILE):
+    raise SystemExit('Invalid AGENT_LOCAL_PROFILE')
+STATE = ROOT / '.runtime' / PROFILE
+API_PORT = 4160 if PROFILE == 'voice' else 4060
+DB_PORT = 55560 if PROFILE == 'voice' else 55460
+CONSOLE_PORT = API_PORT + 1
 CONFIG = STATE / 'config.json'
 
 
@@ -41,15 +48,19 @@ def setup():
     STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     if not CONFIG.exists():
         save(CONFIG, {
-            'AI_PLATFORM_DATABASE_URL': f'postgresql://agent_platform:{secrets.token_hex(32)}@127.0.0.1:55460/postgres',
+            'AI_PLATFORM_DATABASE_URL': f'postgresql://agent_platform:{secrets.token_hex(32)}@127.0.0.1:{DB_PORT}/postgres',
             'AI_PLATFORM_SIGNING_KEY': secrets.token_hex(32),
             'AI_PLATFORM_CONNECTOR_URL': 'http://127.0.0.1:4022',
             'NVIDIA_API_KEY': '', 'AI_PLATFORM_NVIDIA_FAST_MODEL': '',
             'AI_PLATFORM_NVIDIA_REASONING_MODEL': '', 'AI_WORKFLOWS': '1',
         })
     values = load()
+    if PROFILE == 'voice':
+        for name, value in {'AI_DURABLE_TASKS': '1', 'AI_TASK_AGENTS': '1', 'AI_WEB_VOICE_ENABLED': '1'}.items():
+            values.setdefault(name, value)
+        save(CONFIG, values)
     save(STATE / 'client.json', {'AI_PLATFORM_ENABLED': '1',
-        'AI_PLATFORM_URL': 'http://127.0.0.1:4060',
+        'AI_PLATFORM_URL': f'http://127.0.0.1:{API_PORT}',
         'AI_PLATFORM_SIGNING_KEY': values['AI_PLATFORM_SIGNING_KEY']})
     print('Local platform configuration ready. Existing settings preserved.')
     print(f'Consumer connection file: {STATE / "client.json"}')
@@ -73,8 +84,8 @@ def database(values):
     if status.returncode == 0:
         return
     with socket.socket() as probe:
-        if probe.connect_ex(('127.0.0.1', 55460)) == 0:
-            raise SystemExit('Port 55460 is occupied by another database; nothing changed')
+        if probe.connect_ex(('127.0.0.1', DB_PORT)) == 0:
+            raise SystemExit(f'Port {DB_PORT} is occupied by another database; nothing changed')
     if not (data / 'PG_VERSION').exists():
         password_file = STATE / 'init-password'
         descriptor = os.open(password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -86,7 +97,7 @@ def database(values):
         finally:
             password_file.unlink(missing_ok=True)
     subprocess.run([pg('pg_ctl'), '-D', str(data), '-l', str(STATE / 'postgres.log'),
-                    '-o', '-h 127.0.0.1 -p 55460', '-w', 'start'], check=True)
+                    '-o', f'-h 127.0.0.1 -p {DB_PORT}', '-w', 'start'], check=True)
 
 
 def nvidia():
@@ -130,8 +141,15 @@ def supervise(env,roles):
         api_env['AI_PLATFORM_OPERATOR_DATABASE_URL']=roles['agent_worker']
     children = {}
     try:
+        if PROFILE == 'voice' and env.get('AI_VOICE_MEDIA_URL') == 'http://127.0.0.1:4162':
+            children['media'] = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'agent_platform.media_service:app',
+                '--host', '127.0.0.1', '--port', '4162', '--no-access-log'], env=api_env, cwd=ROOT)
         children['api'] = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'agent_platform.app:app',
-            '--host', '127.0.0.1', '--port', '4060', '--no-access-log'], env=api_env, cwd=ROOT)
+            '--host', '127.0.0.1', '--port', str(API_PORT), '--no-access-log'], env=api_env, cwd=ROOT)
+        if PROFILE == 'voice':
+            children['workspace'] = subprocess.Popen([sys.executable, '-m', 'uvicorn',
+                'agent_platform.console_app:create_console', '--factory', '--host', '127.0.0.1',
+                '--port', str(CONSOLE_PORT), '--no-access-log'], env={**api_env, 'AI_PLATFORM_OPERATOR_DATABASE_URL': roles['agent_worker']}, cwd=ROOT)
         if env.get('AI_DURABLE_TASKS') == '1':
             children['worker'] = subprocess.Popen([sys.executable, '-m', 'agent_platform.task_worker'],
                                                  env=worker_env, cwd=ROOT)
@@ -162,7 +180,7 @@ def service_status():
     try:
         record = json.loads((STATE / 'services.json').read_text())
         fresh = 0 <= time.time() - record['updated_at'] < 5
-        return {name: fresh and record['running'].get(name, False) for name in ('api', 'worker')}
+        return {name: fresh and running for name, running in record['running'].items()}
     except (OSError, ValueError, KeyError, TypeError):
         return {'api': False, 'worker': False}
 
@@ -187,7 +205,7 @@ def main():
         print('NVIDIA: ' + ('configured (not verified)' if values.get('NVIDIA_API_KEY') and
               values.get('AI_PLATFORM_NVIDIA_FAST_MODEL') else 'awaiting key and model ID'))
         try:
-            with urlopen('http://127.0.0.1:4060/readiness', timeout=3) as response:
+            with urlopen(f'http://127.0.0.1:{API_PORT}/readiness', timeout=3) as response:
                 print('API/database: ' + json.load(response)['status'])
         except (URLError, TimeoutError):
             print('API/database: stopped or not ready')
@@ -217,17 +235,17 @@ def main():
         env['PYTHONPATH'] = str(ROOT / 'src')
         with lifecycle_lock():
             with socket.socket() as probe:
-                if probe.connect_ex(('127.0.0.1', 4060)) == 0:
-                    raise SystemExit('Port 4060 is occupied; stop its existing launcher first. Nothing changed.')
+                if probe.connect_ex(('127.0.0.1', API_PORT)) == 0:
+                    raise SystemExit(f'Port {API_PORT} is occupied; stop its existing launcher first. Nothing changed.')
             database(values)
-            roles_file=STATE/'database-roles.json'
+            roles_file = STATE / 'database-roles.json'
             if not roles_file.is_file() or roles_file.stat().st_mode & 0o077:
-                raise SystemExit('Run scripts/local.py roles first; role credentials must be private')
-            roles=json.loads(roles_file.read_text())
+                raise SystemExit('Provision private restricted database roles before starting')
+            roles = json.loads(roles_file.read_text())
             from runtime_env import process_env
-            migration_env=process_env(env,roles['agent_migrator'])
-            subprocess.run([sys.executable, '-m', 'agent_platform.migrate'], env=migration_env, cwd=ROOT, check=True)
-            print('Platform: http://127.0.0.1:4060. Ctrl-C stops API and worker; database and reports persist.', flush=True)
+            subprocess.run([sys.executable, '-m', 'agent_platform.migrate'],
+                           env=process_env(env, roles['agent_migrator']), cwd=ROOT, check=True)
+            print(f'Platform: http://127.0.0.1:{API_PORT}. Ctrl-C stops API and worker; database and reports persist.', flush=True)
             supervise(env,roles)
 
 

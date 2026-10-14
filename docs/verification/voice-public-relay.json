@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "public_turn_relay": true,
+  "rtp_audio_frames_received": 20,
+  "datachannel_roundtrip": true,
+  "human_microphone_tested": false,
+  "model_provider_requests": 0,
+  "telephone_calls": 0
+}

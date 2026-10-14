@@ -19,14 +19,14 @@ agents.myalgodesk.in, shayak.myalgodesk.in {
     # No operator console or legacy unscoped API is exposed here.
     @appagents {
         host agents.myalgodesk.in
-        path /v1/businesses/* /v1/integrations/* /v1/whatsapp/* /v1/telephony/* /v1/voice/agents /v1/voice/agents/* /v1/knowledge/documents /v1/knowledge/documents/* /v1/task-agents /v1/task-agents/* /v1/tasks /v1/tasks/* /v1/orchestration/*
+        path /v1/businesses/* /v1/integrations/* /v1/whatsapp/* /v1/telephony/* /v1/voice/agents /v1/voice/agents/* /v1/voice/sessions /v1/voice/sessions/* /v1/voice/usage /v1/voice/capabilities /v1/knowledge/documents /v1/knowledge/documents/* /v1/task-agents /v1/task-agents/* /v1/tasks /v1/tasks/* /v1/orchestration/*
     }
     handle @appagents {
         reverse_proxy agent-platform-api-1:4060
     }
     @platformconnectors {
         host agents.myalgodesk.in
-        path /v1/connectors /v1/connectors/* /v1/notifications/email /v1/notifications/email/*
+        path /v1/connectors /v1/connectors/* /v1/notifications/email /v1/notifications/email/* /v1/notifications/sms /v1/notifications/sms/*
     }
     handle @platformconnectors {
         reverse_proxy agent-platform-api-1:4060

@@ -31,7 +31,8 @@ def test_every_tenant_table_fails_closed_without_scope():
         assert not flags['rolsuper'] and not flags['rolbypassrls']
         tables=conn.execute("SELECT tablename,rowsecurity FROM pg_tables WHERE schemaname='public'").fetchall()
         global_tables={'agent_schema_migrations','platform_worker_heartbeats','whatsapp_worker_health',
-                       'whatsapp_call_worker_health','meta_webhook_receipts','meta_platform_webhook'}
+                       'whatsapp_call_worker_health','meta_webhook_receipts','meta_platform_webhook',
+                       'voice_media_nonces','voice_rate_cards'}
         for table in tables:
             if table['tablename'] in global_tables:
                 continue

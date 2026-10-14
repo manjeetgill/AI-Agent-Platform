@@ -1,0 +1,96 @@
+{
+  "observed_during": "bounded public voice capacity pilot",
+  "containers": [
+    {
+      "CPUPerc": "20.14%",
+      "MemPerc": "15.14%",
+      "MemUsage": "77.49MiB / 512MiB",
+      "Name": "agent-platform-media-1",
+      "PIDs": "11"
+    },
+    {
+      "CPUPerc": "7.15%",
+      "MemPerc": "18.60%",
+      "MemUsage": "71.42MiB / 384MiB",
+      "Name": "agent-platform-api-1",
+      "PIDs": "3"
+    },
+    {
+      "CPUPerc": "0.16%",
+      "MemPerc": "16.63%",
+      "MemUsage": "63.87MiB / 384MiB",
+      "Name": "agent-platform-voice-worker-1",
+      "PIDs": "4"
+    },
+    {
+      "CPUPerc": "0.29%",
+      "MemPerc": "33.75%",
+      "MemUsage": "43.2MiB / 128MiB",
+      "Name": "agent-platform-meta-worker-1",
+      "PIDs": "3"
+    },
+    {
+      "CPUPerc": "1.65%",
+      "MemPerc": "41.58%",
+      "MemUsage": "53.22MiB / 128MiB",
+      "Name": "agent-platform-worker-1",
+      "PIDs": "3"
+    },
+    {
+      "CPUPerc": "0.00%",
+      "MemPerc": "37.34%",
+      "MemUsage": "47.8MiB / 128MiB",
+      "Name": "agent-platform-whatsapp-worker-1",
+      "PIDs": "3"
+    },
+    {
+      "CPUPerc": "1.49%",
+      "MemPerc": "69.76%",
+      "MemUsage": "446.5MiB / 640MiB",
+      "Name": "myalgodesk-api-1",
+      "PIDs": "15"
+    },
+    {
+      "CPUPerc": "89.23%",
+      "MemPerc": "18.14%",
+      "MemUsage": "92.85MiB / 512MiB",
+      "Name": "myalgodesk-execution-1",
+      "PIDs": "4"
+    },
+    {
+      "CPUPerc": "1.42%",
+      "MemPerc": "14.36%",
+      "MemUsage": "73.54MiB / 512MiB",
+      "Name": "myalgodesk-web-1",
+      "PIDs": "12"
+    },
+    {
+      "CPUPerc": "2.60%",
+      "MemPerc": "4.24%",
+      "MemUsage": "5.434MiB / 128MiB",
+      "Name": "agent-platform-turn-1",
+      "PIDs": "6"
+    },
+    {
+      "CPUPerc": "8.17%",
+      "MemPerc": "12.13%",
+      "MemUsage": "15.53MiB / 128MiB",
+      "Name": "myalgodesk-proxy-1",
+      "PIDs": "9"
+    },
+    {
+      "CPUPerc": "4.62%",
+      "MemPerc": "43.29%",
+      "MemUsage": "83.11MiB / 192MiB",
+      "Name": "agent-platform-db-1",
+      "PIDs": "20"
+    },
+    {
+      "CPUPerc": "3.16%",
+      "MemPerc": "52.53%",
+      "MemUsage": "201.7MiB / 384MiB",
+      "Name": "myalgodesk-db-1",
+      "PIDs": "16"
+    }
+  ]
+}

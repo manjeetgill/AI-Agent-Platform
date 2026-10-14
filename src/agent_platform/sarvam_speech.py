@@ -11,9 +11,13 @@ import wave
 
 import httpx
 
+MODELS = {'asr': 'saaras:v3', 'tts': 'bulbul:v3'}
+
 
 class SarvamSpeechError(ValueError):
-    pass
+    def __init__(self, message, code='FAILED'):
+        self.code = code
+        super().__init__(message)
 
 
 def key():
@@ -37,8 +41,9 @@ async def request(path, **kwargs):
                 if len(raw) > 4_000_000:
                     raise ValueError('Response too large')
             return json.loads(raw)
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        raise SarvamSpeechError('Sarvam speech unavailable; no automatic retry') from None
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
+        from .voice_failures import failure_code
+        raise SarvamSpeechError('Sarvam speech unavailable; no automatic retry', failure_code(error)) from None
 
 
 async def transcribe(pcm):
@@ -51,7 +56,7 @@ async def transcribe(pcm):
         wav.setframerate(16000)
         wav.writeframes(pcm)
     result = await request('speech-to-text', files={'file': ('turn.wav', out.getvalue(), 'audio/wav')},
-                           data={'model': 'saaras:v3', 'mode': 'codemix', 'language_code': 'unknown'})
+                           data={'model': MODELS['asr'], 'mode': 'codemix', 'language_code': 'unknown'})
     transcript = result.get('transcript') if isinstance(result, dict) else None
     if not isinstance(transcript, str) or len(transcript) > 1500:
         raise SarvamSpeechError('Invalid Sarvam transcript')
@@ -63,7 +68,7 @@ async def speak(text):
         raise SarvamSpeechError('Speech text must contain 1..1200 characters')
     result = await request('text-to-speech', json={
         'text': text, 'language_code': 'hi-IN' if re.search(r'[\u0900-\u097f]', text) else 'en-IN',
-        'model': 'bulbul:v3', 'speaker': 'shubh', 'speech_sample_rate': 16000,
+        'model': MODELS['tts'], 'speaker': 'shubh', 'speech_sample_rate': 16000,
         'output_audio_codec': 'wav',
     })
     try:

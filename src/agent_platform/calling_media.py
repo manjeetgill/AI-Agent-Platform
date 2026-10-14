@@ -5,15 +5,29 @@ import fractions
 import json
 import os
 import time
+from contextlib import nullcontext
+from contextvars import ContextVar
 from uuid import uuid4
 
-from . import calling_audio, voice_ice
+from . import calling_audio, voice_config, voice_ice, voice_usage
+from .voice_failures import failure_code
+
+_stage = ContextVar('audio_turn_stage', default='audio_turn')
+
+
+class StageFailure(Exception):
+    def __init__(self, stage, code):
+        self.stage, self.code = stage, code
+        super().__init__(code)
+
+
 
 
 def available():
     try:
         import aiortc  # noqa: F401
         import av  # noqa: F401
+        import webrtcvad  # noqa: F401
 
         calling_audio.key()
         calling_audio.speech_key()
@@ -41,6 +55,14 @@ class Session:
         self.tasks, self.closed = set(), False
         self.audio = bytearray()
         self.busy = False
+        self.turn_task = None
+        self.partial_task = None
+        self.utterance = 0
+        self.generation = 0
+        self.profile = voice_config.current().model_dump()
+        self.event = None
+        self.meter = None
+        self.supports_streaming = False
         self.timer = self.spawn(self.deadline())
         self.greeted = False
         owner = self
@@ -75,9 +97,12 @@ class Session:
         async def state_changed():
             if self.pc.connectionState == "connected" and not self.greeted:
                 self.greeted = True
-                self.spawn(self.welcome())
+                await self.emit("connected")
+                self.turn_task = self.spawn(self.welcome())
+            elif self.pc.connectionState == "disconnected":
+                self.spawn(self.disconnect_grace())
             elif self.pc.connectionState == "failed":
-                await self.close()
+                await self.fail('connection')
 
     def spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -86,76 +111,218 @@ class Session:
         def finished(done):
             self.tasks.discard(done)
             if not done.cancelled() and done.exception() and not self.closed:
-                self.spawn(self.close())
+                self.spawn(self.fail('media_task'))
 
         task.add_done_callback(finished)
         return task
 
+    async def emit(self, kind, details=None, text=None):
+        if self.event:
+            await self.event(kind, details, text)
+
+    async def fail(self, stage):
+        if self.closed:
+            return
+        try:
+            await self.emit('failed', {'stage': stage, 'outcome': 'failed'})
+        finally:
+            await self.close()
+
     async def welcome(self):
+        generation = self.generation
         self.busy = True
         try:
-            await self.say("Hello. This is an AI assistant. " + self.greeting)
+            with voice_config.using(self.profile), (voice_usage.using(*self.meter) if self.meter else nullcontext()):
+                await asyncio.wait_for(self.say("Hello. This is an AI assistant. " + self.greeting, generation), 45)
         finally:
-            self.busy = False
+            if generation == self.generation:
+                self.busy = False
+
+    async def disconnect_grace(self):
+        await asyncio.sleep(5)
+        if not self.closed and self.pc.connectionState != 'connected':
+            await self.fail('network_disconnect')
 
     async def deadline(self):
         await asyncio.sleep(120)
         await self.close()
 
-    async def say(self, text):
+    async def interrupt(self):
+        self.generation += 1
+        self.utterance += 1
+        if self.partial_task:
+            self.partial_task.cancel()
+        self.audio.clear()
+        if self.turn_task and not self.turn_task.done():
+            self.turn_task.cancel()
+            # Do not wait on uncooperative upstream cancellation in the audio reader.
+        self.busy = False
+        await self.emit('interrupted', {'outcome': 'playback_cleared'})
+
+    async def partial(self, pcm, utterance):
+        # Local-only rolling recognition. Never send speculative duplicates to paid ASR.
+        try:
+            with voice_config.using(self.profile), (voice_usage.using(*self.meter) if self.meter else nullcontext()):
+                text = await asyncio.wait_for(calling_audio.transcribe(pcm), 10)
+            if text.strip() and utterance == self.utterance and not self.closed:
+                await self.emit('asr_partial', {'provider': 'local', 'outcome': 'provisional'}, text)
+        except Exception:  # noqa: BLE001 -- provisional failure must not expose upstream diagnostics
+            await self.emit('asr_partial', {'provider': 'local', 'outcome': 'unavailable'})
+
+    async def say(self, text, generation=None):
         import av
 
-        pcm, rate = await calling_audio.speak(text)
-        if len(pcm) > rate * 2 * 40:
-            raise ValueError("Speech response too long")
-        frame = av.AudioFrame(format="s16", layout="mono", samples=len(pcm) // 2)
-        frame.planes[0].update(pcm)
-        frame.sample_rate = rate
-        convert = av.AudioResampler(format="s16", layout="mono", rate=48000)
-        for f in convert.resample(frame) + convert.resample(None):
-            self.audio.extend(bytes(f.planes[0])[: f.samples * 2])
+        generation = self.generation if generation is None else generation
+        started = time.monotonic()
+        seconds = 0
+        async for pcm, rate in calling_audio.speech_chunks(text):
+            if self.closed or generation != self.generation:
+                return
+            if rate not in {8000, 16000, 22050, 24000, 44100, 48000} or not pcm or len(pcm) % 2:
+                raise ValueError("Unsupported speech response")
+            seconds += len(pcm) / (rate * 2)
+            if seconds > 40:
+                raise ValueError("Speech response too long")
+            frame = av.AudioFrame(format="s16", layout="mono", samples=len(pcm) // 2)
+            frame.planes[0].update(pcm)
+            frame.sample_rate = rate
+            convert = av.AudioResampler(format="s16", layout="mono", rate=48000)
+            for f in convert.resample(frame) + convert.resample(None):
+                if len(self.audio) + f.samples * 2 > 48000 * 2 * 40:
+                    raise ValueError('Voice output buffer exceeds limit')
+                self.audio.extend(bytes(f.planes[0])[: f.samples * 2])
+        await self.emit('tts', {'duration_ms': int((time.monotonic()-started)*1000),
+                              'provider': calling_audio.speech_provider('tts'), 'characters': len(text)})
 
     async def consume(self, track):
-        from array import array
-
+        from aiortc.mediastreams import MediaStreamError
         from av import AudioResampler
 
+        from .voice_vad import SpeechDetector
+
         resample = AudioResampler(format="s16", layout="mono", rate=16000)
-        chunks, quiet = bytearray(), 0
+        chunks, quiet, onset = bytearray(), 0, bytearray()
+        preroll = bytearray()
+        partial_at = 32000
+        config = voice_config.VoiceConfig.model_validate(self.profile)
+        detector = SpeechDetector(config.speech_threshold)
         try:
             while not self.closed:
                 incoming = await track.recv()
                 for frame in resample.resample(incoming):
                     raw = bytes(frame.planes[0])[: frame.samples * 2]
+                    loud = detector.feed(raw)
+                    preroll.extend(raw)
+                    del preroll[:-32000]  # preserve the first words before the VAD trigger
                     if self.busy or self.audio:
-                        chunks.clear()
-                        quiet = 0
-                        continue
-                    samples = array("h", raw)
-                    loud = bool(samples) and sum(abs(x) for x in samples) / len(samples) > 300
-                    if loud or chunks:
+                        if config.barge_in and loud:
+                            onset.extend(raw)
+                            if len(onset) < 6400:  # 200 ms detected speech, not a single noisy frame
+                                continue
+                            await self.interrupt()
+                            chunks = bytearray(preroll)
+                            onset.clear()
+                        else:
+                            onset.clear()
+                            continue
+                    elif loud or chunks:
                         chunks.extend(raw)
-                        quiet = 0 if loud else quiet + len(raw)
-                    if len(chunks) >= 384000 or (chunks and quiet >= 25600):
+                    quiet = 0 if loud else quiet + len(raw)
+                    if config.partial_transcripts and config.asr == 'local' and len(chunks) >= partial_at and partial_at <= 352000 and (not self.partial_task or self.partial_task.done()):
+                        self.partial_task = self.spawn(self.partial(bytes(chunks), self.utterance))
+                        partial_at += 32000
+                    if len(chunks) >= 384000 or (chunks and quiet >= config.silence_ms * 32):
+                        self.utterance += 1
+                        if self.partial_task:
+                            self.partial_task.cancel()
                         self.busy = True
-                        self.spawn(self.speech_turn(bytes(chunks)))
+                        self.turn_task = self.spawn(self.speech_turn(bytes(chunks[:384000])))
                         chunks.clear()
                         quiet = 0
-        except Exception:  # noqa: BLE001 -- no audio/transcripts in exceptions or logs
+                        partial_at = 32000
+        except MediaStreamError:
+            # Browser End call stops its track before the HTTP end request arrives.
+            # A normal end-of-stream is not a media decoder failure. ICE failure is
+            # reported separately by connectionstatechange.
             await self.close()
+        except Exception:  # noqa: BLE001 -- no audio/transcripts in exceptions or logs
+            await self.fail('media_receive')
 
     async def speech_turn(self, pcm):
+        generation = self.generation
         try:
-            text = await calling_audio.transcribe(pcm)
-            if text.strip():
-                reply = await self.respond(text)
-                await self.say(reply["text"])
-                if reply["action"] != "continue":
-                    while self.audio and not self.closed:
-                        await asyncio.sleep(0.1)
-                    await self.close()
+            with voice_config.using(self.profile) as config, (voice_usage.using(*self.meter) if self.meter else nullcontext()):
+                await asyncio.wait_for(self.process_turn(pcm, generation), config.turn_timeout_seconds)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:  # noqa: BLE001 -- never emit raw provider errors
+            try:
+                await self.emit('turn_failed', {'outcome': failure_code(error),
+                    'stage': error.stage if isinstance(error, StageFailure) else 'audio_turn'})
+            finally:
+                await self.close()
         finally:
-            self.busy = False
+            if generation == self.generation:
+                self.busy = False
+
+    async def process_turn(self, pcm, generation):
+        token = _stage.set('asr')
+        try:
+            return await self._process_turn(pcm, generation)
+        except asyncio.CancelledError:
+            # wait_for cancels the child task on the whole-turn deadline. Leave
+            # the outer turn responsible for closing; cancellation also covers barge-in.
+            raise
+        except Exception as error:  # noqa: BLE001 -- redact provider diagnostics at the media boundary
+            raise StageFailure(_stage.get(), failure_code(error)) from None
+        finally:
+            _stage.reset(token)
+
+    async def _process_turn(self, pcm, generation):
+        started = time.monotonic()
+        text = await calling_audio.transcribe(pcm)
+        await self.emit('asr', {'duration_ms': int((time.monotonic()-started)*1000),
+                              'provider': calling_audio.speech_provider()})
+        if not text.strip() or generation != self.generation or self.closed:
+            return
+        await self.emit('user', {'characters': len(text)}, text)
+        _stage.set('reasoning')
+        started = time.monotonic()
+        streamed = []
+
+        async def on_claim(quotation):
+            if generation != self.generation or self.closed:
+                raise asyncio.CancelledError()
+            # Never persist speculative raw tokens. This callback receives a validated quotation.
+            _stage.set('tts')
+            await self.say(quotation, generation)
+            _stage.set('reasoning')
+            streamed.append(quotation)
+            await self.emit('streamed_claim', {'characters': len(quotation), 'outcome': 'source_validated'})
+
+        if self.supports_streaming and voice_config.current().stream_grounded_quotes:
+            reply = await self.respond(text, on_claim)
+        else:
+            reply = await self.respond(text)
+        await self.emit('reasoning', {'duration_ms': int((time.monotonic()-started)*1000),
+                                    'provider': voice_config.current().reasoning,
+                                    'model': voice_config.current().model, 'outcome': reply['action']})
+        if generation != self.generation or self.closed:
+            return
+        await self.emit('assistant', {'characters': len(reply['text'])}, reply['text'])
+        if not streamed:
+            _stage.set('tts')
+            await self.say(reply["text"], generation)
+        elif reply['action'] != 'continue':
+            # An incomplete stream must not keep emitting a newly generated answer.
+            await self.emit('turn_failed', {'stage': 'stream_completion', 'outcome': 'failed'})
+            await self.close()
+            return
+        if reply["action"] != "continue" and generation == self.generation:
+            while self.audio and not self.closed and generation == self.generation:
+                await asyncio.sleep(0.1)
+            if generation == self.generation:
+                await self.close()
 
     async def offer(self):
         await self.pc.setLocalDescription(await self.pc.createOffer())

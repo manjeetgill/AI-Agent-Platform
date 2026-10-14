@@ -42,7 +42,7 @@ async def main():
                 await db.execute('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO agent_runtime_api,agent_runtime_worker')
                 await db.execute('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO agent_runtime_api,agent_runtime_worker')
                 await db.execute('REVOKE INSERT,UPDATE,DELETE ON agent_schema_migrations FROM agent_runtime_api,agent_runtime_worker')
-            env.update(AI_PLATFORM_OPERATOR_DATABASE_URL=urls['worker'],AI_PLATFORM_API_DATABASE_URL=urls['api'],AI_PLATFORM_DATABASE_URL=urls['worker'],AGENT_TEST_DATABASE_URL=urls['worker'],AGENT_TEST_API_URL=urls['api'])
+            env.update(AGENT_TEST_MIGRATION_URL=urls['migration'],AI_PLATFORM_OPERATOR_DATABASE_URL=urls['worker'],AI_PLATFORM_API_DATABASE_URL=urls['api'],AI_PLATFORM_DATABASE_URL=urls['worker'],AGENT_TEST_DATABASE_URL=urls['worker'],AGENT_TEST_API_URL=urls['api'])
             result=await asyncio.to_thread(subprocess.run,[sys.executable,'-m','pytest','-q',*(sys.argv[1:] or ['tests/python'])],env=env,cwd=ROOT,check=False)
             return result.returncode
         finally:

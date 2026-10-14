@@ -1,0 +1,15 @@
+{
+  "name": "node",
+  "command": [
+    "/Users/manjeet/.nvm/versions/node/v22.13.0/bin/node",
+    "--test",
+    "tests/node/dealagent-probe.test.mjs",
+    "tests/node/monitor.test.mjs",
+    "tests/node/server-retailer.test.mjs",
+    "tests/javascript/meta-connect.test.mjs",
+    "browser-extension/retailer-policy.test.mjs",
+    "browser-extension/retailer-worker.test.mjs"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.18
+}

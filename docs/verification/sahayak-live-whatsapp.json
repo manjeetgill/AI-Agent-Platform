@@ -1,0 +1,15 @@
+{
+  "app": "Sahayak",
+  "app_id": "812f044e-c1b7-4d88-b57f-56412ec75814",
+  "channel_id": "ed9f35a0-3167-4e56-bc94-340f4cce3164",
+  "message_id": "0cf1c893-9ec0-4313-93bc-8607e4a49fcd",
+  "received_at": "2026-10-11T11:53:50+00:00",
+  "status": "SENT",
+  "delivery": "delivered",
+  "provider_accepted": true,
+  "execution_mode": "SAHAYAK",
+  "webhook_verified": true,
+  "reply_nonempty": true,
+  "tested_at": "2026-10-11",
+  "status_verified": true
+}

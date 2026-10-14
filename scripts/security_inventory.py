@@ -10,6 +10,8 @@ from psycopg.rows import dict_row
 
 ROOT = Path(__file__).resolve().parents[1]
 GLOBAL = {
+    'voice_media_nonces': 'Private authenticated control replay digests and expiry; no caller content.',
+    'voice_rate_cards': 'Operator-reviewed public pricing metadata; runtime read-only.',
     'agent_schema_migrations': 'Immutable schema checksums; migration operator only.',
     'platform_worker_heartbeats': 'Global worker liveness and tool versions; no business rows.',
     'whatsapp_worker_health': 'Global worker liveness.',

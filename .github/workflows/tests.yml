@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        extras: [dev, 'dev,voice']
+        extras: ['dev,financial', 'dev,voice,financial']
     services:
       postgres:
         image: postgres:17-bookworm
@@ -25,6 +25,10 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -e '.[${{ matrix.extras }}]'
+      - run: pip check
+      - run: pip install -e '.[audit]'
+      - run: mypy
+      - run: pip-audit --skip-editable
       - run: ruff check src scripts tests/python
       - run: python scripts/test_restricted.py tests/python
       - uses: actions/setup-node@v4

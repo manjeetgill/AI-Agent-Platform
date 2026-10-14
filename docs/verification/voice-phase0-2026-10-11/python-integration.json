@@ -1,0 +1,10 @@
+{
+  "name": "python-integration",
+  "command": [
+    ".venv/bin/python",
+    "scripts/test_orchestration_local.py",
+    "tests/python"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 128.92
+}

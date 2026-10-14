@@ -35,6 +35,9 @@ def install_bridge(app, local, *, transport=None):
     # create_app installs same-process monitor routes. This console has a separate
     # pilot database; use the real operations service instead of misrouting app keys.
     app.router.routes[:]=[r for r in app.router.routes if not getattr(r,'path','').startswith('/monitor')]
+    # The console forwards to the independently configured operations service.
+    # Its own database's monitor flag must not intercept these proxy requests.
+    app.state.workspace_monitor_bridge = True
 
     @app.api_route('/monitor',methods=['GET'],include_in_schema=False)
     @app.api_route('/monitor/{path:path}',methods=['GET','POST'],include_in_schema=False)

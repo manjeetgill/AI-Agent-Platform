@@ -20,7 +20,7 @@ async def schema_ready(connection):
         return False
     rows = await (await connection.execute('SELECT name,sha256 FROM agent_schema_migrations')).fetchall()
     applied = {row['name']: row['sha256'] for row in rows}
-    return all(applied.get(name) == digest for name, digest in expected.items())
+    return applied == expected
 
 
 async def migrate():

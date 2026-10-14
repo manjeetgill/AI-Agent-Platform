@@ -124,7 +124,12 @@ async def serve(registry):
             from .server_retailer import runtime_configured
             async with reporting(pool, registry, lambda: bool(
                     server_browser and not server_browser.done() and runtime_configured())):
+                retention_checked = 0.0
                 while True:
+                    if asyncio.get_running_loop().time() - retention_checked > 60:
+                        from .voice_events import expire
+                        await expire(pool)
+                        retention_checked = asyncio.get_running_loop().time()
                     from .flags import enabled
                     if enabled('AI_AUTOMATIONS'):
                         from .automation import tick as automation_tick

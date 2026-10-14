@@ -27,10 +27,16 @@ def install(app, legacy_key):
         operator_access.set(False)
         path = request.url.path
         if path == '/monitor' or path.startswith('/monitor/'):
-            from .local_monitor import local
             try:
-                local(request)
-                operator_access.set(True)
+                if getattr(request.app.state, 'workspace_monitor_bridge', False):
+                    from .console_app import local as console_local
+                    console_local(request)
+                    # A bridge only forwards fixed-origin HTTP requests. It must
+                    # not gain access to its console database's operator pool.
+                else:
+                    from .local_monitor import local
+                    local(request)
+                    operator_access.set(True)
             except HTTPException as exc:
                 return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
         if path.startswith('/console/'):

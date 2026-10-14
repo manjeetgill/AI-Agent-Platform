@@ -1,0 +1,16 @@
+{
+  "name": "current-lint",
+  "checkout": "/Users/manjeet/AI-Agent-Python-clean",
+  "command": [
+    "/Users/manjeet/Documents/ChatGPT/Algo/AI-Agent-Platform/.venv/bin/ruff",
+    "check",
+    "--no-cache",
+    "src",
+    "scripts",
+    "tests/python",
+    "--output-format",
+    "json"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 0.07
+}

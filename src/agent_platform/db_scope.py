@@ -77,3 +77,15 @@ def bound_identity(claims):
         yield
     finally:
         identity.reset(marker)
+
+
+class BoundPool:
+    """A voice call retains its authenticated scope beyond the HTTP request."""
+    def __init__(self, pool, claims):
+        self.pool, self.claims = pool, dict(claims)
+
+    @asynccontextmanager
+    async def connection(self, timeout=None):
+        with bound_identity(self.claims):
+            async with self.pool.connection(timeout=timeout) as conn:
+                yield conn

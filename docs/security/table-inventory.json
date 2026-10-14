@@ -796,7 +796,7 @@
         "notification_sms_jobs"
       ],
       "classification": "tenant",
-      "reason": "SMS notifications belong to one tenant, application and owner."
+      "reason": "Direct tenant identity; owner/app filters also required where present."
     },
     {
       "name": "notification_sms_jobs",
@@ -812,7 +812,7 @@
         "platform_external_users"
       ],
       "classification": "tenant",
-      "reason": "SMS notifications belong to one tenant, application and owner."
+      "reason": "Direct tenant identity; owner/app filters also required where present."
     },
     {
       "name": "platform_agent_templates",
@@ -1247,6 +1247,65 @@
       "reason": "Inherited ownership through foreign-key parent telephony_sessions."
     },
     {
+      "name": "voice_media_nonces",
+      "rls": false,
+      "forced": false,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Private authenticated control replay digests and expiry; no caller content."
+    },
+    {
+      "name": "voice_rate_cards",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [],
+      "classification": "global/operator",
+      "reason": "Operator-reviewed public pricing metadata; runtime read-only."
+    },
+    {
+      "name": "voice_reconciliations",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "voice_usage_ledger"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "voice_spend_limits",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "voice_usage_ledger",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [
+        "app_id"
+      ],
+      "parents": [
+        "platform_apps",
+        "web_voice_sessions"
+      ],
+      "classification": "app",
+      "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
       "name": "web_voice_agents",
       "rls": true,
       "forced": true,
@@ -1259,6 +1318,17 @@
       ],
       "classification": "app",
       "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
+    },
+    {
+      "name": "web_voice_events",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "web_voice_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent web_voice_sessions."
     },
     {
       "name": "web_voice_handoffs",
@@ -1295,6 +1365,17 @@
       "reason": "Resolve app ownership through platform_apps; preserve owner/private sharing rules."
     },
     {
+      "name": "web_voice_transcripts",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "web_voice_sessions"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent web_voice_sessions."
+    },
+    {
       "name": "web_voice_turns",
       "rls": true,
       "forced": true,
@@ -1304,6 +1385,17 @@
       ],
       "classification": "app",
       "reason": "Inherited ownership through foreign-key parent web_voice_sessions."
+    },
+    {
+      "name": "web_voice_versions",
+      "rls": true,
+      "forced": true,
+      "scope_columns": [],
+      "parents": [
+        "web_voice_agents"
+      ],
+      "classification": "app",
+      "reason": "Inherited ownership through foreign-key parent web_voice_agents."
     },
     {
       "name": "whatsapp_alert_deliveries",
@@ -1912,6 +2004,10 @@
       "line": 34
     },
     {
+      "file": "src/agent_platform/db_scope.py",
+      "line": 90
+    },
+    {
       "file": "src/agent_platform/delegation.py",
       "line": 87
     },
@@ -2025,35 +2121,39 @@
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 233
+      "line": 242
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 279
+      "line": 289
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 319
+      "line": 329
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 355
+      "line": 365
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 372
+      "line": 382
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 166
+      "line": 168
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 246
+      "line": 256
     },
     {
       "file": "src/agent_platform/knowledge.py",
-      "line": 203
+      "line": 205
+    },
+    {
+      "file": "src/agent_platform/knowledge.py",
+      "line": 209
     },
     {
       "file": "src/agent_platform/local_onboarding.py",
@@ -2062,6 +2162,22 @@
     {
       "file": "src/agent_platform/local_onboarding.py",
       "line": 206
+    },
+    {
+      "file": "src/agent_platform/media_contract.py",
+      "line": 69
+    },
+    {
+      "file": "src/agent_platform/media_service.py",
+      "line": 61
+    },
+    {
+      "file": "src/agent_platform/media_service.py",
+      "line": 90
+    },
+    {
+      "file": "src/agent_platform/media_service.py",
+      "line": 95
     },
     {
       "file": "src/agent_platform/memory_embeddings.py",
@@ -2492,6 +2608,30 @@
       "line": 59
     },
     {
+      "file": "src/agent_platform/sms_api.py",
+      "line": 78
+    },
+    {
+      "file": "src/agent_platform/sms_api.py",
+      "line": 95
+    },
+    {
+      "file": "src/agent_platform/sms_api.py",
+      "line": 108
+    },
+    {
+      "file": "src/agent_platform/sms_service.py",
+      "line": 34
+    },
+    {
+      "file": "src/agent_platform/sms_service.py",
+      "line": 68
+    },
+    {
+      "file": "src/agent_platform/sms_service.py",
+      "line": 102
+    },
+    {
       "file": "src/agent_platform/task_agent_api.py",
       "line": 55
     },
@@ -2732,6 +2872,14 @@
       "line": 373
     },
     {
+      "file": "src/agent_platform/voice_events.py",
+      "line": 15
+    },
+    {
+      "file": "src/agent_platform/voice_events.py",
+      "line": 25
+    },
+    {
       "file": "src/agent_platform/voice_handoffs.py",
       "line": 53
     },
@@ -2748,36 +2896,88 @@
       "line": 146
     },
     {
-      "file": "src/agent_platform/web_voice.py",
-      "line": 109
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 69
+    },
+    {
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 105
+    },
+    {
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 26
+    },
+    {
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 79
+    },
+    {
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 82
+    },
+    {
+      "file": "src/agent_platform/voice_runtime.py",
+      "line": 121
+    },
+    {
+      "file": "src/agent_platform/voice_specialists.py",
+      "line": 23
+    },
+    {
+      "file": "src/agent_platform/voice_usage.py",
+      "line": 43
+    },
+    {
+      "file": "src/agent_platform/voice_usage.py",
+      "line": 79
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 191
+      "line": 149
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 254
+      "line": 247
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 296
+      "line": 322
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 342
+      "line": 340
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 366
+      "line": 357
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 408
+      "line": 402
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 427
+      "line": 449
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 474
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 520
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 538
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 550
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 562
     },
     {
       "file": "src/agent_platform/web_voice.py",
@@ -2785,23 +2985,51 @@
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 186
+      "line": 594
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 548
+      "line": 601
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 352
+      "line": 620
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 528
+      "line": 714
     },
     {
       "file": "src/agent_platform/web_voice.py",
-      "line": 563
+      "line": 753
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 762
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 239
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 725
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 776
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 460
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 213
+    },
+    {
+      "file": "src/agent_platform/web_voice.py",
+      "line": 707
     },
     {
       "file": "src/agent_platform/whatsapp.py",
@@ -2941,39 +3169,43 @@
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 210
+      "line": 279
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 92
+      "line": 119
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 116
+      "line": 153
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 127
+      "line": 164
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 138
+      "line": 175
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 161
+      "line": 200
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 170
+      "line": 223
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 187
+      "line": 232
     },
     {
       "file": "src/agent_platform/whatsapp_outbound.py",
-      "line": 240
+      "line": 249
+    },
+    {
+      "file": "src/agent_platform/whatsapp_outbound.py",
+      "line": 313
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
@@ -2985,35 +3217,35 @@
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 160
+      "line": 161
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 170
+      "line": 171
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 221
+      "line": 222
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 67
+      "line": 68
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 127
+      "line": 128
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 81
+      "line": 82
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 89
+      "line": 90
     },
     {
       "file": "src/agent_platform/whatsapp_worker.py",
-      "line": 153
+      "line": 154
     },
     {
       "file": "src/agent_platform/worker_readiness.py",
@@ -3029,8 +3261,8 @@
     }
   ],
   "summary": {
-    "tables": 111,
-    "without_rls": 5,
+    "tables": 119,
+    "without_rls": 6,
     "unclassified": 0
   },
   "note": "Classification is an inventory, not proof of runtime isolation. Connection sites require scope review."

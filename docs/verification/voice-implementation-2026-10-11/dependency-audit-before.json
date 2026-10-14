@@ -1,0 +1,54 @@
+{
+  "scope": "installed Python environment; editable project omitted by audit tool",
+  "packages_checked": 67,
+  "findings": [
+    {
+      "name": "cryptography",
+      "version": "46.0.7",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-3554",
+          "fix_versions": [
+            "49.0.0"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3552",
+          "fix_versions": [
+            "50.0.0"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3553",
+          "fix_versions": [
+            "49.0.0"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3552",
+          "fix_versions": [
+            "50.0.0"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3553",
+          "fix_versions": [
+            "49.0.0"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-3554",
+          "fix_versions": [
+            "49.0.0"
+          ]
+        },
+        {
+          "id": "GHSA-537c-gmf6-5ccf",
+          "fix_versions": [
+            "48.0.1"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,170 @@
+TAP version 13
+# Subtest: only canonical allowed product routes and local pairing, no URL credentials or arbitrary JS
+ok 1 - only canonical allowed product routes and local pairing, no URL credentials or arbitrary JS
+  ---
+  duration_ms: 2.251375
+  ...
+# Subtest: Croma uses product price, not EMI; contradictory selected specification is flagged
+ok 2 - Croma uses product price, not EMI; contradictory selected specification is flagged
+  ---
+  duration_ms: 1.23375
+  ...
+# Subtest: JioMart mismatched pack sizes are unsafe even with delivery postcode
+ok 3 - JioMart mismatched pack sizes are unsafe even with delivery postcode
+  ---
+  duration_ms: 0.347333
+  ...
+# Subtest: Zepto reads split currency DOM, requires confirmed delivery location
+ok 4 - Zepto reads split currency DOM, requires confirmed delivery location
+  ---
+  duration_ms: 0.352375
+  ...
+# Subtest: Instamart scopes price away from recommended products and marks unconfirmed pack
+ok 5 - Instamart scopes price away from recommended products and marks unconfirmed pack
+  ---
+  duration_ms: 0.209833
+  ...
+# Subtest: multiple prices, missing markup, redirect, expired and blocked pages fail closed
+ok 6 - multiple prices, missing markup, redirect, expired and blocked pages fail closed
+  ---
+  duration_ms: 0.127916
+  ...
+# Subtest: hydration ticks resume one saved job without opening duplicate tabs
+ok 7 - hydration ticks resume one saved job without opening duplicate tabs
+  ---
+  duration_ms: 1.659459
+  ...
+# Subtest: ambiguous opening crash never opens another tab
+ok 8 - ambiguous opening crash never opens another tab
+  ---
+  duration_ms: 0.167709
+  ...
+# Subtest: stop removes local authority even when server is offline
+ok 9 - stop removes local authority even when server is offline
+  ---
+  duration_ms: 0.189083
+  ...
+# Subtest: missing Meta configuration does not fall back to Chakra
+ok 10 - missing Meta configuration does not fall back to Chakra
+  ---
+  duration_ms: 1.155958
+  ...
+# Subtest: direct signup retains only ID and checks authoritative completion
+ok 11 - direct signup retains only ID and checks authoritative completion
+  ---
+  duration_ms: 0.279416
+  ...
+# Subtest: reload reads saved session without starting another signup
+ok 12 - reload reads saved session without starting another signup
+  ---
+  duration_ms: 0.092708
+  ...
+# Subtest: fresh validated price keeps source time and unknown fees
+ok 13 - fresh validated price keeps source time and unknown fees
+  ---
+  duration_ms: 2.773792
+  ...
+# Subtest: http_403 never produces price evidence or invokes parser
+ok 14 - http_403 never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.363292
+  ...
+# Subtest: robots_restricted never produces price evidence or invokes parser
+ok 15 - robots_restricted never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.068959
+  ...
+# Subtest: captcha never produces price evidence or invokes parser
+ok 16 - captcha never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.056583
+  ...
+# Subtest: login_required never produces price evidence or invokes parser
+ok 17 - login_required never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.110792
+  ...
+# Subtest: http_429 never produces price evidence or invokes parser
+ok 18 - http_429 never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.054084
+  ...
+# Subtest: javascript_shell never produces price evidence or invokes parser
+ok 19 - javascript_shell never produces price evidence or invokes parser
+  ---
+  duration_ms: 0.093333
+  ...
+# Subtest: location and rendering requirements never imply verified prices
+ok 20 - location and rendering requirements never imply verified prices
+  ---
+  duration_ms: 0.0875
+  ...
+# Subtest: parser validation failures never become zero-priced observations
+ok 21 - parser validation failures never become zero-priced observations
+  ---
+  duration_ms: 0.257541
+  ...
+# Subtest: configured domain permits its www form, never unrelated hosts
+ok 22 - configured domain permits its www form, never unrelated hosts
+  ---
+  duration_ms: 0.279042
+  ...
+# Subtest: failed robots fetch is not misreported as an explicit robots disallow
+ok 23 - failed robots fetch is not misreported as an explicit robots disallow
+  ---
+  duration_ms: 0.112
+  ...
+# Subtest: uncertain outcomes allow reconciliation, never resume or retry
+ok 24 - uncertain outcomes allow reconciliation, never resume or retry
+  ---
+  duration_ms: 0.605667
+  ...
+# Subtest: elapsed time stops at terminal update and never fabricates missing usage
+ok 25 - elapsed time stops at terminal update and never fabricates missing usage
+  ---
+  duration_ms: 0.135416
+  ...
+# Subtest: evidence links cannot execute code or contain credentials
+ok 26 - evidence links cannot execute code or contain credentials
+  ---
+  duration_ms: 0.078333
+  ...
+# Subtest: stalled tasks describe recovery without offering blind execution
+ok 27 - stalled tasks describe recovery without offering blind execution
+  ---
+  duration_ms: 9.972125
+  ...
+# Subtest: renderer only allows HTTPS public IPv4 destinations and read methods
+ok 28 - renderer only allows HTTPS public IPv4 destinations and read methods
+  ---
+  duration_ms: 0.545041
+  ...
+# Subtest: server and extension use the same versioned DOM extraction
+ok 29 - server and extension use the same versioned DOM extraction
+  ---
+  duration_ms: 3.429166
+  ...
+# Subtest: DNS resolving to private IP never launches a browser
+ok 30 - DNS resolving to private IP never launches a browser
+  ---
+  duration_ms: 0.657917
+  ...
+# Subtest: fresh context, sandbox, blocked websockets, access denials and cleanup
+ok 31 - fresh context, sandbox, blocked websockets, access denials and cleanup
+  ---
+  duration_ms: 0.523708
+  ...
+# Subtest: navigation failure closes the browser and reports unavailability without raw errors
+ok 32 - navigation failure closes the browser and reports unavailability without raw errors
+  ---
+  duration_ms: 0.163166
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 32
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 103.271583

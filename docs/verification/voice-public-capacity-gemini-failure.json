@@ -1,0 +1,21 @@
+{
+  "status": "FAIL",
+  "concurrent_sessions": 2,
+  "waves_completed": 1,
+  "waves_requested": 2,
+  "duration_seconds": 39.57,
+  "overload_rejected": true,
+  "synthetic_audio": true,
+  "human_microphone_verified": false,
+  "scale_limit": "Only the configured two-call pilot tested; no higher capacity claim.",
+  "runs": [
+    {
+      "status": "FAIL",
+      "error_type": "RuntimeError"
+    },
+    {
+      "status": "FAIL",
+      "error_type": "RuntimeError"
+    }
+  ]
+}

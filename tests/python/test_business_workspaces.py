@@ -187,3 +187,69 @@ def test_saved_signup_resumes_and_prepares_one_clinic_channel(monkeypatch):
         for table in ('platform_service_keys','platform_external_users'):
             sql(f'DELETE FROM {table} WHERE app_id=%s',(workspace['app_id'],))
         sql('DELETE FROM platform_apps WHERE id=%s',(workspace['app_id'],))
+
+
+def test_expired_chakra_signup_requires_review_and_renews_once(monkeypatch):
+    from fastapi import HTTPException
+
+    from agent_platform.chakra_recovery import review
+    encryption(monkeypatch)
+    for name,value in {'AI_CHAKRA_PARTNER_TOKEN':'private-partner-token',
+        'AI_CHAKRA_WEBHOOK_SECRET':'s'*40, 'AI_CHAKRA_GRAPH_VERSION':'v26.0',
+        'AI_PLATFORM_PUBLIC_URL':'https://agents.example.test'}.items():
+        monkeypatch.setenv(name,value)
+    calls=[]
+    fail=False
+    async def fake(method,path,token,body=None):
+        calls.append(body)
+        if fail:
+            raise HTTPException(502,'Uncertain provider outcome')
+        return {'connectToken':'private-connect-token-'+'x'*40}
+    monkeypatch.setattr(chakra_onboarding,'provider',fake)
+    with environment(monkeypatch) as (client,_,key,_):
+        headers,_,_=setup(client,key,monkeypatch)
+        workspace,ha=business(client,headers,'recovery')
+        session=client.post('/v1/whatsapp/chakra/onboarding',headers=ha).json()['id']
+        route='/v1/whatsapp/chakra/onboarding/'+session
+        duplicate=client.post('/v1/whatsapp/chakra/onboarding',headers=ha)
+        assert duplicate.status_code==409 and duplicate.json()['detail']['session_id']==session
+        sql("UPDATE chakra_signup_sessions SET expires_at=now()-interval '1 minute' WHERE id=%s",(session,))
+        status=client.get(route,headers=ha).json()
+        assert status['authorization_expired'] and status['next_action']=='operator_review'
+        assert 'private-connect-token' not in str(status)
+        assert client.post(route+'/renew',headers=ha).status_code==409
+        assert len(calls)==1
+        async def approve(plugin=None):
+            async with AsyncConnectionPool(database(),open=False,kwargs={'row_factory':dict_row}) as pool:
+                await review(pool,session,reference='operator-fixture-review',plugin_id=plugin,no_connection=plugin is None)
+        asyncio.run(approve())
+        stranger={**ha,'X-External-User-ID':'someone-else'}
+        assert client.post(route+'/renew',headers=stranger).status_code==404
+        renewed=client.post(route+'/renew',headers=ha)
+        assert renewed.status_code==200,renewed.text
+        assert renewed.headers['cache-control']=='no-store'
+        assert calls[-1]['clientReferenceId']==session
+        assert client.post(route+'/renew',headers=ha).json()==renewed.json()
+        assert len(calls)==2
+        sql("UPDATE chakra_signup_sessions SET expires_at=now()-interval '1 minute' WHERE id=%s",(session,))
+        assert client.post(route+'/renew',headers=ha).status_code==409
+        plugin=uuid4()
+        asyncio.run(approve(plugin))
+        fail=True
+        assert client.post(route+'/renew',headers=ha).status_code==502
+        assert client.post(route+'/renew',headers=ha).status_code==409
+        assert len(calls)==3 and calls[-1]=={'pluginId':str(plugin)}
+        assert sql('SELECT state FROM chakra_signup_sessions WHERE id=%s',(session,))[0]['state']=='CHECK_REQUIRED'
+        # Even an operator cannot renew while the prior dispatch can still complete.
+        import pytest
+        with pytest.raises(ValueError,match='expired'):
+            asyncio.run(approve(plugin))
+        sql("UPDATE chakra_signup_sessions SET expires_at=now()-interval '1 minute' WHERE id=%s",(session,))
+        asyncio.run(approve(plugin))
+        fail=False
+        assert client.post(route+'/renew',headers=ha).status_code==200
+        assert client.post(route+'/complete',headers=ha,json={'plugin_id':str(uuid4())}).status_code==409
+        assert client.post(route+'/complete',headers=ha,json={'plugin_id':str(plugin)}).status_code==200
+        for table in ('platform_service_keys','platform_external_users'):
+            sql(f'DELETE FROM {table} WHERE app_id=%s',(workspace['app_id'],))
+        sql('DELETE FROM platform_apps WHERE id=%s',(workspace['app_id'],))

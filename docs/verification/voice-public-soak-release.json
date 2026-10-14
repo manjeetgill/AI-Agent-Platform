@@ -1,0 +1,23 @@
+{
+  "deployed": true,
+  "revision": "e838029263a6479f0d5acac6854fd10759d53693",
+  "checks": {
+    "https://myalgodesk.in/login": 200,
+    "https://agents.myalgodesk.in/v1/task-agents/tools": 401,
+    "https://agents.myalgodesk.in/v1/orchestration/automations": 401,
+    "https://agents.myalgodesk.in/v1/whatsapp/setup": 401,
+    "https://agents.myalgodesk.in/v1/connectors": 401,
+    "https://agents.myalgodesk.in/v1/notifications/sms/configuration": 401,
+    "https://agents.myalgodesk.in/v1/integrations/capability-readiness": 401,
+    "https://agents.myalgodesk.in/openapi.json": 404,
+    "https://agents.myalgodesk.in/console": 404,
+    "https://agents.myalgodesk.in/monitor": 404,
+    "https://agents.myalgodesk.in/setup": 404,
+    "https://shayak.myalgodesk.in/v1/connectors": 404,
+    "https://shayak.myalgodesk.in/v1/orchestration/automations": 404,
+    "https://agents.myalgodesk.in/v1/voice/agents": 401,
+    "https://agents.myalgodesk.in/v1/voice/health": 401,
+    "https://agents.myalgodesk.in/v1/voice/sessions": 401,
+    "https://agents.myalgodesk.in/internal/v1/status": 404
+  }
+}

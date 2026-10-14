@@ -13,7 +13,8 @@ from .tasks import Strict
 
 # A parent backend must already hold every permission it can delegate.
 Feature = Literal['whatsapp_support', 'whatsapp_notifications', 'whatsapp_calling',
-                  'internet_voice', 'telephone_voice', 'memory']
+                  'internet_voice', 'telephone_voice', 'memory', 'agent_tasks',
+                  'knowledge', 'email', 'sms', 'api_feeds', 'schedules']
 
 FEATURE_SCOPES: dict[Feature, set[str]] = {
     'whatsapp_support': {'channels:read', 'channels:write', 'knowledge:read',
@@ -26,6 +27,12 @@ FEATURE_SCOPES: dict[Feature, set[str]] = {
                         'telephony:write', 'knowledge:read', 'knowledge:write',
                         'knowledge:publish'},
     'memory': {'memory:read', 'memory:write', 'memory:review'},
+    'agent_tasks': {'tasks:read', 'tasks:write', 'tasks:approve', 'agents:read', 'agents:write', 'agents:run'},
+    'knowledge': {'knowledge:read', 'knowledge:write', 'knowledge:publish'},
+    'email': {'notifications:read', 'notifications:send'},
+    'sms': {'notifications:read', 'notifications:send'},
+    'api_feeds': {'tasks:read', 'tasks:write', 'agents:run'},
+    'schedules': {'tasks:read', 'tasks:write', 'tasks:approve', 'agents:write', 'agents:run'},
 }
 
 
@@ -37,7 +44,7 @@ class Business(Strict):
 class KeyRequest(Strict):
     days: int = Field(default=30, ge=1, le=90)
     features: list[Feature] = Field(default_factory=lambda: ['whatsapp_support'],
-                                    min_length=1, max_length=6)
+                                    min_length=1, max_length=len(FEATURE_SCOPES))
 
 
 def public(row):

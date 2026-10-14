@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "app": "Sahayak",
+  "isolated_database": true,
+  "actual_business_code": true,
+  "synthetic_patient_data": true,
+  "outbound_messages": 0,
+  "telephone_calls": 0,
+  "coverage": [
+    "signed Python telephone and internet-voice HTTP contracts",
+    "booking requires final confirmation",
+    "duplicate event protection",
+    "clinic isolation",
+    "caller ID cannot reveal history",
+    "unknown-outcome fence"
+  ],
+  "public_audio_end_to_end": false
+}

@@ -89,6 +89,7 @@ async def respond(pool, gateway, agent, user, text, request_key, history):
         documents=agent["documents"],
         conversation=history,
         language=language,
+        retain_content=agent.get("retain_content", True),
     )
     if not result["claims"] or result["missing"]:
         return {"action": "handoff", "text": agent["fallback"]}

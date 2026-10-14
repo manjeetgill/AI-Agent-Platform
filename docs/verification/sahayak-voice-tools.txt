@@ -1,0 +1,12 @@
+
+ RUN  v2.1.9 /Users/manjeet/Desktop/sahayak
+
+ ✓ apps/api/test/calling-bridge.test.ts (7 tests) 1615ms
+   ✓ accepts the deployed Python calling contract over HTTP 405ms
+   ✓ books through the real internet voice client with an app caller identity 636ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  15:50:52
+   Duration  2.48s (transform 294ms, setup 0ms, collect 694ms, tests 1.62s, environment 0ms, prepare 38ms)
+
