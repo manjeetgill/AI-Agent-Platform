@@ -153,6 +153,17 @@ def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
             # Repeating the same active subscription is safe and does not need a new challenge.
             assert client.put(path + '/subscription', headers=headers,
                               json={'recipient': recipient, 'consented': True}).status_code == 200
+            # Recover a valid provider-persisted message if the webhook left its
+            # challenge pending; another app user must still be unable to read it.
+            recovery = client.post(path + '/verifications', headers=other,
+                                   json={'recipient': recipient}).json()
+            conversation = sql('SELECT id FROM whatsapp_conversations WHERE channel_id=%s AND customer=%s',
+                               (channel['id'], recipient))[0]['id']
+            sql('''INSERT INTO whatsapp_messages(id,conversation_id,provider_id,body,received_at,status)
+                VALUES(%s,%s,%s,%s,now(),'PENDING')''',
+                (uuid4(), conversation, 'wamid.persisted-verification', recovery['message']))
+            assert client.get(path + '/verifications/' + recovery['id'], headers=headers).status_code == 404
+            assert client.get(path + '/verifications/' + recovery['id'], headers=other).json()['state'] == 'VERIFIED'
         finally:
             sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
             sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))

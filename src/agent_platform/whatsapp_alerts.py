@@ -272,6 +272,18 @@ def install_alerts(app):
             await conn.execute('''UPDATE whatsapp_alert_verifications SET state='EXPIRED'
                 WHERE id=%s AND app_id=%s AND owner_id=%s AND state='PENDING' AND expires_at<=now()''',
                 (verification_id, claims['app_id'], claims['user']))
+            # A signed provider webhook may persist before its verification update is
+            # observed. Recover only from that recipient's exact, timely inbound code.
+            await conn.execute('''UPDATE whatsapp_alert_verifications v
+                SET state='VERIFIED',verified_at=now()
+                WHERE v.id=%s AND v.app_id=%s AND v.owner_id=%s
+                AND v.state='PENDING' AND v.expires_at>now()
+                AND EXISTS (SELECT 1 FROM whatsapp_conversations c
+                    JOIN whatsapp_messages m ON m.conversation_id=c.id
+                    WHERE c.channel_id=v.channel_id AND c.customer=v.recipient
+                    AND m.received_at BETWEEN v.created_at AND v.expires_at
+                    AND encode(sha256(convert_to(upper(btrim(m.body)),'UTF8')),'hex')=v.code_hash)''',
+                (verification_id, claims['app_id'], claims['user']))
             row = await (await conn.execute('''SELECT id,recipient,state,expires_at,verified_at,consumed_at
                 FROM whatsapp_alert_verifications WHERE id=%s AND app_id=%s AND owner_id=%s''',
                 (verification_id, claims['app_id'], claims['user']))).fetchone()
