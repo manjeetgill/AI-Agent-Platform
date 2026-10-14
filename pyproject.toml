@@ -15,6 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+financial = ["pyarrow==25.0.0"]
 training = ["torch>=2.6,<3", "transformers>=5,<6", "peft>=0.17,<1"]
 embeddings = ["sentence-transformers>=5,<6"]
 voice = ["aiortc==1.15.0", "webrtcvad-wheels==2.0.14.post1"]

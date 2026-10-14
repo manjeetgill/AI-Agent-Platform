@@ -6,6 +6,11 @@ NRAIAlgo is the first consumer. Its application UI, login/session validation, HT
 
 ## Reuse across apps and businesses
 
+The [authorized financial collector](docs/FINANCIAL_COLLECTOR.md) stages financial tables and
+original filing PDFs for a 10-company pilot, Nifty 100/500, or the NSE main-board/SME universe.
+It runs locally and retains versioned Parquet evidence. Legacy SQLite mode also exports records
+for the existing app-scoped knowledge API; collection does not automatically publish data to consuming apps.
+
 The generic task API supports app-specific built-in catalogues, private user agents, configurable
 planning limits and explicitly enabled business tool packages. New domains supply adapters and
 versioned templates without editing the engine. See [multi-app onboarding](docs/MULTI_APP_PLATFORM.md)
@@ -299,3 +304,5 @@ Migrations 050–054 require separate migration, API and worker roles. Run the m
 restricted-role regression suite with `python scripts/test_restricted.py tests/python`
 and an operator-only `AGENT_TEST_ADMIN_URL` pointing to a disposable PostgreSQL cluster.
 Provider chains require explicit per-app budgets; no paid provider is activated by default.
+
+Financial collection now defaults to compressed Parquet; selected companies can be loaded into a local database cache on demand. See [financial storage and collection](docs/FINANCIAL_COLLECTOR.md#parquet-first-storage-and-on-demand-database-cache). Install the optional `financial` extra before collection.

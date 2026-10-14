@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        extras: [dev, 'dev,voice']
+        extras: ['dev,financial', 'dev,voice,financial']
     services:
       postgres:
         image: postgres:17-bookworm
