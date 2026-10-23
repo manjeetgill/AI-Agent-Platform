@@ -430,6 +430,7 @@ async def tick_alerts(pool, sender=send):
             error='Interrupted dispatch; check provider before retrying',updated_at=now()
             WHERE status='SENDING' AND updated_at<now()-interval '2 minutes' ''')
         job = await (await conn.execute('''SELECT d.*,c.phone_id,c.app_id AS channel_app,c.owner_id AS channel_owner,
+            c.provider AS channel_provider,
             r.template_name,r.template_language
             FROM whatsapp_alert_deliveries d JOIN whatsapp_channels c ON c.id=d.channel_id
             JOIN whatsapp_alert_routes r ON r.app_id=d.app_id AND r.channel_id=d.channel_id
@@ -447,7 +448,7 @@ async def tick_alerts(pool, sender=send):
             return True
         await conn.execute("UPDATE whatsapp_alert_deliveries SET status='SENDING',updated_at=now() WHERE id=%s", (job['id'],))
     try:
-        config = await managed_config(pool, job['phone_id'], job['channel_app'], job['channel_owner'])
+        config = await managed_config(pool, job['phone_id'], job['channel_app'], job['channel_owner'], provider=job.get('channel_provider'))
         if not has_recent and job.get('template_name'):
             if job['template_name'] == 'nraialgo_trading_alert':
                 lines = [line.strip() for line in job['body'].splitlines() if line.strip()]

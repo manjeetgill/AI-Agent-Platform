@@ -47,11 +47,15 @@ def install_connection_form(app, local):
     async def saved_connections(request: Request):
         local(request)
         owner = str(app.state.console_app_id)
-        return {'connections': [
-            {'phone_id': phone, 'graph_version': value.get('graph_version')}
-            for phone, value in connection_configs().items()
-            if value.get('app_id') == owner and value.get('provider', 'meta') == 'meta'
-        ]}
+        conns = []
+        for phone, value in connection_configs().items():
+            if isinstance(value, dict) and ('chakra' in value or 'meta' in value):
+                m = value.get('meta') or {}
+                if (m.get('app_id') == owner or value.get('app_id') == owner) and m.get('graph_version'):
+                    conns.append({'phone_id': phone, 'graph_version': m.get('graph_version')})
+            elif value.get('app_id') == owner and value.get('provider', 'meta') == 'meta':
+                conns.append({'phone_id': phone, 'graph_version': value.get('graph_version')})
+        return {'connections': conns}
 
     @app.post('/console/whatsapp/refresh-token')
     async def refresh_token(request: Request):
@@ -78,7 +82,11 @@ def install_connection_form(app, local):
                 raise HTTPException(409, 'This form only refreshes direct Meta connections')
             if not all(previous.get(k) for k in ('app_secret', 'verify_token', 'graph_version')):
                 raise HTTPException(409, 'Connection is incomplete; use the full setup form')
-            values[body.phone_id] = {**previous, 'access_token': body.access_token.get_secret_value()}
+            if isinstance(previous, dict) and ('chakra' in previous or 'meta' in previous):
+                m = previous.get('meta') or {}
+                values[body.phone_id] = {**previous, 'meta': {**m, 'access_token': body.access_token.get_secret_value()}}
+            else:
+                values[body.phone_id] = {**previous, 'access_token': body.access_token.get_secret_value()}
             # Pause dispatch; preserve webhook verification because its secret is unchanged.
             async with app.state.repository.pool.connection() as conn:
                 await conn.execute('UPDATE whatsapp_channels SET enabled=false WHERE phone_id=%s AND app_id=%s',
@@ -120,14 +128,39 @@ def install_connection_form(app, local):
             path = Path(filename)
             if not path.parent.is_dir():
                 raise HTTPException(503, "Private credential directory is missing")
-            values[body.phone_id] = {
-                "app_id": app_id,
-                "graph_version": body.graph_version,
-                "access_token": body.access_token.get_secret_value(),
-                "app_secret": body.app_secret.get_secret_value(),
-                "verify_token": body.verify_token.get_secret_value(),
-                "waba_id": body.waba_id or (previous or {}).get("waba_id"),
-            }
+            if isinstance(previous, dict) and ('chakra' in previous or 'meta' in previous):
+                meta_block = {
+                    'provider': 'meta',
+                    'app_id': app_id,
+                    'phone_id': body.phone_id,
+                    'graph_version': body.graph_version,
+                    'access_token': body.access_token.get_secret_value(),
+                    'app_secret': body.app_secret.get_secret_value(),
+                    'verify_token': body.verify_token.get_secret_value(),
+                    'waba_id': body.waba_id or (previous.get('meta') or {}).get('waba_id'),
+                }
+                values[body.phone_id] = {**previous, 'meta': meta_block}
+            elif previous and previous.get('provider') == 'chakra':
+                meta_block = {
+                    'provider': 'meta',
+                    'app_id': app_id,
+                    'phone_id': body.phone_id,
+                    'graph_version': body.graph_version,
+                    'access_token': body.access_token.get_secret_value(),
+                    'app_secret': body.app_secret.get_secret_value(),
+                    'verify_token': body.verify_token.get_secret_value(),
+                    'waba_id': body.waba_id or previous.get('waba_id'),
+                }
+                values[body.phone_id] = {'chakra': previous, 'meta': meta_block}
+            else:
+                values[body.phone_id] = {
+                    'app_id': app_id,
+                    'graph_version': body.graph_version,
+                    'access_token': body.access_token.get_secret_value(),
+                    'app_secret': body.app_secret.get_secret_value(),
+                    'verify_token': body.verify_token.get_secret_value(),
+                    'waba_id': body.waba_id or (previous or {}).get('waba_id'),
+                }
             async with app.state.repository.pool.connection() as conn:
                 await conn.execute(
                     "UPDATE whatsapp_channels SET enabled=false,webhook_verified_at=NULL WHERE phone_id=%s AND app_id=%s",

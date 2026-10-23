@@ -214,7 +214,7 @@ async def tick(pool, model=None, sender=send):
             await conn.execute("UPDATE whatsapp_messages SET status='CANCELLED' WHERE id=%s", (msg['id'],))
             await audit(conn, channel['id'], conversation['id'], 'trial:blocked', 'worker')
             return True
-        config = await managed_config(pool, channel["phone_id"], channel["app_id"], channel["owner_id"])
+        config = await managed_config(pool, channel["phone_id"], channel["app_id"], channel["owner_id"], provider=channel.get("provider"))
         # Independent committed dispatch fence survives a crash while the send lock is held.
         await conn.execute(
             "UPDATE whatsapp_messages SET status='SENDING',updated_at=now() WHERE id=%s", (msg["id"],)

@@ -1,5 +1,6 @@
 """Cross-app alert routing, consent, idempotency and uncertain-send fences."""
 import asyncio
+import json
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -37,7 +38,7 @@ def test_generic_notification_is_bounded_and_provider_neutral():
 
 def test_shared_sender_alert_is_scoped_and_sent_once(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        _, channel, doc = setup(client, owner_key, monkeypatch)
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -111,7 +112,7 @@ def test_shared_sender_alert_is_scoped_and_sent_once(monkeypatch):
 
 def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        _, channel, doc = setup(client, owner_key, monkeypatch)
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -183,7 +184,7 @@ def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
 
 def test_owned_sender_route_and_generic_notification(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        _, channel, doc = setup(client, owner_key, monkeypatch)
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -249,7 +250,7 @@ def test_owned_sender_route_and_generic_notification(monkeypatch):
 
 def test_template_alert_dispatches_outside_24h_window(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        _, channel, doc = setup(client, owner_key, monkeypatch)
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -319,6 +320,147 @@ def test_template_alert_dispatches_outside_24h_window(monkeypatch):
             assert components[0]['parameters'][2]['text'] == 'market-alert-template-1'
 
             assert client.get(path + '/deliveries/' + deliv_id, headers=headers).json()['status'] == 'ACCEPTED'
+        finally:
+            sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_apps WHERE id=%s', (app_key['app_id'],))
+            sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_dynamic_provider_flip_routes_chakra_and_meta(monkeypatch):
+    with environment(monkeypatch) as (client, _, owner_key, _):
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
+
+        dual_cfg = {
+            channel['phone_id']: {
+                'chakra': {
+                    'provider': 'chakra',
+                    'plugin_id': 'fixture-chakra-plugin-id',
+                    'phone_id': channel['phone_id'],
+                    'waba_id': '1750946452827982',
+                    'graph_version': 'v20.0',
+                    'access_token': 'fixture-chakra-access-token-12345',
+                    'webhook_secret': 'fixture-webhook-secret-32-chars-long-1234',
+                    'sender_number': '+917703961610',
+                    'app_id': str(owner_key['app_id']),
+                },
+                'meta': {
+                    'provider': 'meta',
+                    'phone_id': channel['phone_id'],
+                    'waba_id': '1750946452827982',
+                    'app_id': str(owner_key['app_id']),
+                    'app_secret': 'fixture-meta-app-secret-12345',
+                    'access_token': 'fixture-meta-access-token-12345',
+                    'graph_version': 'v20.0',
+                    'verify_token': 'platform-meta-verify-token',
+                }
+            }
+        }
+        monkeypatch.setenv('AI_WHATSAPP_CONNECTIONS', json.dumps(dual_cfg))
+
+        async def make_key():
+            async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                return await provision(pool, tenant=tenant, organisation='Fixture', app_name='Flip alerts',
+                                       scopes=['alerts:send'])
+
+        app_key = asyncio.run(make_key())
+        headers = {'Authorization': 'Bearer ' + app_key['credential'], 'X-External-User-ID': 'trader-flip'}
+        path = '/v1/whatsapp/alerts'
+        recipient = '919876543210'
+
+        # Verify default provider is chakra
+        chan_row = sql('SELECT provider FROM whatsapp_channels WHERE id=%s', (channel['id'],))[0]
+        assert chan_row['provider'] == 'chakra'
+
+        sql("""INSERT INTO whatsapp_alert_routes
+            (app_id,channel_id,enabled,require_recipient_verification,template_name,template_language)
+            VALUES(%s,%s,true,false,'nraialgo_trading_alert','en_US')""",
+            (app_key['app_id'], channel['id']))
+
+        conversation = uuid4()
+        sql("INSERT INTO whatsapp_conversations(id,channel_id,customer) VALUES(%s,%s,%s)",
+            (conversation, channel['id'], recipient))
+
+        dispatched_configs = []
+
+        async def spy_send(config, phone, customer, body):
+            dispatched_configs.append(config)
+            return 'wamid.flip-' + str(len(dispatched_configs))
+
+        try:
+            assert client.put(path + '/subscription', headers=headers,
+                              json={'recipient': recipient, 'consented': True}).status_code == 200
+
+            # 1. Send alert while provider is chakra (default)
+            first_body = {'request_key': 'flip-alert-1', 'exchange': 'NSE', 'symbol': 'NIFTY',
+                          'timeframe': 'live', 'condition': 'price_above', 'target': '25000',
+                          'observed': '25001', 'triggered_at': datetime.now(UTC).isoformat()}
+            first = client.post(path + '/deliveries', headers=headers, json=first_body)
+            assert first.status_code == 202
+
+            async def dispatch():
+                async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                    assert await tick_alerts(pool, sender=spy_send)
+            asyncio.run(dispatch())
+
+            assert len(dispatched_configs) == 1
+            assert dispatched_configs[0]['provider'] == 'chakra'
+            assert dispatched_configs[0]['plugin_id'] == 'fixture-chakra-plugin-id'
+
+            # 2. Toggle provider to meta via PATCH /v1/whatsapp/channels/{channel_id}/provider
+            res = client.patch(f"/v1/whatsapp/channels/{channel['id']}/provider",
+                               headers=owner_headers,
+                               json={'provider': 'meta'})
+            assert res.status_code == 200
+            assert res.json()['provider'] == 'meta'
+
+            chan_row = sql('SELECT provider FROM whatsapp_channels WHERE id=%s', (channel['id'],))[0]
+            assert chan_row['provider'] == 'meta'
+
+            # 3. Send alert while provider is meta - must route to meta immediately without restart
+            second_body = {'request_key': 'flip-alert-2', 'exchange': 'NSE', 'symbol': 'BANKNIFTY',
+                           'timeframe': 'live', 'condition': 'price_above', 'target': '50000',
+                           'observed': '50050', 'triggered_at': datetime.now(UTC).isoformat()}
+            second = client.post(path + '/deliveries', headers=headers, json=second_body)
+            assert second.status_code == 202
+
+            asyncio.run(dispatch())
+
+            assert len(dispatched_configs) == 2
+            assert dispatched_configs[1]['provider'] == 'meta'
+            assert dispatched_configs[1]['app_secret'] == 'fixture-meta-app-secret-12345'
+
+            # 4. Toggle back to chakra
+            res = client.patch(f"/v1/whatsapp/channels/{channel['id']}/provider",
+                               headers=owner_headers,
+                               json={'provider': 'chakra'})
+            assert res.status_code == 200
+            assert res.json()['provider'] == 'chakra'
+
+            chan_row = sql('SELECT provider FROM whatsapp_channels WHERE id=%s', (channel['id'],))[0]
+            assert chan_row['provider'] == 'chakra'
+
+            # 5. Send third alert - must route to chakra again
+            third_body = {'request_key': 'flip-alert-3', 'exchange': 'NSE', 'symbol': 'RELIANCE',
+                          'timeframe': 'live', 'condition': 'price_above', 'target': '3000',
+                          'observed': '3010', 'triggered_at': datetime.now(UTC).isoformat()}
+            third = client.post(path + '/deliveries', headers=headers, json=third_body)
+            assert third.status_code == 202
+
+            asyncio.run(dispatch())
+
+            assert len(dispatched_configs) == 3
+            assert dispatched_configs[2]['provider'] == 'chakra'
+            assert dispatched_configs[2]['plugin_id'] == 'fixture-chakra-plugin-id'
+
+            # 6. Verify audit logs recorded provider transitions
+            audits = sql("SELECT event FROM whatsapp_audit WHERE channel_id=%s AND event LIKE %s ORDER BY id ASC", (channel['id'], 'channel:provider_updated:%'))
+            assert len(audits) == 2
+            assert audits[0]['event'] == 'channel:provider_updated:meta'
+            assert audits[1]['event'] == 'channel:provider_updated:chakra'
+
         finally:
             sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
             sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))
