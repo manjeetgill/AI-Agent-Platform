@@ -449,6 +449,18 @@ async def tick_alerts(pool, sender=send):
     try:
         config = await managed_config(pool, job['phone_id'], job['channel_app'], job['channel_owner'])
         if not has_recent and job.get('template_name'):
+            if job['template_name'] == 'nraialgo_trading_alert':
+                lines = [line.strip() for line in job['body'].splitlines() if line.strip()]
+                title = lines[0] if lines else 'Trading Alert'
+                details = '\n'.join(lines[1:]) if len(lines) > 1 else job['body']
+                ref = str(job.get('request_key') or job['id'])[:100]
+                parameters = [
+                    {"type": "text", "text": title[:1024]},
+                    {"type": "text", "text": details[:1024]},
+                    {"type": "text", "text": ref[:1024]},
+                ]
+            else:
+                parameters = [{"type": "text", "text": job["body"]}]
             payload = {
                 "messaging_product": "whatsapp",
                 "to": job["recipient"],
@@ -459,9 +471,7 @@ async def tick_alerts(pool, sender=send):
                     "components": [
                         {
                             "type": "body",
-                            "parameters": [
-                                {"type": "text", "text": job["body"]}
-                            ]
+                            "parameters": parameters,
                         }
                     ]
                 }

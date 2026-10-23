@@ -313,10 +313,10 @@ def test_template_alert_dispatches_outside_24h_window(monkeypatch):
             components = payload['template']['components']
             assert len(components) == 1
             assert components[0]['type'] == 'body'
-            assert len(components[0]['parameters']) == 1
-            assert components[0]['parameters'][0]['type'] == 'text'
+            assert len(components[0]['parameters']) == 3
             assert 'NSE:NIFTY 50' in components[0]['parameters'][0]['text']
-            assert '₹25050' in components[0]['parameters'][0]['text']
+            assert '₹25050' in components[0]['parameters'][1]['text']
+            assert components[0]['parameters'][2]['text'] == 'market-alert-template-1'
 
             assert client.get(path + '/deliveries/' + deliv_id, headers=headers).json()['status'] == 'ACCEPTED'
         finally:
