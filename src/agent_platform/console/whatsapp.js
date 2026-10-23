@@ -26,13 +26,58 @@ async function loadDocuments(more = false) { const page = await api('knowledge/d
 function renderChannels() {
   $('channels').replaceChildren(); const previous = $('inbox-channel').value; $('inbox-channel').replaceChildren(new Option('Choose an agent',''));
   for (const c of channels) {
+    const activeProvider = c.provider || 'chakra';
     $('inbox-channel').append(new Option(c.name, c.id));
-    const box = el('article','',$('channels'),'channel-card'); el('h3',c.name,box); el('span',c.enabled?'Automatic replies enabled':'Inactive',box,'badge');
-    el('p','Number ID: ' + c.phone_id,box,'muted'); const list = el('ul','',box,'checklist');
-    const checks = [[settings.phone_ids?.includes(c.phone_id),'Business credentials saved'], [Boolean(c.webhook_verified_at),'Meta webhook verified'], [settings.worker_online,'Message worker online'],[settings.model_configured,'AI model configured']];
+    const box = el('article','',$('channels'),'channel-card'); el('h3',c.name,box);
+    el('span',c.enabled?'Automatic replies enabled':'Inactive',box,'badge');
+    el('span',activeProvider === 'chakra' ? '🟢 ChakraHQ Active' : '🔵 Direct Meta Active',box,'badge ' + (activeProvider === 'chakra' ? 'badge-chakra' : 'badge-meta'));
+    el('p','Number ID: ' + c.phone_id,box,'muted');
+
+    const providerControl = el('div','',box,'provider-control');
+    el('strong','WhatsApp Provider: ',providerControl);
+    const toggleRow = el('div','',providerControl,'segmented-toggle');
+    const chakraBtn = el('button','🟢 ChakraHQ (BSP)',toggleRow,'provider-btn' + (activeProvider === 'chakra' ? ' active' : ''));
+    chakraBtn.type = 'button';
+    if (activeProvider === 'chakra') chakraBtn.setAttribute('aria-pressed', 'true');
+    const metaBtn = el('button','🔵 Direct Meta Cloud API',toggleRow,'provider-btn' + (activeProvider === 'meta' ? ' active' : ''));
+    metaBtn.type = 'button';
+    if (activeProvider === 'meta') metaBtn.setAttribute('aria-pressed', 'true');
+
+    chakraBtn.onclick = () => busy(chakraBtn, async () => {
+      if (c.provider === 'chakra') return;
+      await api('whatsapp/channels/' + c.id + '/provider', 'PATCH', { provider: 'chakra' });
+      c.provider = 'chakra';
+      notice('Channel switched to ChakraHQ (BSP) routing.');
+      renderChannels();
+    });
+
+    metaBtn.onclick = () => busy(metaBtn, async () => {
+      if (c.provider === 'meta') return;
+      await api('whatsapp/channels/' + c.id + '/provider', 'PATCH', { provider: 'meta' });
+      c.provider = 'meta';
+      notice('Channel switched to Direct Meta Cloud API routing.');
+      renderChannels();
+    });
+
+    const list = el('ul','',box,'checklist');
+    const webhookLabel = (activeProvider === 'chakra' ? 'Chakra' : 'Meta') + ' webhook verified';
+    const checks = [[settings.phone_ids?.includes(c.phone_id),'Business credentials saved'], [Boolean(c.webhook_verified_at), webhookLabel], [settings.worker_online,'Message worker online'],[settings.model_configured,'AI model configured']];
     for (const [ok,label] of checks) el('li',(ok?'✓ ':'○ ')+label,list);
-    el('p','Webhook callback to enter in Meta:',box); el('code',(settings.public_url || 'https://YOUR-PUBLIC-PLATFORM-HOST')+'/webhooks/whatsapp/'+c.id,box);
-    if (!settings.public_url) el('p','A public HTTPS deployment is still needed. Localhost cannot receive Meta webhooks. Set AI_PLATFORM_PUBLIC_URL on the server.',box,'muted');
+
+    const webhookUrl = (settings.public_url || 'https://YOUR-PUBLIC-PLATFORM-HOST') + '/webhooks/whatsapp/' + c.id;
+    if (activeProvider === 'chakra') {
+      el('p','Webhook callback URL to enter in Chakra plugin:',box);
+      el('code',webhookUrl,box);
+      el('p','Chakra signs webhook requests with X-Chakra-Signature-256 using your webhook secret.',box,'muted');
+    } else {
+      el('p','Webhook callback URL to enter in Meta Developer Dashboard:',box);
+      el('code',webhookUrl,box);
+      el('p','Webhook Verify Token to enter in Meta Developer Dashboard:',box);
+      el('code',settings.verify_token || 'platform-meta-verify-token',box);
+      el('p','Meta signs webhook requests with X-Hub-Signature-256 using your Meta app secret.',box,'muted');
+    }
+    if (!settings.public_url) el('p','A public HTTPS deployment is still needed. Localhost cannot receive webhooks. Set AI_PLATFORM_PUBLIC_URL on the server.',box,'muted');
+
     action(box,'Check sender credentials (no message)',async()=>{
       const result=await api('whatsapp/channels/'+c.id+'/connection-test','POST');
       notice(result.credentials_checked?'Sender credentials checked. '+result.next_action:'Sender could not be verified.');

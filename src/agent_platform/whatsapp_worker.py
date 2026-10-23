@@ -17,11 +17,12 @@ from .whatsapp import audit
 
 
 async def send(config, phone, customer, text):
-    payload = {'messaging_product':'whatsapp','to':customer}
-    if isinstance(text, dict):
-        payload.update({'type':'interactive','interactive':text})
+    if isinstance(text, dict) and text.get('type') == 'template':
+        payload = {'messaging_product': 'whatsapp', 'to': customer, **text}
+    elif isinstance(text, dict):
+        payload = {'messaging_product': 'whatsapp', 'to': customer, 'type': 'interactive', 'interactive': text}
     else:
-        payload.update({'type':'text','text':{'body':text,'preview_url':False}})
+        payload = {'messaging_product': 'whatsapp', 'to': customer, 'type': 'text', 'text': {'body': text, 'preview_url': False}}
     if config.get('provider') == 'chakra':
         from .chakra_client import send_message
         return await send_message(config, phone, payload)
@@ -213,7 +214,7 @@ async def tick(pool, model=None, sender=send):
             await conn.execute("UPDATE whatsapp_messages SET status='CANCELLED' WHERE id=%s", (msg['id'],))
             await audit(conn, channel['id'], conversation['id'], 'trial:blocked', 'worker')
             return True
-        config = await managed_config(pool, channel["phone_id"], channel["app_id"], channel["owner_id"])
+        config = await managed_config(pool, channel["phone_id"], channel["app_id"], channel["owner_id"], provider=channel.get("provider"))
         # Independent committed dispatch fence survives a crash while the send lock is held.
         await conn.execute(
             "UPDATE whatsapp_messages SET status='SENDING',updated_at=now() WHERE id=%s", (msg["id"],)

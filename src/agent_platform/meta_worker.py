@@ -172,15 +172,46 @@ async def tick_onboarding(pool, client=None):
     return True
 
 
-async def managed_config(pool, phone, app, owner=None):
+async def managed_config(pool, phone, app, owner=None, provider=None):
+    from .whatsapp import connection
+    if provider == 'chakra':
+        from .chakra_onboarding import stored_config
+        chakra = await stored_config(pool, phone, app, owner)
+        if chakra:
+            return {**chakra, 'provider': 'chakra'}
+        try:
+            return connection(phone, app, provider='chakra')
+        except HTTPException as exc:
+            if exc.status_code == 503:
+                raise HTTPException(404, 'Chakra connection not found') from None
+            raise
+    if provider == 'meta':
+        async with pool.connection() as conn:
+            row = await (await conn.execute('SELECT * FROM meta_connections WHERE phone_id=%s', (phone,))).fetchone()
+        if not row:
+            try:
+                return connection(phone, app, provider='meta')
+            except HTTPException as exc:
+                if exc.status_code == 503:
+                    raise HTTPException(404, 'Meta connection not found') from None
+                raise
+        if str(row['app_id']) != str(app) or (owner and str(row['owner_id']) != str(owner)):
+            raise HTTPException(404, 'Business connection not found')
+        now = datetime.now(UTC)
+        if row['state'] != 'CONNECTED' or not row['checked_at'] or (now-row['checked_at']).total_seconds()>900 or (row['token_expires_at'] and row['token_expires_at'] <= now):
+            raise HTTPException(409, 'Reconnect or verify your WhatsApp connection before messaging')
+        cfg = config()
+        return {'provider': 'meta', 'phone_id': row['phone_id'], 'access_token': unseal(row['token_cipher'],aad(row)), 'app_secret':cfg['app_secret'],
+                'verify_token':cfg['verify_token'],'graph_version':cfg['graph_version'],'waba_id':row['waba_id'],
+                'display_phone_number': row.get('display_phone_number')}
+
     from .chakra_onboarding import stored_config
     chakra = await stored_config(pool, phone, app, owner)
     if chakra:
-        return chakra
+        return {**chakra, 'provider': 'chakra'}
     async with pool.connection() as conn:
         row = await (await conn.execute('SELECT * FROM meta_connections WHERE phone_id=%s', (phone,))).fetchone()
     if not row:
-        from .whatsapp import connection
         try:
             return connection(phone, app)
         except HTTPException as exc:
@@ -193,8 +224,9 @@ async def managed_config(pool, phone, app, owner=None):
     if row['state'] != 'CONNECTED' or not row['checked_at'] or (now-row['checked_at']).total_seconds()>900 or (row['token_expires_at'] and row['token_expires_at'] <= now):
         raise HTTPException(409, 'Reconnect or verify your WhatsApp connection before messaging')
     cfg = config()
-    return {'access_token': unseal(row['token_cipher'],aad(row)), 'app_secret':cfg['app_secret'],
-            'verify_token':cfg['verify_token'],'graph_version':cfg['graph_version'],'waba_id':row['waba_id']}
+    return {'provider': 'meta', 'phone_id': row['phone_id'], 'access_token': unseal(row['token_cipher'],aad(row)), 'app_secret':cfg['app_secret'],
+            'verify_token':cfg['verify_token'],'graph_version':cfg['graph_version'],'waba_id':row['waba_id'],
+            'display_phone_number': row.get('display_phone_number')}
 
 
 async def tick_health(pool, client=None):

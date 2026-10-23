@@ -35,6 +35,8 @@ class VerificationRequest(Strict):
 class RouteConfiguration(Strict):
     channel_id: UUID
     daily_limit: int | None = Field(default=20, ge=1, le=1000)
+    template_name: str | None = Field(default=None, min_length=1, max_length=128)
+    template_language: str = Field(default='en_US', min_length=2, max_length=10)
 
 
 class NotificationDelivery(Strict):
@@ -117,6 +119,28 @@ async def recent_conversation(conn, channel_id, recipient):
         (channel_id, recipient))).fetchone()
 
 
+async def is_opted_out(conn, channel_id, recipient) -> bool:
+    return bool(await (await conn.execute("""SELECT 1 FROM whatsapp_conversations
+        WHERE channel_id=%s AND customer=%s AND opted_out""",
+        (channel_id, recipient))).fetchone())
+
+
+def build_template_parameters(body: str, ref: str | None = None) -> list[dict]:
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    if len(lines) > 1:
+        title = lines[0]
+        details = '\n'.join(lines[1:])
+        params = [
+            {"type": "text", "text": title[:1024]},
+            {"type": "text", "text": details[:1024]},
+        ]
+        if ref:
+            params.append({"type": "text", "text": str(ref)[:1024]})
+        return params
+    return [{"type": "text", "text": body[:1024]}]
+
+
+
 def verification_hash(code: str) -> str:
     return hashlib.sha256(code.strip().upper().encode()).hexdigest()
 
@@ -169,10 +193,14 @@ def install_alerts(app):
 
     @router.get('/capabilities')
     async def alert_capabilities(request: Request):
-        await manage_context(request, 'alerts:send')
+        pool, claims = await manage_context(request, 'alerts:send')
+        async with pool.connection() as conn:
+            route = await (await conn.execute('''SELECT template_name FROM whatsapp_alert_routes
+                WHERE app_id=%s AND enabled''', (claims['app_id'],))).fetchone()
+        has_template = bool(route and route.get('template_name'))
         return {'recipient_verification': 'inbound_one_time_code', 'verification_ttl_seconds': 600,
-                'generic_notifications': True, 'market_alerts': True, 'approved_templates': False,
-                'requires_recent_conversation': True, 'payment_actions': False,
+                'generic_notifications': True, 'market_alerts': True, 'approved_templates': has_template,
+                'requires_recent_conversation': not has_template, 'payment_actions': False,
                 'sender_ownership': 'consuming_app_or_operator_approved_shared_route'}
 
     @router.put('/route')
@@ -198,20 +226,25 @@ def install_alerts(app):
                 await conn.execute('''UPDATE whatsapp_alert_verifications SET state='CANCELLED'
                     WHERE app_id=%s AND state IN ('PENDING','VERIFIED')''', (claims['app_id'],))
             await conn.execute('''INSERT INTO whatsapp_alert_routes
-                (app_id,channel_id,sender_number,enabled,daily_limit,require_recipient_verification)
-                VALUES(%s,%s,%s,true,%s,true) ON CONFLICT(app_id) DO UPDATE SET
+                (app_id,channel_id,sender_number,enabled,daily_limit,require_recipient_verification,
+                 template_name,template_language)
+                VALUES(%s,%s,%s,true,%s,true,%s,%s) ON CONFLICT(app_id) DO UPDATE SET
                 channel_id=EXCLUDED.channel_id,sender_number=EXCLUDED.sender_number,enabled=true,
-                daily_limit=EXCLUDED.daily_limit,require_recipient_verification=true''',
-                (claims['app_id'], channel['id'], channel['display_number'], body.daily_limit))
+                daily_limit=EXCLUDED.daily_limit,require_recipient_verification=true,
+                template_name=EXCLUDED.template_name,template_language=EXCLUDED.template_language''',
+                (claims['app_id'], channel['id'], channel['display_number'], body.daily_limit,
+                 body.template_name, body.template_language))
         return {'channel_id': channel['id'], 'sender_number': channel['display_number'],
-                'daily_limit': body.daily_limit, 'enabled': True, 'recipient_verification': True}
+                'daily_limit': body.daily_limit, 'enabled': True, 'recipient_verification': True,
+                'template_name': body.template_name, 'template_language': body.template_language}
 
     @router.get('/route')
     async def route_status(request: Request):
         pool, claims = await manage_context(request, 'channels:read')
         async with pool.connection() as conn:
             row = await (await conn.execute('''SELECT r.channel_id,r.sender_number,r.enabled,
-                r.daily_limit,r.require_recipient_verification FROM whatsapp_alert_routes r
+                r.daily_limit,r.require_recipient_verification,r.template_name,r.template_language
+                FROM whatsapp_alert_routes r
                 JOIN whatsapp_channels c ON c.id=r.channel_id WHERE r.app_id=%s
                 AND c.app_id=%s AND c.owner_id=%s''',
                 (claims['app_id'], claims['app_id'], claims['user']))).fetchone()
@@ -313,7 +346,10 @@ def install_alerts(app):
                     raise HTTPException(409, 'Verify this WhatsApp number before enabling alerts')
                 await conn.execute('''UPDATE whatsapp_alert_verifications
                     SET state='CONSUMED',consumed_at=now() WHERE id=%s''', (verified['id'],))
-            if not await recent_conversation(conn, route['channel_id'], recipient):
+            if await is_opted_out(conn, route['channel_id'], recipient):
+                from .whatsapp_opt_in import subscription_blocker
+                raise HTTPException(409, await subscription_blocker(conn, route['channel_id'], recipient, route['sender_number']))
+            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], recipient):
                 from .whatsapp_opt_in import subscription_blocker
                 raise HTTPException(409, await subscription_blocker(conn, route['channel_id'], recipient, route['sender_number']))
             await conn.execute('''INSERT INTO whatsapp_alert_subscriptions(app_id,owner_id,recipient,consented_at)
@@ -350,7 +386,9 @@ def install_alerts(app):
                 (claims['app_id'], claims['user']))).fetchone()
             if not subscription:
                 raise HTTPException(409, 'Enable WhatsApp alerts first')
-            if not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
+            if await is_opted_out(conn, route['channel_id'], subscription['recipient']):
+                raise HTTPException(409, 'Recipient opted out of WhatsApp messages')
+            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
                 raise HTTPException(409, 'WhatsApp session expired; an approved alert template is required')
             count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
                 WHERE app_id=%s AND created_at>now()-interval '24 hours' ''', (claims['app_id'],))).fetchone()
@@ -383,7 +421,9 @@ def install_alerts(app):
                 (claims['app_id'], claims['user']))).fetchone()
             if not subscription:
                 raise HTTPException(409, 'Enable WhatsApp notifications first')
-            if not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
+            if await is_opted_out(conn, route['channel_id'], subscription['recipient']):
+                raise HTTPException(409, 'Recipient opted out of WhatsApp messages')
+            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
                 raise HTTPException(409, 'WhatsApp session expired; an approved template is required')
             count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
                 WHERE app_id=%s AND created_at>now()-interval '24 hours' ''',
@@ -418,7 +458,9 @@ async def tick_alerts(pool, sender=send):
         await conn.execute('''UPDATE whatsapp_alert_deliveries SET status='UNKNOWN',
             error='Interrupted dispatch; check provider before retrying',updated_at=now()
             WHERE status='SENDING' AND updated_at<now()-interval '2 minutes' ''')
-        job = await (await conn.execute('''SELECT d.*,c.phone_id,c.app_id AS channel_app,c.owner_id AS channel_owner
+        job = await (await conn.execute('''SELECT d.*,c.phone_id,c.app_id AS channel_app,c.owner_id AS channel_owner,
+            c.provider AS channel_provider,
+            r.template_name,r.template_language
             FROM whatsapp_alert_deliveries d JOIN whatsapp_channels c ON c.id=d.channel_id
             JOIN whatsapp_alert_routes r ON r.app_id=d.app_id AND r.channel_id=d.channel_id
             JOIN whatsapp_alert_subscriptions s ON s.app_id=d.app_id AND s.owner_id=d.owner_id
@@ -426,7 +468,11 @@ async def tick_alerts(pool, sender=send):
             AND s.recipient=d.recipient ORDER BY d.created_at FOR UPDATE OF d SKIP LOCKED LIMIT 1''')).fetchone()
         if not job:
             return False
-        if not await recent_conversation(conn, job['channel_id'], job['recipient']):
+        if await is_opted_out(conn, job['channel_id'], job['recipient']):
+            await conn.execute("UPDATE whatsapp_alert_deliveries SET status='CANCELLED',error='Recipient opted out' WHERE id=%s", (job['id'],))
+            return True
+        has_recent = await recent_conversation(conn, job['channel_id'], job['recipient'])
+        if not has_recent and not job.get('template_name'):
             await conn.execute("UPDATE whatsapp_alert_deliveries SET status='CANCELLED',error='Session expired' WHERE id=%s", (job['id'],))
             return True
         if not await reserve(conn, job['app_id'], 'whatsapp_sends', job['id']):
@@ -434,8 +480,28 @@ async def tick_alerts(pool, sender=send):
             return True
         await conn.execute("UPDATE whatsapp_alert_deliveries SET status='SENDING',updated_at=now() WHERE id=%s", (job['id'],))
     try:
-        config = await managed_config(pool, job['phone_id'], job['channel_app'], job['channel_owner'])
-        provider_id = await asyncio.wait_for(sender(config, job['phone_id'], job['recipient'], job['body']), 15)
+        config = await managed_config(pool, job['phone_id'], job['channel_app'], job['channel_owner'], provider=job.get('channel_provider'))
+        if not has_recent and job.get('template_name'):
+            parameters = build_template_parameters(job['body'], ref=job.get('request_key') or job['id'])
+            payload = {
+                "messaging_product": "whatsapp",
+                "to": job["recipient"],
+                "type": "template",
+                "template": {
+                    "name": job["template_name"],
+                    "language": {"code": job.get("template_language") or "en_US"},
+                    "components": [
+                        {
+                            "type": "body",
+                            "parameters": parameters,
+                        }
+                    ]
+                }
+            }
+            body_or_payload = payload
+        else:
+            body_or_payload = job['body']
+        provider_id = await asyncio.wait_for(sender(config, job['phone_id'], job['recipient'], body_or_payload), 15)
     except Exception:  # noqa: BLE001 -- any provider error leaves the send outcome uncertain
         async with pool.connection() as conn:
             await conn.execute("UPDATE whatsapp_alert_deliveries SET status='UNKNOWN',error='Provider outcome uncertain; check before retry',updated_at=now() WHERE id=%s AND status='SENDING'", (job['id'],))

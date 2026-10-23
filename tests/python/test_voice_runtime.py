@@ -282,6 +282,7 @@ def test_barge_in_allows_next_faq_but_never_replays_uncertain_action(monkeypatch
 
 
 def test_browser_track_end_is_not_decoder_failure():
+    pytest.importorskip('aiortc')
     from aiortc.mediastreams import MediaStreamError
     async def run():
         ended=[]

@@ -142,7 +142,7 @@ def install_outbound(app):
     @router.get('/{channel_id}/send-setup')
     async def setup(channel_id: UUID, request: Request):
         pool, _, channel = await context(request, channel_id)
-        config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
+        config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'], provider=channel.get('provider'))
         sender = await verified_sender(config, channel['phone_id'])
         options = await template_options(config)
         approved = [{k: v for k, v in t.items() if k != 'status'} for t in options if t['status'] == 'APPROVED']
@@ -154,7 +154,7 @@ def install_outbound(app):
     @router.post('/{channel_id}/connection-test')
     async def check_connection(channel_id: UUID, request: Request):
         pool, claims, channel = await context(request, channel_id)
-        config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
+        config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'], provider=channel.get('provider'))
         await verified_sender(config, channel['phone_id'])
         async with pool.connection() as conn:
             await audit(conn, channel_id, None, 'sender_credentials_checked', claims['principal'])
@@ -174,7 +174,7 @@ def install_outbound(app):
             if prior['recipient'] != recipient or prior['template']['id'] != body.template_id:
                 raise HTTPException(409, 'Request key belongs to a different message')
             return prior
-        selected = next((t for t in await templates(await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id']))
+        selected = next((t for t in await templates(await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'], provider=channel.get('provider')))
                          if t['id'] == body.template_id), None)
         if not selected:
             raise HTTPException(422, 'Select an available approved template')
@@ -299,7 +299,7 @@ async def tick_outbound(pool, sender=send_template, catalogue=templates):
             await conn.execute("UPDATE whatsapp_outbound SET status='CANCELLED',error='Recipient opted out' WHERE id=%s", (job['id'],))
             return True
         try:
-            config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'])
+            config = await managed_config(pool, channel['phone_id'], channel['app_id'], channel['owner_id'], provider=channel.get('provider'))
             if job['template'].get('kind') == 'session':
                 if not channel['enabled'] or not await session_available(conn, channel['id'], job['recipient']):
                     raise ValueError('Patient conversation closed')
