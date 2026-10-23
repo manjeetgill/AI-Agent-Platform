@@ -126,10 +126,12 @@ async def is_opted_out(conn, channel_id, recipient) -> bool:
 
 
 def build_template_parameters(body: str, ref: str | None = None) -> list[dict]:
+    # Meta Cloud API strictly rejects newline (\n) characters in template parameters with error 132018.
+    # Join multi-line details with ' · ' to keep parameters on a single line.
     lines = [line.strip() for line in body.splitlines() if line.strip()]
     if len(lines) > 1:
         title = lines[0]
-        details = '\n'.join(lines[1:])
+        details = ' · '.join(lines[1:])
         params = [
             {"type": "text", "text": title[:1024]},
             {"type": "text", "text": details[:1024]},
@@ -137,7 +139,8 @@ def build_template_parameters(body: str, ref: str | None = None) -> list[dict]:
         if ref:
             params.append({"type": "text", "text": str(ref)[:1024]})
         return params
-    return [{"type": "text", "text": body[:1024]}]
+    clean_body = ' · '.join(body.splitlines()) if '\n' in body else body
+    return [{"type": "text", "text": clean_body[:1024]}]
 
 
 
