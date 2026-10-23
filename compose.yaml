@@ -44,6 +44,23 @@ services:
     tmpfs: ['/tmp:size=64m,mode=1777']
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+  console:
+    build: .
+    env_file: [.runtime/database/common.env, .runtime/database/api.env, .runtime/database/console.env]
+    command: [uvicorn, agent_platform.console_app:create_console, --factory, --host, '0.0.0.0', --port, '4061']
+    ports: ['127.0.0.1:4061:4061']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      api: {condition: service_healthy}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ['/tmp:size=64m,mode=1777']
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: [tunnel, --no-autoupdate, --url, 'http://api:4060']
+    depends_on:
+      api: {condition: service_healthy}
+    restart: unless-stopped
   whatsapp-worker:
     profiles: [whatsapp]
     build: .

@@ -245,3 +245,83 @@ def test_owned_sender_route_and_generic_notification(monkeypatch):
         finally:
             sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
             sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_template_alert_dispatches_outside_24h_window(monkeypatch):
+    with environment(monkeypatch) as (client, _, owner_key, _):
+        _, channel, doc = setup(client, owner_key, monkeypatch)
+        tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
+
+        async def make_key():
+            async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                return await provision(pool, tenant=tenant, organisation='Fixture', app_name='Market alerts',
+                                       scopes=['alerts:send'])
+
+        app_key = asyncio.run(make_key())
+        headers = {'Authorization': 'Bearer ' + app_key['credential'], 'X-External-User-ID': 'trader-1'}
+        path = '/v1/whatsapp/alerts'
+        recipient = '919876543210'
+
+        sql('''INSERT INTO whatsapp_alert_routes
+            (app_id,channel_id,enabled,require_recipient_verification,template_name,template_language)
+            VALUES(%s,%s,true,false,'nraialgo_trading_alert','en_US')''',
+            (app_key['app_id'], channel['id']))
+
+        try:
+            caps = client.get(path + '/capabilities', headers=headers).json()
+            assert caps['approved_templates'] is True
+            assert caps['requires_recent_conversation'] is False
+
+            sub = client.put(path + '/subscription', headers=headers, json={'recipient': recipient, 'consented': True})
+            assert sub.status_code == 200, sub.text
+
+            body = {
+                'request_key': 'market-alert-template-1',
+                'exchange': 'NSE',
+                'symbol': 'NIFTY 50',
+                'timeframe': 'live',
+                'condition': 'price_above',
+                'target': '25000',
+                'observed': '25050',
+                'triggered_at': datetime.now(UTC).isoformat(),
+            }
+            deliv = client.post(path + '/deliveries', headers=headers, json=body)
+            assert deliv.status_code == 202, deliv.text
+            deliv_id = deliv.json()['id']
+
+            calls = []
+
+            async def fake_send(config, phone, customer, payload):
+                calls.append((customer, payload))
+                return 'wamid.template-alert-1'
+
+            async def work():
+                async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                    assert await tick_alerts(pool, sender=fake_send)
+
+            asyncio.run(work())
+
+            assert len(calls) == 1
+            assert calls[0][0] == recipient
+            payload = calls[0][1]
+            assert isinstance(payload, dict)
+            assert payload['messaging_product'] == 'whatsapp'
+            assert payload['to'] == recipient
+            assert payload['type'] == 'template'
+            assert payload['template']['name'] == 'nraialgo_trading_alert'
+            assert payload['template']['language']['code'] == 'en_US'
+            components = payload['template']['components']
+            assert len(components) == 1
+            assert components[0]['type'] == 'body'
+            assert len(components[0]['parameters']) == 1
+            assert components[0]['parameters'][0]['type'] == 'text'
+            assert 'NSE:NIFTY 50' in components[0]['parameters'][0]['text']
+            assert '₹25050' in components[0]['parameters'][0]['text']
+
+            assert client.get(path + '/deliveries/' + deliv_id, headers=headers).json()['status'] == 'ACCEPTED'
+        finally:
+            sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_apps WHERE id=%s', (app_key['app_id'],))
+            sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))

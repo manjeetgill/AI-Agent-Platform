@@ -78,14 +78,16 @@ def connection_configs():
 
 def connection(phone, app=None):
     value = connection_configs().get(phone)
-    if not value or (app is not None and value.get("app_id") != str(app)):
+    if not value or (app is not None and value.get("app_id") is not None and value.get("app_id") != str(app)):
         raise HTTPException(503, "WhatsApp connection not provisioned for this app")
     if value.get('provider') == 'chakra':
-        if (not all(value.get(k) for k in ('access_token', 'plugin_id', 'waba_id', 'webhook_secret'))
-            or value.get('phone_id') != phone or len(value['webhook_secret']) < 32
+        secret = value.get('webhook_secret') or os.environ.get('AI_CHAKRA_WEBHOOK_SECRET', '')
+        if (not all(value.get(k) for k in ('access_token', 'plugin_id', 'waba_id'))
+            or not secret or len(secret) < 32
+            or value.get('phone_id') != phone
             or not re.fullmatch(r'v\d+\.\d+', value.get('graph_version', ''))):
             raise HTTPException(503, 'Chakra connection incomplete')
-        return value
+        return {**value, 'webhook_secret': secret}
     if value.get('provider', 'meta') != 'meta':
         raise HTTPException(503, 'Unsupported WhatsApp provider')
     if not all(value.get(k) for k in ("access_token", "app_secret", "verify_token", "graph_version")):
