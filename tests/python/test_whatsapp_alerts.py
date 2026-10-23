@@ -38,7 +38,7 @@ def test_generic_notification_is_bounded_and_provider_neutral():
 
 def test_shared_sender_alert_is_scoped_and_sent_once(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        _, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -112,7 +112,7 @@ def test_shared_sender_alert_is_scoped_and_sent_once(monkeypatch):
 
 def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        _, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -184,7 +184,7 @@ def test_public_recipient_must_verify_from_claimed_whatsapp_number(monkeypatch):
 
 def test_owned_sender_route_and_generic_notification(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        _, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():
@@ -250,7 +250,7 @@ def test_owned_sender_route_and_generic_notification(monkeypatch):
 
 def test_template_alert_dispatches_outside_24h_window(monkeypatch):
     with environment(monkeypatch) as (client, _, owner_key, _):
-        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        _, channel, doc = setup(client, owner_key, monkeypatch)
         tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
 
         async def make_key():

@@ -1,5 +1,6 @@
 """Shared local workspace navigation and fixed-target operations bridge."""
 import html
+import os
 import re
 from pathlib import Path
 
