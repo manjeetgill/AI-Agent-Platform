@@ -90,11 +90,12 @@ def connection(phone, app=None):
         return {**value, 'webhook_secret': secret}
     if value.get('provider', 'meta') != 'meta':
         raise HTTPException(503, 'Unsupported WhatsApp provider')
-    if not all(value.get(k) for k in ("access_token", "app_secret", "verify_token", "graph_version")):
+    verify = value.get("verify_token") or os.environ.get("AI_META_VERIFY_TOKEN") or "platform-meta-verify-token"
+    if not all(value.get(k) for k in ("access_token", "app_secret", "graph_version")):
         raise HTTPException(503, "WhatsApp connection incomplete")
     if not re.fullmatch(r"v\d+\.\d+", value["graph_version"]):
         raise HTTPException(503, "Invalid Graph API version")
-    return value
+    return {**value, "verify_token": verify}
 
 
 async def audit(conn, channel, conversation, event, actor):
