@@ -17,9 +17,7 @@ PATH = re.compile(r'(?:integrations/(?:task-readiness|capability-readiness|capab
 
 
 def local(request, *, mutation=False):
-    host = request.client.host if request.client else ''
-    is_local = host in {'127.0.0.1', '::1', 'testclient'} or host.startswith(('172.', '10.', '192.168.', '127.'))
-    if not is_local or request.url.hostname not in {'127.0.0.1', 'localhost', 'testserver'}:
+    if request.client.host not in {'127.0.0.1', '::1', 'testclient'} or request.url.hostname not in {'127.0.0.1', 'localhost', 'testserver'}:
         raise HTTPException(403, 'Console is available only on this computer')
     origin = request.headers.get('origin')
     if (origin and origin != str(request.base_url).rstrip('/')) or request.headers.get('sec-fetch-site')=='cross-site':

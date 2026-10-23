@@ -467,3 +467,165 @@ def test_dynamic_provider_flip_routes_chakra_and_meta(monkeypatch):
             sql('DELETE FROM platform_apps WHERE id=%s', (app_key['app_id'],))
             sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
             sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_whatsapp_alerts_strictly_enforces_opt_out_even_with_template(monkeypatch):
+    """Opt-out must never be bypassed even when an approved template is configured."""
+    with environment(monkeypatch) as (client, _, owner_key, _):
+        _, channel, doc = setup(client, owner_key, monkeypatch)
+        tenant = sql('SELECT tenant_id FROM platform_apps WHERE id=%s', (owner_key['app_id'],))[0]['tenant_id']
+
+        async def make_key():
+            async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                return await provision(pool, tenant=tenant, organisation='Fixture', app_name='Market alerts',
+                                       scopes=['alerts:send'])
+
+        app_key = asyncio.run(make_key())
+        headers = {'Authorization': 'Bearer ' + app_key['credential'], 'X-External-User-ID': 'investor-optout'}
+        path = '/v1/whatsapp/alerts'
+        recipient = '919876543999'
+
+        # Route configured with template_name
+        sql("""INSERT INTO whatsapp_alert_routes
+            (app_id,channel_id,enabled,require_recipient_verification,template_name,template_language)
+            VALUES(%s,%s,true,false,'fixture_alert_template','en_US')""",
+            (app_key['app_id'], channel['id']))
+
+        # Recipient is opted out
+        conversation = uuid4()
+        sql("INSERT INTO whatsapp_conversations(id,channel_id,customer,opted_out) VALUES(%s,%s,%s,true)",
+            (conversation, channel['id'], recipient))
+
+        try:
+            # 1. Subscription must be blocked
+            sub_res = client.put(path + '/subscription', headers=headers, json={'recipient': recipient, 'consented': True})
+            assert sub_res.status_code == 409
+            assert 'OPTED OUT' in sub_res.text.upper() or 'STOP' in sub_res.text.upper() or 'BLOCKED' in sub_res.text.upper()
+
+            user_row = sql("SELECT owner_id FROM platform_external_users WHERE app_id=%s AND external_id=%s",
+                           (app_key['app_id'], 'investor-optout'))
+            owner_uuid = user_row[0]['owner_id'] if user_row else uuid4()
+
+            # Insert subscription manually to test deliver & notify gates
+            sql("""INSERT INTO whatsapp_alert_subscriptions(app_id,owner_id,recipient,consented_at,active)
+                VALUES(%s,%s,%s,now(),true)""",
+                (app_key['app_id'], owner_uuid, recipient))
+
+            # 2. Delivery must be rejected
+            deliv_res = client.post(path + '/deliveries', headers=headers, json={
+                'request_key': 'optout-deliv-1', 'exchange': 'NSE', 'symbol': 'INFY',
+                'timeframe': 'live', 'condition': 'price_above', 'target': '2000',
+                'observed': '2005', 'triggered_at': datetime.now(UTC).isoformat()
+            })
+            assert deliv_res.status_code == 409
+            assert 'opted out' in deliv_res.text.lower()
+
+            # 3. Notification must be rejected
+            notif_res = client.post(path + '/notifications', headers=headers, json={
+                'request_key': 'optout-notif-1', 'category': 'booking.confirmed',
+                'title': 'Test Notification', 'summary': 'Summary', 'reference': 'REF123',
+                'occurred_at': datetime.now(UTC).isoformat()
+            })
+            assert notif_res.status_code == 409
+            assert 'opted out' in notif_res.text.lower()
+
+            # 4. tick_alerts must cancel any existing queued delivery
+            deliv_id = uuid4()
+            sql("""INSERT INTO whatsapp_alert_deliveries
+                (id,app_id,owner_id,channel_id,request_key,recipient,body,status)
+                VALUES(%s,%s,%s,%s,'optout-queued',%s,'Test body','QUEUED')""",
+                (deliv_id, app_key['app_id'], owner_uuid, channel['id'], recipient))
+
+            async def run_tick():
+                async with AsyncConnectionPool(database(), open=False, kwargs={'row_factory': dict_row}) as pool:
+                    assert await tick_alerts(pool, sender=lambda *args: 'wamid.unused')
+            asyncio.run(run_tick())
+
+            row = sql("SELECT status,error FROM whatsapp_alert_deliveries WHERE id=%s", (deliv_id,))[0]
+            assert row['status'] == 'CANCELLED'
+            assert 'opted out' in row['error'].lower()
+
+        finally:
+            sql('DELETE FROM platform_external_users WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_service_keys WHERE app_id=%s', (app_key['app_id'],))
+            sql('DELETE FROM platform_apps WHERE id=%s', (app_key['app_id'],))
+            sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_provider_switch_rejected_when_target_provider_unconfigured(monkeypatch):
+    """Switching provider must fail with 409 if target provider is not configured."""
+    with environment(monkeypatch) as (client, _, owner_key, _):
+        owner_headers, channel, doc = setup(client, owner_key, monkeypatch)
+        try:
+            # Clear AI_WHATSAPP_CONNECTIONS so neither provider is provisioned
+            monkeypatch.setenv('AI_WHATSAPP_CONNECTIONS', '{}')
+            res = client.patch(f"/v1/whatsapp/channels/{channel['id']}/provider",
+                               headers=owner_headers,
+                               json={'provider': 'meta'})
+            assert res.status_code == 409
+            assert 'cannot switch provider to meta' in res.text.lower()
+
+            chan_row = sql('SELECT provider FROM whatsapp_channels WHERE id=%s', (channel['id'],))[0]
+            assert chan_row['provider'] == 'chakra'
+        finally:
+            sql('DELETE FROM whatsapp_channels WHERE id=%s', (channel['id'],))
+            sql('DELETE FROM knowledge_documents WHERE id=%s', (doc['id'],))
+
+
+def test_whatsapp_connection_strict_app_id_and_secret_requirements(monkeypatch):
+    """connection() must strictly enforce app_id match and secret requirements."""
+    import pytest
+    from fastapi import HTTPException
+
+    from agent_platform.whatsapp import connection
+
+    # 1. Reject when app_id does not match
+    fake_config = {
+        'phone-123': {
+            'app_id': 'app-1',
+            'provider': 'meta',
+            'phone_id': 'phone-123',
+            'access_token': 'token',
+            'app_secret': 'secret',
+            'verify_token': 'verify',
+            'graph_version': 'v20.0'
+        }
+    }
+    monkeypatch.setattr('agent_platform.whatsapp.connection_configs', lambda: fake_config)
+    with pytest.raises(HTTPException) as exc:
+        connection('phone-123', app='wrong-app')
+    assert exc.value.status_code == 503
+
+    # 2. Reject when app_id is missing from config
+    fake_no_app = {
+        'phone-123': {
+            'provider': 'meta',
+            'phone_id': 'phone-123',
+            'access_token': 'token',
+            'app_secret': 'secret',
+            'verify_token': 'verify',
+            'graph_version': 'v20.0'
+        }
+    }
+    monkeypatch.setattr('agent_platform.whatsapp.connection_configs', lambda: fake_no_app)
+    with pytest.raises(HTTPException) as exc:
+        connection('phone-123', app='app-1')
+    assert exc.value.status_code == 503
+
+    # 3. Reject when verify_token is missing for meta
+    fake_no_verify = {
+        'phone-123': {
+            'app_id': 'app-1',
+            'provider': 'meta',
+            'phone_id': 'phone-123',
+            'access_token': 'token',
+            'app_secret': 'secret',
+            'graph_version': 'v20.0'
+        }
+    }
+    monkeypatch.delenv('AI_META_VERIFY_TOKEN', raising=False)
+    monkeypatch.setattr('agent_platform.whatsapp.connection_configs', lambda: fake_no_verify)
+    with pytest.raises(HTTPException) as exc:
+        connection('phone-123', app='app-1')
+    assert exc.value.status_code == 503

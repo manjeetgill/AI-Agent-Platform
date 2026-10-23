@@ -85,14 +85,10 @@ def connection(phone, app=None, provider=None):
     if not raw_value:
         raise HTTPException(503, "WhatsApp connection not provisioned for this app")
     if isinstance(raw_value, dict) and ("chakra" in raw_value or "meta" in raw_value):
-        selected_provider = provider or "chakra"
+        selected_provider = provider or ("chakra" if "chakra" in raw_value else "meta")
         prov_dict = raw_value.get(selected_provider)
         if not prov_dict:
-            fallback_provider = "chakra" if selected_provider == "meta" else "meta"
-            prov_dict = raw_value.get(fallback_provider)
-            if not prov_dict:
-                raise HTTPException(503, f"WhatsApp provider {selected_provider} not provisioned for this number")
-            selected_provider = fallback_provider
+            raise HTTPException(503, f"WhatsApp provider {selected_provider} not provisioned for this number")
         root_fields = {k: v for k, v in raw_value.items() if k not in ("chakra", "meta")}
         value = {**root_fields, **prov_dict}
         if "provider" not in value:
@@ -102,10 +98,10 @@ def connection(phone, app=None, provider=None):
         if provider and value.get("provider") and value.get("provider") != provider:
             raise HTTPException(503, f"WhatsApp provider {provider} not provisioned for this number")
 
-    if not value or (app is not None and value.get("app_id") is not None and value.get("app_id") != str(app)):
+    if not value or (app is not None and str(value.get("app_id") or "") != str(app)):
         raise HTTPException(503, "WhatsApp connection not provisioned for this app")
     if value.get('provider') == 'chakra':
-        secret = value.get('webhook_secret') or os.environ.get('AI_CHAKRA_WEBHOOK_SECRET', '')
+        secret = value.get('webhook_secret')
         if (not all(value.get(k) for k in ('access_token', 'plugin_id', 'waba_id'))
             or not secret or len(secret) < 32
             or value.get('phone_id') != phone
@@ -114,8 +110,8 @@ def connection(phone, app=None, provider=None):
         return {**value, 'webhook_secret': secret, 'provider': 'chakra'}
     if value.get('provider', 'meta') != 'meta':
         raise HTTPException(503, 'Unsupported WhatsApp provider')
-    verify = value.get("verify_token") or os.environ.get("AI_META_VERIFY_TOKEN") or "platform-meta-verify-token"
-    if not all(value.get(k) for k in ("access_token", "app_secret", "graph_version")):
+    verify = value.get("verify_token") or os.environ.get("AI_META_VERIFY_TOKEN")
+    if not all(value.get(k) for k in ("access_token", "app_secret", "graph_version")) or not verify:
         raise HTTPException(503, "WhatsApp connection incomplete")
     if not re.fullmatch(r"v\d+\.\d+", value["graph_version"]):
         raise HTTPException(503, "Invalid Graph API version")
@@ -274,7 +270,7 @@ def install_whatsapp(app):
             app_id = raw.get("app_id") if isinstance(raw, dict) else None
             if not app_id and isinstance(raw, dict):
                 app_id = (raw.get("chakra") or {}).get("app_id") or (raw.get("meta") or {}).get("app_id")
-            if app_id is None or app_id == claims["app_id"]:
+            if app_id and str(app_id) == str(claims["app_id"]):
                 try:
                     connection(phone, claims["app_id"])
                     numbers.append(phone)
@@ -295,7 +291,7 @@ def install_whatsapp(app):
         public = os.environ.get("AI_PLATFORM_PUBLIC_URL", "").rstrip("/")
         if urlsplit(public).scheme != "https" or not urlsplit(public).hostname:
             public = ""
-        verify_token = os.environ.get("AI_META_VERIFY_TOKEN", "platform-meta-verify-token")
+        verify_token = os.environ.get("AI_META_VERIFY_TOKEN", "")
         return {
             "app_id": claims["app_id"],
             "phone_ids": numbers,
@@ -441,6 +437,12 @@ def install_whatsapp(app):
         async with pool.connection() as conn, conn.transaction():
             row = await owned(conn, channel_id, claims, True)
             if row.get("provider") != body.provider:
+                from .meta_worker import managed_config
+                try:
+                    await managed_config(pool, row["phone_id"], claims["app_id"], claims["user"], provider=body.provider)
+                except HTTPException as exc:
+                    detail = exc.detail if hasattr(exc, "detail") else "Connection unavailable"
+                    raise HTTPException(409, f"Cannot switch provider to {body.provider}: {detail}") from None
                 await conn.execute(
                     "UPDATE whatsapp_channels SET provider=%s WHERE id=%s",
                     (body.provider, channel_id),

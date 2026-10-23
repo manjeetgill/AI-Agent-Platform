@@ -1,6 +1,5 @@
 """Shared local workspace navigation and fixed-target operations bridge."""
 import html
-import os
 import re
 from pathlib import Path
 
@@ -60,9 +59,8 @@ def install_bridge(app, local, *, transport=None):
             raise HTTPException(404)
         headers={'X-Monitor-Intent':request.headers.get('x-monitor-intent',''),
                  'Content-Type':'application/json'}
-        base = os.environ.get('AI_PLATFORM_URL', 'http://127.0.0.1:4060')
         try:
-            async with httpx.AsyncClient(base_url=base,timeout=15,
+            async with httpx.AsyncClient(base_url='http://127.0.0.1:4060',timeout=15,
                                          follow_redirects=False,trust_env=False,transport=transport) as client:
                 response=await client.request(request.method,target,params=request.query_params,headers=headers,content=bytes(raw))
         except httpx.HTTPError:

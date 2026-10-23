@@ -76,7 +76,7 @@ async def connected(pool, agent):
         ).fetchone()
     if not row:
         raise HTTPException(409, "Connect an authorized WhatsApp business number first")
-    cfg = await managed_config(pool, row["phone_id"], row["app_id"], row["owner_id"])
+    cfg = await managed_config(pool, row["phone_id"], row["app_id"], row["owner_id"], provider=row.get("provider"))
     return row, cfg
 
 
