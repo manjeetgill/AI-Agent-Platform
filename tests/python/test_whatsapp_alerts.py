@@ -21,6 +21,7 @@ from agent_platform.whatsapp_alerts import (
 
 def test_route_configuration_can_disable_application_daily_limit():
     assert RouteConfiguration(channel_id=uuid4(), daily_limit=None).daily_limit is None
+    assert RouteConfiguration(channel_id=uuid4()).daily_limit is None
 
 
 def test_generic_notification_is_bounded_and_provider_neutral():

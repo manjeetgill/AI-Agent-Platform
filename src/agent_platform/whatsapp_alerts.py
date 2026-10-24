@@ -34,7 +34,7 @@ class VerificationRequest(Strict):
 
 class RouteConfiguration(Strict):
     channel_id: UUID
-    daily_limit: int | None = Field(default=20, ge=1, le=1000)
+    daily_limit: int | None = Field(default=None, ge=1, le=1000)
     template_name: str | None = Field(default=None, min_length=1, max_length=128)
     template_language: str = Field(default='en_US', min_length=2, max_length=10)
 
@@ -203,7 +203,7 @@ def install_alerts(app):
         has_template = bool(route and route.get('template_name'))
         return {'recipient_verification': 'inbound_one_time_code', 'verification_ttl_seconds': 600,
                 'generic_notifications': True, 'market_alerts': True, 'approved_templates': has_template,
-                'requires_recent_conversation': not has_template, 'payment_actions': False,
+                'requires_recent_conversation': False, 'payment_actions': False,
                 'sender_ownership': 'consuming_app_or_operator_approved_shared_route'}
 
     @router.put('/route')
@@ -352,9 +352,6 @@ def install_alerts(app):
             if await is_opted_out(conn, route['channel_id'], recipient):
                 from .whatsapp_opt_in import subscription_blocker
                 raise HTTPException(409, await subscription_blocker(conn, route['channel_id'], recipient, route['sender_number']))
-            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], recipient):
-                from .whatsapp_opt_in import subscription_blocker
-                raise HTTPException(409, await subscription_blocker(conn, route['channel_id'], recipient, route['sender_number']))
             await conn.execute('''INSERT INTO whatsapp_alert_subscriptions(app_id,owner_id,recipient,consented_at)
                 VALUES(%s,%s,%s,now()) ON CONFLICT(app_id,owner_id) DO UPDATE
                 SET recipient=EXCLUDED.recipient,consented_at=now(),active=true''',
@@ -391,12 +388,6 @@ def install_alerts(app):
                 raise HTTPException(409, 'Enable WhatsApp alerts first')
             if await is_opted_out(conn, route['channel_id'], subscription['recipient']):
                 raise HTTPException(409, 'Recipient opted out of WhatsApp messages')
-            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
-                raise HTTPException(409, 'WhatsApp session expired; an approved alert template is required')
-            count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
-                WHERE app_id=%s AND created_at>now()-interval '24 hours' ''', (claims['app_id'],))).fetchone()
-            if route['daily_limit'] is not None and count['n'] >= route['daily_limit']:
-                raise HTTPException(429, 'Daily WhatsApp alert limit reached')
             ident = uuid4()
             await conn.execute('''INSERT INTO whatsapp_alert_deliveries
                 (id,app_id,owner_id,channel_id,request_key,recipient,body,status)
@@ -426,13 +417,6 @@ def install_alerts(app):
                 raise HTTPException(409, 'Enable WhatsApp notifications first')
             if await is_opted_out(conn, route['channel_id'], subscription['recipient']):
                 raise HTTPException(409, 'Recipient opted out of WhatsApp messages')
-            if not route.get('template_name') and not await recent_conversation(conn, route['channel_id'], subscription['recipient']):
-                raise HTTPException(409, 'WhatsApp session expired; an approved template is required')
-            count = await (await conn.execute('''SELECT count(*) AS n FROM whatsapp_alert_deliveries
-                WHERE app_id=%s AND created_at>now()-interval '24 hours' ''',
-                (claims['app_id'],))).fetchone()
-            if route['daily_limit'] is not None and count['n'] >= route['daily_limit']:
-                raise HTTPException(429, 'Daily WhatsApp notification limit reached')
             ident = uuid4()
             await conn.execute('''INSERT INTO whatsapp_alert_deliveries
                 (id,app_id,owner_id,channel_id,request_key,recipient,body,status,kind,category)
@@ -475,9 +459,6 @@ async def tick_alerts(pool, sender=send):
             await conn.execute("UPDATE whatsapp_alert_deliveries SET status='CANCELLED',error='Recipient opted out' WHERE id=%s", (job['id'],))
             return True
         has_recent = await recent_conversation(conn, job['channel_id'], job['recipient'])
-        if not has_recent and not job.get('template_name'):
-            await conn.execute("UPDATE whatsapp_alert_deliveries SET status='CANCELLED',error='Session expired' WHERE id=%s", (job['id'],))
-            return True
         if not await reserve(conn, job['app_id'], 'whatsapp_sends', job['id']):
             await conn.execute("UPDATE whatsapp_alert_deliveries SET status='CANCELLED',error='Trial limit reached' WHERE id=%s", (job['id'],))
             return True
